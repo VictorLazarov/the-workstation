@@ -1,16 +1,16 @@
 # Vision (from the owner)
-A personal, extensible agentic coding harness with a first-class desktop-style UI — in the class of Claude Code
-Desktop, Cursor Agents and the GitHub Copilot app — that the owner develops themselves around their daily work,
-and that can connect to any provider, without settling for opencode's UI experience.
+A personal, extensible coding-agent workspace — in the class of Claude Code Desktop, Cursor Agents and the GitHub
+Copilot app — that the owner shapes around their daily work. The **Claude Agent SDK is the engine** ("best in the
+business"); we do not reinvent the agent loop, tools, permissions, sessions, MCP, hooks, skills or checkpoints.
+Our value is the UX/UI and workflows built on top of it. Provider flexibility = `ANTHROPIC_BASE_URL` / gateways
+speaking the Anthropic API; no custom agent runtime.
 
 ## Consequences for the design
-1. **Backend is an interface, not the SDK.** The server's `sdk.ts` adapter (real / mock) is the seam. Treat it as
-   an `AgentBackend` contract: start/resume/fork session, send prompt, interrupt, permission callbacks, rewind,
-   model/mode/effort, MCP, history. Today's implementation = Claude Agent SDK (Anthropic-API-compatible
-   endpoints, incl. gateways such as LiteLLM/OpenRouter-style proxies that speak the Anthropic Messages API).
-   A future native or third-party backend must be addable without touching the web UI.
-2. **UI depends on a normalized event model**, not on raw SDK shapes. Today `sdk` events are forwarded raw;
-   the web reducer is the only place that interprets them, so a normalizing layer can be introduced there later.
-3. **Extensibility is a feature**: keep panels, tool-card renderers, slash commands and server routes pluggable
-   (registries), so the owner can add personal workflows (custom panels, review flows, task boards) quickly.
-4. Everything stays local-first, single-user, token-gated.
+1. **Lean on the SDK for everything it offers** (sessions, resume/fork, rewind, MCP, skills, subagents, hooks,
+   settings sources, usage/context). Before building any feature, check whether the SDK already provides it and
+   expose that rather than reimplementing.
+2. **No speculative backend abstraction.** The mock in `packages/server/src/sdk.ts` exists only for tests/demo.
+3. **Invest in the UI**: rich tool rendering, parallel sessions, review/diff workflow, composer, polish (see UX.md).
+4. **Extensibility at the UI layer**: panels, tool-card renderers and commands are registries so the owner can add
+   personal workflows quickly.
+5. Local-first, single-user, token-gated.
