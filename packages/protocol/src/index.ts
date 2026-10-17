@@ -30,6 +30,8 @@ export type ClientMessage =
   | { type: 'mcp.reconnect'; sessionId: SessionId; server: string }
   /** Remove the git worktree this server created for the session (acks with { removed, branchDeleted, reason? }). Refuses a dirty worktree unless `force`. */
   | { type: 'worktree.remove'; reqId: string; sessionId: SessionId; force?: boolean }
+  /** Ask the live session's SDK query for its real context-window breakdown (acks with `ContextUsage`). `detail` defaults to 'summary' (cheap, no token-count API calls). */
+  | { type: 'context.usage'; reqId: string; sessionId: SessionId; detail?: 'summary' | 'full' }
   | { type: 'ping' };
 
 export type PermissionDecision =
@@ -69,6 +71,36 @@ export interface SessionRuntimeState {
 }
 export interface SessionRule { toolName: string; ruleContent?: string; behavior: 'allow' | 'deny' | 'ask'; destination: string }
 
+/** One row of the context-window breakdown (name is display text from the SDK; classify on `kind`). */
+export interface ContextUsageCategory { name: string; tokens: number; color: string; kind: 'used' | 'free' | 'buffer' | 'deferred'; isDeferred?: boolean }
+export interface ContextUsageTool { name: string; serverName: string; tokens: number; isLoaded?: boolean }
+export interface ContextMessageBreakdown {
+  toolCallTokens: number; toolResultTokens: number; attachmentTokens: number; assistantMessageTokens: number; userMessageTokens: number;
+  redirectedContextTokens: number; unattributedTokens: number;
+}
+/**
+ * Real context-window usage of a live session: the SDK's `query.getContextUsage()` response with the bulky per-square
+ * `gridRows` dropped. `source` is 'sdk' for the real thing and 'mock' for the offline mock agent.
+ */
+export interface ContextUsage {
+  source: 'sdk' | 'mock';
+  detail: 'summary' | 'full';
+  model: string;
+  categories: ContextUsageCategory[];
+  totalTokens: number;
+  maxTokens: number;
+  rawMaxTokens: number;
+  /** 0..100 */
+  percentage: number;
+  mcpTools: ContextUsageTool[];
+  isAutoCompactEnabled: boolean;
+  autoCompactThreshold?: number;
+  messageBreakdown?: ContextMessageBreakdown;
+  apiUsage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number } | null;
+  /** epoch ms when the server produced this snapshot */
+  at: number;
+}
+
 // ───────────── REST (/api) ─────────────
 export interface SessionSummary {
   sessionId: SessionId; title: string; cwd?: string; gitBranch?: string;
@@ -103,6 +135,7 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *  GET  /api/sessions?cwd=     -> SessionSummary[]
  *  GET  /api/sessions/:id/messages?cwd=  -> { messages: unknown[] }  (SDK getSessionMessages)
  *  PATCH /api/sessions/:id {title}   DELETE /api/sessions/:id[?force=1]  -> { ok, worktree? } (also removes a server-created clean worktree)
+ *  GET  /api/sessions/:id/context?detail=summary|full -> ContextUsage   (live sessions only; 404 otherwise)
  *  GET  /api/models            -> ModelOption[]
  *  GET  /api/fs/list?path=     -> FsEntry[]        (directory browser / file tree)
  *  GET  /api/fs/read?path=     -> { content, encoding, truncated }
