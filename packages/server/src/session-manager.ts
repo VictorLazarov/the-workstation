@@ -537,6 +537,7 @@ export class SessionManager {
         for (const u of rememberable(p.suggestions)) {
           const upd = d.remember === 'session' ? { ...u, destination: 'session' as const } : u;
           updates.push(upd);
+          if (upd.type === 'setMode') s.permissionMode = upd.mode;
           if (upd.type === 'addRules') for (const r of upd.rules) s.rules.push({ toolName: r.toolName, ...(r.ruleContent ? { ruleContent: r.ruleContent } : {}), behavior: upd.behavior, destination: upd.destination });
         }
       }
@@ -546,7 +547,7 @@ export class SessionManager {
       }
       p.resolve({ behavior: 'allow', updatedInput, toolUseID: p.toolUseID, ...(updates.length ? { updatedPermissions: updates } : {}) });
       if (d.setMode) s.permissionMode = d.setMode;
-      if (updates.some((u) => u.type === 'addRules') || d.setMode) this.emitState(s, true);
+      if (updates.some((u) => u.type === 'addRules' || u.type === 'setMode')) this.emitState(s, true);
     } else {
       p.resolve({ behavior: 'deny', message: d.message || 'The user denied this action.', interrupt: !!d.interrupt, toolUseID: p.toolUseID });
     }
@@ -567,9 +568,14 @@ export class SessionManager {
   }
 }
 
-/** Only these SDK suggestion kinds are applied by "always allow". */
+/**
+ * What "always allow" applies from the SDK's suggestions: rules and directories; the `setMode acceptEdits` suggestion
+ * only when it is the sole way to remember (file edits), so that remembering a Bash rule never flips the session mode.
+ */
 function rememberable(suggestions: PermissionUpdate[] | undefined): PermissionUpdate[] {
-  return (suggestions ?? []).filter((u) => u.type === 'addRules' || u.type === 'addDirectories');
+  const all = suggestions ?? [];
+  const hasRule = all.some((u) => u.type === 'addRules');
+  return all.filter((u) => u.type === 'addRules' || u.type === 'addDirectories' || (u.type === 'setMode' && !hasRule));
 }
 
 /** Cut gigantic tool_result text before it is buffered/forwarded (the model has already seen the full output). */

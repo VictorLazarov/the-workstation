@@ -72,9 +72,11 @@ test.describe('session features', () => {
     await chips.getByRole('button', { name: 'Medium' }).click();
     await page.getByRole('menuitem', { name: /^High/ }).click();
     await expect(chips.getByRole('button', { name: 'High' })).toBeVisible();
+    // Label casing is covered by BUG-002 below; here we only check the selection took effect.
     await chips.getByRole('button', { name: /Default model/ }).click();
     await page.getByRole('menuitem', { name: /^Opus/ }).click();
-    await expect(chips.getByRole('button', { name: /Opus/ })).toBeVisible();
+    await expect(chips.getByRole('button', { name: /default model/i })).toHaveCount(0);
+    await expect(chips.getByRole('button', { name: /opus/i })).toBeVisible();
   });
 
   test('BUG-002: the model chip shows the friendly name of the chosen model', async ({ page }) => {
