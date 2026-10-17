@@ -14,6 +14,7 @@ import { HttpError, listDir, readFile, requireDir, resolveUserPath, searchFiles 
 import { gitDiff, gitStatus } from './git.js';
 import { createAdapter, type SdkAdapter } from './sdk.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, securityOptionsFromEnv, tokenMatches, type SecurityOptions } from './security.js';
+import { createTerminalService } from './terminal.js';
 import { SessionManager, type Subscriber } from './session-manager.js';
 
 export const VERSION = '0.1.0';
@@ -215,6 +216,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const addr = server.address();
   const port = typeof addr === 'object' && addr ? addr.port : opts.port ?? DEFAULT_PORT;
 
+  const terminals = createTerminalService({ security, token: () => config.token, defaultCwd: serverCwd });
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
   const reject = (socket: Duplex, code: number, text: string) => {
     socket.write(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
@@ -223,6 +225,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     let url: URL;
     try { url = new URL(req.url ?? '/', 'http://x'); } catch { return reject(socket, 400, 'Bad Request'); }
+    if (url.pathname === '/ws/terminal') return terminals.upgrade(req, socket, head, url);
     if (url.pathname !== '/ws') return reject(socket, 404, 'Not Found');
     if (!isHostAllowed(req.headers.host, security)) return reject(socket, 403, 'Forbidden');
     if (!isOriginAllowed(req.headers.origin, req.headers.host, security)) return reject(socket, 403, 'Forbidden');
@@ -260,6 +263,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     url: `http://${shownHost}:${port}/?token=${config.token}`,
     close: async () => {
       sessions.closeAll();
+      terminals.closeAll();
       for (const c of wss.clients) c.terminate();
       wss.close();
       server.closeAllConnections?.();
