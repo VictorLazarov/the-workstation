@@ -84,13 +84,17 @@ log "Using node $(node -v), npm $(npm -v)"
 # (The server falls back to a python3 pty helper when node-pty is unavailable, python3 is useful either way.)
 if [ -z "${WORKSTATION_SKIP_PKGS:-}" ]; then
   tc=()
-  command -v python3 >/dev/null || tc+=(python3)
-  command -v make >/dev/null || tc+=(make)
-  if ! command -v g++ >/dev/null && ! command -v c++ >/dev/null; then
-    if command -v apk >/dev/null; then tc+=(g++); elif command -v dnf >/dev/null || command -v yum >/dev/null; then tc+=(gcc-c++); else tc+=(g++); fi
+  if command -v apk >/dev/null; then
+    # Alpine/musl: g++ pulls in gcc + musl-dev; linux-headers is needed by node-gyp for the pty bindings
+    for c in python3 make g++; do command -v "$c" >/dev/null || tc+=("$c"); done
+    [ -e /usr/include/linux/limits.h ] || tc+=(linux-headers)
+  else
+    command -v python3 >/dev/null || tc+=(python3)
+    command -v make >/dev/null || tc+=(make)
+    if ! command -v g++ >/dev/null && ! command -v c++ >/dev/null; then
+      if command -v dnf >/dev/null || command -v yum >/dev/null; then tc+=(gcc-c++); else tc+=(g++); fi
+    fi
   fi
-  if command -v apk >/dev/null && [ ! -e /usr/include/stdio.h ]; then tc+=(musl-dev linux-headers); fi
-  if command -v apk >/dev/null && ! command -v gcc >/dev/null; then tc+=(gcc); fi
   if [ "${#tc[@]}" -gt 0 ]; then log "Installing native build tools for node-pty: ${tc[*]}"; pkg_install "${tc[@]}"; fi
 fi
 

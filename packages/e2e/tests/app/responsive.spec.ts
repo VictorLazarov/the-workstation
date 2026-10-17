@@ -77,11 +77,12 @@ test.describe('B2: toasts never cover the composer, inspector tabs or commit box
           await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
           await expect(page.getByRole('dialog')).toHaveCount(0);
         }
-        // other sessions on the shared mock server may raise their own toasts: ours are the "Settings saved" ones
+        // three identical toasts coalesce into ONE toast with a count (N3); other sessions on the shared mock server may raise their own
         const toasts = page.locator('.toast').filter({ hasText: 'Settings saved' });
-        await expect(toasts).toHaveCount(3);
+        await expect(toasts).toHaveCount(1);
+        await expect(toasts.locator('.toast-count')).toHaveText('×3');
         const protectedBoxes: [string, Locator][] = [['composer', page.locator('.composer')], ['inspector tabs', page.locator('.itabs')], ['commit box', page.locator('.ccommit')]];
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0; i < 1; i++) {
           const t = await box(toasts.nth(i));
           expect(t.x).toBeGreaterThanOrEqual(0); expect(t.x + t.width).toBeLessThanOrEqual(width + 0.5); expect(t.y + t.height).toBeLessThanOrEqual(860 + 0.5);
           for (const [name, loc] of protectedBoxes) {

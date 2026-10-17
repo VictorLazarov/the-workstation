@@ -20,7 +20,7 @@ remapping its message/permission model. We build a small purpose-built stack and
 ## Server <-> Web
 - One WebSocket `/ws?token=…` per browser tab. Messages defined in `packages/protocol/src/index.ts`.
 - REST under `/api/*` (bearer token header or `?token`). Static SPA at `/`.
-- Auth: random token generated at first start, stored `~/.config/workstation/config.json` (0600),
+- Auth: random token generated at first start, stored `<config dir>/config.json` (0600; `~/.config/workstation`, `%APPDATA%\workstation` on Windows, see CROSS_PLATFORM.md),
   printed as a URL on startup. Default bind `127.0.0.1`; `--host 0.0.0.0` (devcontainers) still requires the token.
   WS/REST check `Origin`/`Host` to block DNS-rebinding and cross-site WebSocket hijack. This is mandatory: the server can run shell commands.
 
