@@ -48,9 +48,16 @@ export function Composer({ session }: { session: SessionData }) {
   useEffect(() => {
     const ins = (e: Event) => { setText((e as CustomEvent<string>).detail); ta.current?.focus(); };
     const foc = () => ta.current?.focus();
+    // ws:mention (detail: path) appends "@path " to the draft, e.g. from the Files panel
+    const men = (e: Event) => {
+      const p = (e as CustomEvent<string>).detail;
+      setText((t) => `${t}${t && !/\s$/.test(t) ? ' ' : ''}@${p} `);
+      ta.current?.focus();
+    };
+    window.addEventListener('ws:mention', men);
     window.addEventListener('ws:insert', ins);
     window.addEventListener('ws:focus-composer', foc);
-    return () => { window.removeEventListener('ws:insert', ins); window.removeEventListener('ws:focus-composer', foc); };
+    return () => { window.removeEventListener('ws:mention', men); window.removeEventListener('ws:insert', ins); window.removeEventListener('ws:focus-composer', foc); };
   }, []);
 
   /* ───── popups ───── */

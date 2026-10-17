@@ -14,6 +14,8 @@ function wsUrl(id: string, cwd: string, cols: number, rows: number): string {
 }
 
 export const TermView = forwardRef<TermHandle, { id: string; cwd: string; visible: boolean }>(function TermView({ id, cwd, visible }, ref) {
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
   const host = useRef<HTMLDivElement>(null);
   const api = useRef<{ term?: import('@xterm/xterm').Terminal; fit?: () => void; reconnect?: () => void }>({});
   const [status, setStatus] = useState<Status>({ kind: 'connecting' });
@@ -42,6 +44,7 @@ export const TermView = forwardRef<TermHandle, { id: string; cwd: string; visibl
       const doFit = () => { try { if (host.current && host.current.clientWidth > 0) fit.fit(); } catch { /* not laid out */ } };
       doFit();
       api.current = { term, fit: doFit };
+      if (visibleRef.current) term.focus();
       const offTheme = onThemeChange(() => { term.options.theme = readTermTheme(); });
 
       let dead = false; // unavailable: don't reconnect

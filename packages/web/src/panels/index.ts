@@ -7,8 +7,8 @@
  * `useUi.getState().inspectorFocus` carries the file path), 'files', 'tasks', 'context', 'terminal', 'preview'.
  */
 import './PlanPanel';
-// import './ChangesPanel';
-// import './FilesPanel';
-// import './TasksPanel';
-// import './ContextPanel';
+import './ChangesPanel';
+import './FilesPanel';
+import './TasksPanel';
+import './ContextPanel';
 import './terminal/TerminalPanel';

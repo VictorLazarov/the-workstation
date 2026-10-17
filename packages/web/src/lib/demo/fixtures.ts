@@ -41,7 +41,11 @@ export const demoDirs: Record<string, { name: string; kind: 'dir' | 'file' }[]> 
     { name: 'acme-web', kind: 'dir' }, { name: 'api-gateway', kind: 'dir' }, { name: 'docs-site', kind: 'dir' },
     { name: 'dotfiles', kind: 'dir' }, { name: 'notes.md', kind: 'file' },
   ],
-  '/home/dev/acme-web': [{ name: 'src', kind: 'dir' }, { name: 'tests', kind: 'dir' }, { name: 'package.json', kind: 'file' }],
+  '/home/dev/acme-web': [{ name: 'src', kind: 'dir' }, { name: 'tests', kind: 'dir' }, { name: 'package.json', kind: 'file' }, { name: 'README.md', kind: 'file' }, { name: '.gitignore', kind: 'file' }],
+  '/home/dev/acme-web/src': [{ name: 'lib', kind: 'dir' }, { name: 'routes', kind: 'dir' }, { name: 'styles', kind: 'dir' }],
+  '/home/dev/acme-web/src/lib': [{ name: 'token.ts', kind: 'file' }, { name: 'useTheme.ts', kind: 'file' }],
+  '/home/dev/acme-web/src/routes': [{ name: 'login.ts', kind: 'file' }, { name: 'settings.tsx', kind: 'file' }],
+  '/home/dev/acme-web/src/styles': [{ name: 'theme.css', kind: 'file' }],
 };
 
 export const demoSessions: SessionSummary[] = [

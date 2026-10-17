@@ -83,7 +83,7 @@ export interface InitInfo {
   slashCommands: string[];
   skills: string[];
   agents: string[];
-  mcpServers: { name: string; status: string }[];
+  mcpServers: { name: string; status: string; error?: string }[];
   permissionMode?: PermissionMode;
   version?: string;
 }

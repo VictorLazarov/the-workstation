@@ -83,6 +83,8 @@ interface Store {
   forkSession: (id: string) => void;
   closeSession: (id: string) => void;
   rewind: (id: string, userMessageId: string, dryRun: boolean) => Promise<unknown>;
+  mcpToggle: (id: string, server: string, enabled: boolean) => void;
+  mcpReconnect: (id: string, server: string) => void;
   reconnectNow: () => void;
 }
 
@@ -193,6 +195,13 @@ export const useSessions = create<Store>((set, get) => {
         void onOpen();
         return;
       case 'ack': {
+        if (m.reqId.startsWith('mcp:')) {
+          // server pushes the fresh MCP status list after mcp.toggle / mcp.reconnect
+          const list = (m.data as { mcpServers?: { name: string; status: string; error?: string }[] } | undefined)?.mcpServers;
+          const sid = m.reqId.slice(4);
+          if (list) patch(sid, (s) => (s.conv.init ? { conv: { ...s.conv, init: { ...s.conv.init, mcpServers: list.map((x) => ({ name: x.name, status: x.status, error: x.error })) } } } : {}));
+          return;
+        }
         const w = waiters.get(m.reqId);
         if (w) { clearTimeout(w.timer); waiters.delete(m.reqId); w.resolve(m.data); }
         return;
@@ -495,6 +504,14 @@ export const useSessions = create<Store>((set, get) => {
       patch(id, () => ({ live: false }));
     },
 
+    mcpToggle(id, server, enabled) {
+      patch(id, (s) => (s.conv.init ? { conv: { ...s.conv, init: { ...s.conv.init, mcpServers: s.conv.init.mcpServers.map((x) => (x.name === server ? { ...x, status: enabled ? 'pending' : 'disabled' } : x)) } } } : {}));
+      transport?.send({ type: 'mcp.toggle', sessionId: id, server, enabled });
+    },
+    mcpReconnect(id, server) {
+      patch(id, (s) => (s.conv.init ? { conv: { ...s.conv, init: { ...s.conv.init, mcpServers: s.conv.init.mcpServers.map((x) => (x.name === server ? { ...x, status: 'pending', error: undefined } : x)) } } } : {}));
+      transport?.send({ type: 'mcp.reconnect', sessionId: id, server });
+    },
     async rewind(id, userMessageId, dryRun) {
       return request({ type: 'rewind', reqId: uid('req'), sessionId: id, userMessageId, dryRun });
     },

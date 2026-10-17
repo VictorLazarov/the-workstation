@@ -13,7 +13,7 @@ test.describe('token handling', () => {
   });
 
   test('a wrong token is rejected and the access error is shown', async ({ page }) => {
-    await openApp(page, { token: 'definitely-wrong-token-value' }).catch(() => undefined);
+    await openApp(page, { token: 'definitely-wrong-token-value' });
     await expect(page.getByRole('alert').filter({ hasText: /Connecting to the server|access token|Connection lost/ })).toBeVisible();
     await expect(page.getByRole('textbox', { name: 'Message Claude' })).toHaveCount(0);
   });

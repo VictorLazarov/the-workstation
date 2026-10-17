@@ -4,6 +4,7 @@
  */
 import type { ClientMessage, PermissionDecision, ServerMessage, SessionRuntimeState } from '@workstation/protocol';
 import type { ConnStatus, Transport } from '../transport/types';
+import { demoGitCommit, demoGitDiff, demoGitRevert, demoGitStatus, demoReadFile } from './git';
 import {
   DEMO_CWD, demoCommands, demoConfig, demoDirs, demoFiles, demoModels, demoSessions, richHistory,
 } from './fixtures';
@@ -363,8 +364,10 @@ export async function demoRest<T>(method: string, path: string, q: Record<string
     const needle = (q.q ?? '').toLowerCase();
     return ok(demoFiles.filter((f) => !needle || f.toLowerCase().includes(needle)).slice(0, 8));
   }
-  if (path === '/api/git/status') return ok({ isRepo: true, branch: 'feat/dark-mode', files: [{ path: 'src/styles/theme.css', index: ' ', worktree: 'M' }] });
-  if (path === '/api/git/diff') return ok({ diff: '' });
-  if (path === '/api/fs/read') return ok({ content: '// demo file', encoding: 'utf8', truncated: false });
+  if (path === '/api/git/status') return ok(demoGitStatus());
+  if (path === '/api/git/diff') return ok({ diff: demoGitDiff(q.path) });
+  if (path === '/api/git/commit') return ok(demoGitCommit((body as { message?: unknown })?.message));
+  if (path === '/api/git/revert') return ok(demoGitRevert((body as { path?: unknown })?.path));
+  if (path === '/api/fs/read') return ok(demoReadFile(q.path ?? ''));
   throw new Error(`demo: unhandled ${method} ${path}`);
 }

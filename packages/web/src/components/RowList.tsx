@@ -111,11 +111,13 @@ export const RowList = memo(function RowList({ conv, laneKey, sessionId, cwd, se
             const b = r.block;
             const perm = perms.find((p) => p.toolUseID === b.id);
             return (
+              <div key={b.id} data-tool-id={b.id}>
               <ToolCard
-                key={b.id} block={b} result={conv.toolResults[b.id]} perm={perm} outcome={outcomes[b.id]} sessionRunning={sessionRunning}
+                block={b} result={conv.toolResults[b.id]} perm={perm} outcome={outcomes[b.id]} sessionRunning={sessionRunning}
                 sessionId={sessionId} cwd={cwd} elapsed={conv.toolProgress[b.id]} conv={b.name === 'Task' || b.name === 'Agent' ? conv : undefined}
                 task={conv.tasks[b.id]} onRespond={perm ? respond(b.id, perm.requestId) : noop}
               />
+              </div>
             );
           }
           case 'notice': return <div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>;

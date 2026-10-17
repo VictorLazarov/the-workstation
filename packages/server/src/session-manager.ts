@@ -7,7 +7,7 @@ import type {
 import type { ConfigStore } from './config.js';
 import { HttpError, requireDir } from './files.js';
 import { createWorktree } from './git.js';
-import type { QueryHandle, SdkAdapter } from './sdk.js';
+import { buildCliEnv, type QueryHandle, type SdkAdapter } from './sdk.js';
 
 export interface Subscriber {
   id: string;
@@ -221,7 +221,7 @@ export class SessionManager {
       permissionMode,
       allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, o) => this.canUseTool(s, toolName, input, o),
-      env: { ...process.env, CLAUDE_AGENT_SDK_CLIENT_APP: 'the-workstation/0.1.0', ...this.config.providerEnv() },
+      env: buildCliEnv({ CLAUDE_AGENT_SDK_CLIENT_APP: 'the-workstation/0.1.0', ...this.config.providerEnv() }),
       stderr: (d) => { if (process.env.WORKSTATION_DEBUG) process.stderr.write(`[claude ${id.slice(0, 8)}] ${d}`); },
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),

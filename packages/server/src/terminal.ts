@@ -37,7 +37,7 @@ interface PtyLike {
 }
 
 const SCROLLBACK_BYTES = 512 * 1024;
-const MAX_TERMINALS = 16;
+const MAX_TERMINALS = 32;
 const IDLE_REAP_MS = 30 * 60_000;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 

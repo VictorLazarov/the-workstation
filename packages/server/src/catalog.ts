@@ -2,7 +2,7 @@ import type { ModelInfo, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelOption, SlashCommandInfo } from '@workstation/protocol';
 import type { ConfigStore } from './config.js';
 import type { SessionManager } from './session-manager.js';
-import type { QueryHandle, SdkAdapter } from './sdk.js';
+import { buildCliEnv, type QueryHandle, type SdkAdapter } from './sdk.js';
 
 const FALLBACK_MODELS: ModelInfo[] = [
   { value: 'default', displayName: 'Default', description: 'Recommended model for your account' },
@@ -23,7 +23,7 @@ export class Catalog {
   private async withProbe<T>(cwd: string, fn: (q: QueryHandle) => Promise<T>): Promise<T> {
     const q = this.adapter.query({
       prompt: idle as AsyncIterable<never>,
-      options: { cwd, settingSources: ['user', 'project', 'local'], env: { ...process.env, ...this.config.providerEnv() } },
+      options: { cwd, settingSources: ['user', 'project', 'local'], env: buildCliEnv(this.config.providerEnv()) },
     });
     try {
       return await Promise.race([fn(q), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('probe timeout')), 25_000))]);

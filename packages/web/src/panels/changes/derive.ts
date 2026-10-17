@@ -26,6 +26,9 @@ export interface SessionFile {
   lines: DiffLine[];
 }
 
+interface EditCalc { res: unknown; lines: DiffLine[]; isNew: boolean; added: number; removed: number }
+const calcCache = new WeakMap<object, EditCalc>();
+
 /** Aggregate this session's successful Edit/MultiEdit/Write/NotebookEdit calls per file. */
 export function sessionFiles(conv: Conversation, cwd: string): SessionFile[] {
   const byPath = new Map<string, SessionFile>();
@@ -37,8 +40,14 @@ export function sessionFiles(conv: Conversation, cwd: string): SessionFile[] {
     const raw = toolPath(b);
     if (!raw) continue;
     const path = absPath(raw, cwd);
-    const { lines, isNew } = editLines(b, res);
-    const stats = diffStats(lines);
+    let calc = calcCache.get(b);
+    if (!calc || calc.res !== res) {
+      const el = editLines(b, res);
+      calc = { res, ...el, ...diffStats(el.lines) };
+      calcCache.set(b, calc);
+    }
+    const { lines, isNew } = calc;
+    const stats = calc;
     const prev = byPath.get(path);
     if (!prev) { byPath.set(path, { path, added: stats.added, removed: stats.removed, isNew, edits: 1, lines: b.name === 'Write' ? lines : collapseContext(lines, 2) }); continue; }
     const body = b.name === 'Write' ? lines : collapseContext(lines, 2);
