@@ -4,12 +4,10 @@ import { Icon } from '../components/Icon';
 import { IconButton, Spinner } from '../components/ui';
 import { useSessions } from '../store/sessions';
 import { registerPanel, type PanelProps } from './registry';
-import { deriveContext, groupTools, mcpEnabled, mcpTone, turnCosts, type Category } from './context/derive';
+import { groupTools, mcpEnabled, mcpTone, turnCosts } from './context/derive';
+import { pctLabel } from './context/usage';
+import { ContextBody, useContextSummary } from './OverviewPanel';
 import './panels.css';
-
-const COLOR: Record<Category['id'], string> = {
-  system: 'var(--muted)', user: 'var(--info)', assistant: 'var(--ai-fill)', thinking: 'color-mix(in srgb, var(--ai-fill) 40%, var(--surface))', calls: 'var(--ok)', results: 'var(--text-2)',
-};
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return <section className="ctx-sec"><div className="panel-title"><span>{title}</span>{aside}</div>{children}</section>;
@@ -31,38 +29,15 @@ function Disclosure({ title, count, children }: { title: string; count: number; 
 const Chips = ({ items, prefix = '' }: { items: string[]; prefix?: string }) => <div className="ctx-chips">{items.map((i) => <span key={i} className="chip">{prefix}{i}</span>)}</div>;
 
 function Meter({ sessionId }: { sessionId: string }) {
-  const conv = useSessions((s) => s.sessions[sessionId]?.conv);
-  const model = useSessions((s) => s.sessions[sessionId]?.runtime.model) ?? conv?.init?.model;
-  const running = useSessions((s) => s.sessions[sessionId]?.runtime.status !== 'idle');
-  const win = contextWindowFor(model);
-  const d = useMemo(() => (conv ? deriveContext(conv, win) : null), [conv, win]);
-  if (!d) return null;
-  const tone = d.pct >= 85 ? 'hot' : d.pct >= 65 ? 'warm' : '';
+  const model = useSessions((s) => s.sessions[sessionId]?.runtime.model ?? s.sessions[sessionId]?.conv.init?.model);
+  const { used, max, pct, tone } = useContextSummary(sessionId);
   return (
     <Section title="Context window" aside={<span className="muted">{modelLabel(model)}</span>}>
       <div className="meter-head">
-        <b className={`meter-pct ${tone}`}>{d.used ? `${d.pct < 10 ? d.pct.toFixed(1) : Math.round(d.pct)}%` : '–'}</b>
-        <span className="muted">{d.used ? `${formatTokens(d.used)} of ${formatTokens(d.window)} tokens` : `${formatTokens(d.window)} token window`}</span>
+        <b className={`meter-pct ${tone}`}>{used ? pctLabel(pct, used) : '–'}</b>
+        <span className="muted">{used ? `${formatTokens(used)} of ${formatTokens(max)} tokens` : `${formatTokens(max)} token window`}</span>
       </div>
-      <div className={`meter ${tone}`} role="meter" aria-valuenow={Math.round(d.pct)} aria-valuemin={0} aria-valuemax={100} aria-label="Context window used">
-        {d.categories.map((c) => <i key={c.id} title={`${c.label}: ${formatTokens(c.tokens)}`} style={{ width: `${(c.tokens / d.window) * 100}%`, background: COLOR[c.id] }} />)}
-      </div>
-      {d.used === 0 ? <p className="muted small ctx-note">Usage appears after Claude's first response.</p> : (
-        <>
-          <ul className="legend">
-            {d.categories.map((c) => (
-              <li key={c.id}><i style={{ background: COLOR[c.id] }} /><span>{c.label}</span><span className="muted">{formatTokens(c.tokens)}</span><span className="legend-pct">{((c.tokens / d.used) * 100).toFixed(0)}%</span></li>
-            ))}
-            <li className="free"><i /><span>Free space</span><span className="muted">{formatTokens(d.free)}</span><span className="legend-pct">{(100 - d.pct).toFixed(0)}%</span></li>
-          </ul>
-          <p className="muted small ctx-note">Total is measured; the split is estimated from message sizes.</p>
-        </>
-      )}
-      {d.pct >= 60 && (
-        <button type="button" className="btn" disabled={running} onClick={() => useSessions.getState().send(sessionId, '/compact')}>
-          <Icon name="layers" size={14} /> Compact conversation
-        </button>
-      )}
+      <ContextBody sessionId={sessionId} compact={false} />
     </Section>
   );
 }

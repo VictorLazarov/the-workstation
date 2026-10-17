@@ -30,7 +30,9 @@ export type ClientMessage =
   | { type: 'mcp.reconnect'; sessionId: SessionId; server: string }
   /** Remove the git worktree this server created for the session (acks with { removed, branchDeleted, reason? }). Refuses a dirty worktree unless `force`. */
   | { type: 'worktree.remove'; reqId: string; sessionId: SessionId; force?: boolean }
-  /** Ask the live session's SDK query for its real context-window breakdown (acks with `ContextUsage`). `detail` defaults to 'summary' (cheap, no token-count API calls). */
+  /** Ask the live session's SDK query for its real context-window breakdown (acks with `ContextUsage`). `detail` defaults to 'full' ('summary' skips the per-category token-count calls). */
+  /** Stop one running subagent / background task by its SDK task id (`task_started.task_id`). Acks `{ stopped: true }`. */
+  | { type: 'task.stop'; reqId: string; sessionId: SessionId; taskId: string }
   | { type: 'context.usage'; reqId: string; sessionId: SessionId; detail?: 'summary' | 'full' }
   | { type: 'ping' };
 

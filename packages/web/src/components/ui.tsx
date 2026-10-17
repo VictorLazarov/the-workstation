@@ -13,6 +13,11 @@ export function Spinner({ size = 14 }: { size?: number }) {
   return <span className="spinner" style={{ width: size, height: size }} role="status" aria-label="Working" />;
 }
 
+/** Three animated violet dots: "the agent is doing something" (violet is reserved for agent surfaces). */
+export function Dots() {
+  return <span className="dots" role="status" aria-label="Working"><i /><i /><i /></span>;
+}
+
 export function Kbd({ children }: { children: ReactNode }) { return <kbd className="kbd">{children}</kbd>; }
 
 export function IconButton({ icon, label, onClick, active, disabled, size = 15, className = '' }: {

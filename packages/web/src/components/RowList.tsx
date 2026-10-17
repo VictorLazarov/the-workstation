@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import type { PermissionDecision } from '@workstation/protocol';
 import type { Conversation, ImageRef, PermissionRequest, ResultItem, ThinkingBlock, UserItem } from '../lib/types';
 import { buildRows, type Row } from '../lib/tools';
@@ -94,38 +94,40 @@ export const RowList = memo(function RowList({ conv, laneKey, sessionId, cwd, se
   const lane = conv.lanes[laneKey];
   const rows = useMemo<Row[]>(() => buildRows(lane?.items ?? [], lane?.live?.id), [lane]);
   const respond = (toolUseID: string, requestId: string) => (d: PermissionDecision) => useSessions.getState().respondPermission(sessionId, requestId, d);
-  return (
-    <>
-      {rows.map((r) => {
-        switch (r.kind) {
-          case 'user': return <UserMessage key={r.key} item={r.item} sessionId={sessionId} />;
-          case 'text': return (
-            <div key={r.key} className="msg-assistant">
-              <Markdown text={r.block.text} streaming={r.streaming} />
-              {!r.streaming && !nested && r.block.text.length > 80 && <div className="msg-actions assistant"><CopyButton text={r.block.text} label="Copy response" /></div>}
-            </div>
-          );
-          case 'thinking': return <Thinking key={r.key} block={r.block} streaming={r.streaming} />;
-          case 'explore': return <ExploreGroup key={r.key} blocks={r.blocks} results={conv.toolResults} cwd={cwd} sessionRunning={sessionRunning} />;
-          case 'tool': {
-            const b = r.block;
-            const perm = perms.find((p) => p.toolUseID === b.id);
-            return (
-              <div key={b.id} data-tool-id={b.id}>
-              <ToolCard
-                block={b} result={conv.toolResults[b.id]} perm={perm} outcome={outcomes[b.id]} sessionRunning={sessionRunning}
-                sessionId={sessionId} cwd={cwd} elapsed={conv.toolProgress[b.id]} conv={b.name === 'Task' || b.name === 'Agent' ? conv : undefined}
-                task={conv.tasks[b.id]} onRespond={perm ? respond(b.id, perm.requestId) : noop}
-              />
-              </div>
-            );
-          }
-          case 'notice': return <div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>;
-          case 'result': return nested ? null : <ResultFooter key={r.key} item={r.item} />;
-          case 'error': return <div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.text}</div></div>;
-        }
-      })}
-    </>
-  );
+  const out: ReactNode[] = [];
+  let steps: ReactNode[] = [];
+  const flush = () => { if (steps.length) { out.push(<div className="steps" key={'steps:' + out.length}>{steps}</div>); steps = []; } };
+  for (const r of rows) {
+    switch (r.kind) {
+      case 'thinking': steps.push(<Thinking key={r.key} block={r.block} streaming={r.streaming} />); break;
+      case 'explore': steps.push(<ExploreGroup key={r.key} blocks={r.blocks} results={conv.toolResults} cwd={cwd} sessionRunning={sessionRunning} />); break;
+      case 'tool': {
+        const b = r.block;
+        const perm = perms.find((p) => p.toolUseID === b.id);
+        steps.push(
+          <div key={b.id} data-tool-id={b.id}>
+            <ToolCard
+              block={b} result={conv.toolResults[b.id]} perm={perm} outcome={outcomes[b.id]} sessionRunning={sessionRunning}
+              sessionId={sessionId} cwd={cwd} elapsed={conv.toolProgress[b.id]} conv={b.name === 'Task' || b.name === 'Agent' ? conv : undefined}
+              task={conv.tasks[b.id]} onRespond={perm ? respond(b.id, perm.requestId) : noop}
+            />
+          </div>,
+        );
+        break;
+      }
+      case 'user': flush(); out.push(<UserMessage key={r.key} item={r.item} sessionId={sessionId} />); break;
+      case 'text': flush(); out.push(
+        <div key={r.key} className="msg-assistant">
+          <Markdown text={r.block.text} streaming={r.streaming} />
+          {!r.streaming && !nested && r.block.text.length > 80 && <div className="msg-actions assistant"><CopyButton text={r.block.text} label="Copy response" /></div>}
+        </div>,
+      ); break;
+      case 'notice': flush(); out.push(<div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>); break;
+      case 'result': flush(); if (!nested) out.push(<ResultFooter key={r.key} item={r.item} />); break;
+      case 'error': flush(); out.push(<div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.text}</div></div>); break;
+    }
+  }
+  flush();
+  return <>{out}</>;
 });
 const noop = () => {};

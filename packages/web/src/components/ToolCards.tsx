@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Conversation, PermissionRequest, TaskInfo, ToolResult, ToolUseBlock } from '../lib/types';
 import { MAIN_LANE } from '../lib/types';
 import { collapseContext, diffLines, diffStats, fromStructuredPatch, type DiffLine } from '../lib/diff';
@@ -7,7 +7,7 @@ import { basename, formatDuration, formatTokens, relPath, truncate } from '../li
 import { useHasPanel } from '../panels/registry';
 import { useUi } from '../store/ui';
 import { Icon, type IconName } from './Icon';
-import { CopyButton, Spinner } from './ui';
+import { CopyButton, Dots, Spinner } from './ui';
 import { DiffView } from './DiffView';
 import { Markdown, CodeBlock } from './Markdown';
 import { PermissionActions, QuestionCard, PlanCard } from './PermissionCards';
@@ -34,39 +34,55 @@ export function toolStatus(p: Pick<ToolProps, 'block' | 'result' | 'perm' | 'out
 }
 
 function StatusIcon({ status }: { status: ToolStatus }) {
-  if (status === 'running' || status === 'streaming') return <Spinner size={13} />;
-  if (status === 'waiting') return <Icon name="shield" size={14} className="st-wait" />;
-  if (status === 'done') return <Icon name="check" size={14} className="st-ok" />;
-  if (status === 'error') return <Icon name="alert" size={14} className="st-err" />;
-  if (status === 'denied') return <Icon name="x" size={14} className="st-err" />;
-  return <Icon name="clock" size={13} className="st-dim" />;
+  if (status === 'running' || status === 'streaming') return <Dots />;
+  if (status === 'waiting') return <Icon name="shield" size={13} className="st-wait" />;
+  if (status === 'error') return <Icon name="alert" size={13} className="st-err" />;
+  if (status === 'denied') return <Icon name="x" size={13} className="st-err" />;
+  if (status === 'stopped') return <Icon name="clock" size={12} className="st-dim" />;
+  return null; // done: a finished step is just a quiet line
 }
 
 const KIND_ICON: Record<string, IconName> = {
   bash: 'terminal', edit: 'file-edit', write: 'file-plus', read: 'eye', search: 'search', web: 'globe', task: 'bot',
   todo: 'list-checks', ask: 'help', plan: 'list', mcp: 'zap', other: 'wrench',
 };
+/** Steps that need the reader (checklist, questions, plan review) keep a card; everything else is a one-line row. */
+const CARD_KINDS = new Set(['todo', 'ask', 'plan']);
 
-/** Collapsible card chrome shared by all tool renderings. */
-export function Shell({ kind, title, subtitle, status, meta, defaultOpen = false, forceOpen, children, actions, flush, tone }: {
+/** Seconds a step has been running: seeded from the SDK's tool progress when it reports one, else counted locally. */
+function useElapsed(active: boolean, seedSec = 0): number {
+  const t0 = useRef(Date.now() - seedSec * 1000);
+  const [, tick] = useState(0);
+  useEffect(() => { if (!active) return; const i = setInterval(() => tick((n) => n + 1), 1000); return () => clearInterval(i); }, [active]);
+  return active ? Math.max(seedSec, Math.floor((Date.now() - t0.current) / 1000)) : 0;
+}
+
+/**
+ * Tool step chrome. Default: a compact muted one-line row ("Edited auth.ts +5 -0 ›") that expands inline to the rich body.
+ * A step waiting for permission is forced open and gets a card border; todo/ask/plan keep a card.
+ */
+export function Shell({ kind, title, subtitle, status, meta, defaultOpen = false, forceOpen, children, actions, flush, tone, elapsed }: {
   kind: string; title: ReactNode; subtitle?: ReactNode; status: ToolStatus; meta?: ReactNode; defaultOpen?: boolean; forceOpen?: boolean;
-  children?: ReactNode; actions?: ReactNode; flush?: boolean; tone?: 'warn';
+  children?: ReactNode; actions?: ReactNode; flush?: boolean; tone?: 'warn'; elapsed?: number;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const isOpen = forceOpen || open;
   const has = children != null && children !== false;
+  const live = status === 'running' || status === 'streaming';
+  const sec = useElapsed(live, elapsed ?? 0);
+  const card = CARD_KINDS.has(kind);
   return (
-    <div className={`tool tool-${kind} st-${status}${isOpen ? ' open' : ''}${tone ? ' tone-' + tone : ''}`}>
+    <div className={`tool tool-${kind} st-${status}${isOpen ? ' open' : ''}${card ? ' tool-cardlike' : ''}${tone ? ' tone-' + tone : ''}`}>
       <div className="tool-head" role={has ? 'button' : undefined} tabIndex={has ? 0 : undefined} aria-expanded={has ? isOpen : undefined}
         onClick={() => has && setOpen(!open)} onKeyDown={(e) => { if (has && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); setOpen(!open); } }}>
-        <span className="tool-ico"><Icon name={KIND_ICON[kind] ?? 'wrench'} size={15} /></span>
+        <span className="tool-ico"><Icon name={KIND_ICON[kind] ?? 'wrench'} size={14} /></span>
         <span className="tool-title">{title}</span>
         {subtitle && <span className="tool-sub">{subtitle}</span>}
-        <span className="tool-spacer" />
-        {meta && <span className="tool-meta">{meta}</span>}
-        {actions}
+        {card && <span className="tool-spacer" />}
+        {(meta || live) && <span className="tool-meta">{meta}{live && sec >= 1 && <span className="tool-elapsed">{formatDuration(sec * 1000)}</span>}</span>}
         <StatusIcon status={status} />
-        {has && <Icon name="chevron-right" size={14} className="tool-chev" />}
+        {has && <Icon name="chevron-right" size={12} className="tool-chev" />}
+        {actions}
       </div>
       {has && isOpen && <div className={`tool-body${flush ? ' flush' : ''}`}>{children}</div>}
     </div>
@@ -93,9 +109,10 @@ function BashCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const bg = !!p.block.input.run_in_background;
   const desc = str(p.block.input.description);
   return (
-    <Shell kind="bash" status={p.status} defaultOpen={p.status === 'waiting' || p.status === 'running' || p.status === 'error'} forceOpen={p.status === 'waiting'}
-      title={desc || 'Run command'} subtitle={bg ? 'background' : undefined}
-      meta={<>{p.elapsed ? <span className="pill">{formatDuration(p.elapsed * 1000)}</span> : null}{exit && exit !== '0' ? <span className="pill pill-err">exit {exit}</span> : p.status === 'done' ? <span className="pill pill-ok">exit 0</span> : null}</>}>
+    <Shell kind="bash" status={p.status} defaultOpen={p.status === 'waiting' || p.status === 'error'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
+      title={desc || <>{p.status === 'done' || p.status === 'error' ? 'Ran' : 'Run'} <span className="tool-code">{truncate(cmd.split('\n')[0], 80)}</span></>}
+      subtitle={desc ? <span className="tool-code">{truncate(cmd.split('\n')[0], 70)}{bg ? ' (background)' : ''}</span> : bg ? 'background' : undefined}
+      meta={<>{exit && exit !== '0' ? <span className="meta-err">exit {exit}</span> : p.status === 'done' ? <span>exit {exit ?? '0'}</span> : null}</>}>
       <div className="cmd">
         <span className="cmd-prompt">$</span>
         <code>{cmd}</code>
@@ -127,6 +144,14 @@ export function editLines(b: ToolUseBlock, result?: ToolResult): { lines: DiffLi
   return { lines: diffLines(str(i.old_string), str(i.new_string)), isNew: false };
 }
 
+function editVerb(name: string, isNew: boolean, status: ToolStatus): string {
+  const create = name === 'Write';
+  if (status === 'waiting') return create ? 'Create' : 'Edit';
+  if (status === 'running' || status === 'streaming') return create ? 'Writing' : 'Editing';
+  if (status === 'error' || status === 'denied') return create ? 'Write' : 'Edit';
+  return create ? (isNew ? 'Created' : 'Wrote') : 'Edited';
+}
+
 function EditCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const path = toolPath(p.block);
   const { lines, isNew } = useMemo(() => editLines(p.block, p.result), [p.block, p.result]);
@@ -134,11 +159,11 @@ function EditCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const hasChanges = useHasPanel('changes');
   const hasInput = Object.keys(p.block.input).length > 0;
   return (
-    <Shell kind={p.block.name === 'Write' ? 'write' : 'edit'} status={p.status} flush defaultOpen forceOpen={p.status === 'waiting'}
-      title={<span className="filename" title={path}>{relPath(path, p.cwd)}</span>}
-      subtitle={isNew ? <span className="pill pill-ok">new</span> : p.block.name === 'MultiEdit' ? <span className="pill">{(p.block.input.edits as unknown[] | undefined)?.length ?? 0} edits</span> : undefined}
-      meta={hasInput ? <span className="stats"><span className="add">+{st.added}</span><span className="del">−{st.removed}</span></span> : null}
-      actions={hasChanges && p.status === 'done' ? <button type="button" className="link-btn" onClick={(e) => { e.stopPropagation(); useUi.getState().openInspector('changes', path); }}>Review</button> : null}>
+    <Shell kind={p.block.name === 'Write' ? 'write' : 'edit'} status={p.status} flush forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
+      title={<>{editVerb(p.block.name, isNew, p.status)} <span className="filename" title={path}>{relPath(path, p.cwd)}</span></>}
+      subtitle={p.block.name === 'MultiEdit' ? `${(p.block.input.edits as unknown[] | undefined)?.length ?? 0} edits` : undefined}
+      meta={hasInput && p.status !== 'streaming' ? <span className="stats"><span className="add">+{st.added}</span><span className="del">−{st.removed}</span></span> : null}
+      actions={hasChanges && p.status === 'done' ? <button type="button" className="link-btn row-action" onClick={(e) => { e.stopPropagation(); useUi.getState().openInspector('changes', path); }}>Review</button> : null}>
       {hasInput ? <DiffView lines={lines} path={path} maxLines={p.status === 'waiting' ? 40 : 14} /> : <div className="skeleton-lines"><i /><i /><i /></div>}
       {p.status === 'error' && p.result && <Output text={p.result.content} isError />}
       {p.footer}
@@ -151,7 +176,7 @@ function WebCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const url = str(p.block.input.url);
   const text = p.result?.content ?? '';
   return (
-    <Shell kind="web" status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'}
+    <Shell kind="web" status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
       title={isSearch ? <>Searched the web</> : <>Fetched <span className="mono">{hostOf(url)}</span></>}
       subtitle={isSearch ? <span className="query">“{truncate(str(p.block.input.query), 70)}”</span> : <span className="query">{truncate(str(p.block.input.prompt), 70)}</span>}>
       {!isSearch && url && <a className="source-link" href={url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={13} />{url}</a>}
@@ -191,13 +216,13 @@ function TaskCard(p: ToolProps & { status: ToolStatus; conv: Conversation; task?
   const [showPrompt, setShowPrompt] = useState(false);
   const toolCount = p.task?.toolUses ?? (lane?.items ?? []).reduce((n, it) => n + (it.kind === 'assistant' ? it.blocks.filter((b) => b.type === 'tool_use').length : 0), 0);
   return (
-    <Shell kind="task" status={p.status} defaultOpen={running} forceOpen={p.status === 'waiting'}
+    <Shell kind="task" status={p.status} defaultOpen={running} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
       title={<><span className="agent-name">{str(i.subagent_type) || 'Subagent'}</span></>}
       subtitle={truncate(str(i.description), 90)}
       meta={<>
-        {toolCount > 0 && <span className="pill">{toolCount} tool{toolCount > 1 ? 's' : ''}</span>}
-        {p.task?.totalTokens ? <span className="pill">{formatTokens(p.task.totalTokens)} tok</span> : null}
-        {p.task?.durationMs ? <span className="pill">{formatDuration(p.task.durationMs)}</span> : null}
+        {toolCount > 0 && <span>{toolCount} tool{toolCount > 1 ? 's' : ''}</span>}
+        {p.task?.totalTokens ? <span>{formatTokens(p.task.totalTokens)} tok</span> : null}
+        {p.task?.durationMs ? <span>{formatDuration(p.task.durationMs)}</span> : null}
       </>}>
       <div className="subagent">
         {str(i.prompt) && (
@@ -231,9 +256,9 @@ function GenericCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const json = useMemo(() => { try { return JSON.stringify(p.block.input, null, 2); } catch { return ''; } }, [p.block.input]);
   const empty = json === '{}';
   return (
-    <Shell kind={kind} status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'}
+    <Shell kind={kind} status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
       title={server ? <span className="mono-ish">{tool.replace(/_/g, ' ')}</span> : p.block.name}
-      subtitle={server ? <span className="pill">{server}</span> : undefined}>
+      subtitle={server ? server : undefined}>
       {!empty && <CodeBlock code={json} lang="json" />}
       {p.result && <Output text={p.result.content} isError={p.result.isError} />}
       {p.footer}
@@ -271,16 +296,15 @@ export const ExploreGroup = memo(function ExploreGroup({ blocks, results, cwd, s
   const running = sessionRunning && blocks.some((b) => !results[b.id]);
   const label = [reads ? `${running ? 'Reading' : 'Read'} ${reads} file${reads > 1 ? 's' : ''}` : '', searches ? `${running ? 'searching' : 'searched'} ${searches} time${searches > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ');
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const sec = useElapsed(running);
   return (
-    <div className={`explore${open ? ' open' : ''}`}>
-      <button type="button" className="explore-head" onClick={() => setOpen(!open)} aria-expanded={open}>
-        {running ? <Spinner size={12} /> : <Icon name="eye" size={14} />}
-        <span className="explore-label">{cap(label)}</span>
-        <span className="chips">
-          {!open && blocks.slice(0, 5).map((b) => <span key={b.id} className="chip" title={chipTitle(b, cwd)}>{chipLabel(b)}</span>)}
-          {!open && blocks.length > 5 && <span className="chip chip-more">+{blocks.length - 5}</span>}
-        </span>
-        <Icon name="chevron-right" size={13} className="tool-chev" />
+    <div className={`tool tool-read explore${open ? ' open' : ''}${running ? ' st-running' : ' st-done'}`}>
+      <button type="button" className="tool-head explore-head" onClick={() => setOpen(!open)} aria-expanded={open} title={blocks.map((b) => chipTitle(b, cwd)).join('\n')}>
+        <span className="tool-ico"><Icon name="eye" size={14} /></span>
+        <span className="tool-title explore-label">{cap(label)}</span>
+        {running && <span className="tool-meta">{sec >= 1 && <span className="tool-elapsed">{formatDuration(sec * 1000)}</span>}</span>}
+        {running && <Dots />}
+        <Icon name="chevron-right" size={12} className="tool-chev" />
       </button>
       {open && (
         <ul className="explore-list">
@@ -293,8 +317,8 @@ export const ExploreGroup = memo(function ExploreGroup({ blocks, results, cwd, s
                 <Icon name={b.name === 'Read' || b.name === 'LS' ? 'file' : 'search'} size={13} />
                 <span className="explore-verb">{t.verb}</span>
                 <span className="mono-ish" title={chipTitle(b, cwd)}>{b.name === 'Read' ? relPath(toolPath(b), cwd) : t.subject}</span>
-                {b.name !== 'Read' && r && !r.isError && <span className="pill">{n} result{n === 1 ? '' : 's'}</span>}
-                {r?.isError && <span className="pill pill-err">error</span>}
+                {b.name !== 'Read' && r && !r.isError && <span className="explore-n">{n} result{n === 1 ? '' : 's'}</span>}
+                {r?.isError && <span className="meta-err">error</span>}
               </li>
             );
           })}
@@ -304,11 +328,6 @@ export const ExploreGroup = memo(function ExploreGroup({ blocks, results, cwd, s
   );
 });
 
-function chipLabel(b: ToolUseBlock): string {
-  if (b.name === 'Read') return basename(toolPath(b));
-  if (b.name === 'LS') return basename(toolPath(b)) || '.';
-  return truncate(str(b.input.pattern), 24);
-}
 function chipTitle(b: ToolUseBlock, cwd: string): string {
   if (b.name === 'Read' || b.name === 'LS') return relPath(toolPath(b), cwd);
   return `${b.name}: ${str(b.input.pattern)}${b.input.path ? ' in ' + str(b.input.path) : ''}`;

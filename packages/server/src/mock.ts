@@ -97,6 +97,35 @@ class MockQuery implements QueryHandle {
   async mcpServerStatus() {
     return [...this.mcp].map(([name, on]) => ({ name, status: on ? 'connected' : 'disabled', serverInfo: { name, version: '1.0.0' } }));
   }
+  /** Plausible numbers shaped like the SDK's SDKControlGetContextUsageResponse; the message share grows with the transcript. */
+  async getContextUsage(_o?: { detail?: 'summary' | 'full' }) {
+    const max = /\[1m\]|-1m\b/i.test(this.model) ? 1_000_000 : 200_000;
+    const transcript = Math.ceil(JSON.stringify(this.session.messages).length / 3.6);
+    const messages = 120 + transcript + this.num_turns * 180;
+    const mcpTools = [...this.mcp].filter(([, on]) => on).flatMap(([server]) => ['search', 'fetch', 'list'].map((t) => ({ name: `mcp__${server}__${t}`, serverName: server, tokens: 340 + t.length * 20, isLoaded: true })));
+    const mcp = mcpTools.reduce((n, t) => n + t.tokens, 0);
+    const rows: Array<{ name: string; tokens: number; color: string; kind: 'used' | 'free' | 'buffer' | 'deferred'; isDeferred?: boolean }> = [
+      { name: 'Messages', tokens: messages, color: 'promptBorder', kind: 'used' },
+      { name: 'System tools', tokens: 11_800, color: 'inactive', kind: 'used' },
+      { name: 'MCP tools', tokens: mcp, color: 'permission', kind: 'used' },
+      { name: 'System prompt', tokens: 3_100, color: 'claude', kind: 'used' },
+      { name: 'Skills', tokens: 640, color: 'success', kind: 'used' },
+      { name: 'MCP server instructions', tokens: 420, color: 'warning', kind: 'used' },
+      { name: 'Deferred tools', tokens: 5_200, color: 'inactive', kind: 'deferred', isDeferred: true },
+    ];
+    const used = rows.filter((r) => r.kind === 'used').reduce((n, r) => n + r.tokens, 0);
+    const buffer = Math.round(max * 0.165);
+    rows.push({ name: 'Autocompact buffer', tokens: buffer, color: 'inactive', kind: 'buffer' });
+    rows.push({ name: 'Free space', tokens: Math.max(0, max - used - buffer), color: 'promptBorder', kind: 'free' });
+    return {
+      categories: rows, totalTokens: used, maxTokens: max, rawMaxTokens: max, percentage: (used / max) * 100, model: this.model,
+      memoryFiles: [], mcpTools, agents: [], isAutoCompactEnabled: true, autoCompactThreshold: max - buffer,
+      messageBreakdown: { toolCallTokens: Math.round(messages * 0.2), toolResultTokens: Math.round(messages * 0.35), attachmentTokens: 0, assistantMessageTokens: Math.round(messages * 0.25), userMessageTokens: Math.round(messages * 0.2), redirectedContextTokens: 0, unattributedTokens: 0 },
+      apiUsage: { input_tokens: 1200, output_tokens: 340, cache_read_input_tokens: used - 1200, cache_creation_input_tokens: 500 },
+      gridRows: [{ color: 'claude', isFilled: true, categoryName: 'System prompt', tokens: 3_100, percentage: 1.5, squareFullness: 1 }],
+    };
+  }
+  async stopTask(_taskId: string) { /* mock tasks finish on their own */ }
   async toggleMcpServer(name: string, enabled: boolean) { this.mcp.set(name, enabled); }
   async reconnectMcpServer(name: string) { if (!this.mcp.has(name)) throw new Error(`Unknown MCP server: ${name}`); }
   async supportedModels() { return MOCK_MODELS; }

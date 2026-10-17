@@ -33,6 +33,29 @@ function pngRed(): Buffer {
 }
 
 describe.skipIf(!process.env.REAL_SDK)('real SDK', () => {
+  it('context.usage: returns the SDK breakdown (categories, window, free space) and grows after a turn', async () => {
+    const r = rig();
+    const sid = await r.start();
+    const get = async (detail: 'summary' | 'full') => {
+      const reqId = Math.random().toString(36).slice(2);
+      const mark = r.sub.mark();
+      await r.send({ type: 'context.usage', reqId, sessionId: sid, detail });
+      const ack = await r.sub.waitFor<Extract<ServerMessage, { type: 'ack' }>>((m) => m.type === 'ack' && m.reqId === reqId, 60_000, mark);
+      return ack.data as import('@workstation/protocol').ContextUsage;
+    };
+    const before = await get('full');
+    expect(before.source).toBe('sdk');
+    expect(before.maxTokens).toBeGreaterThan(10_000);
+    expect(before.categories.some((c) => c.kind === 'used' && c.tokens > 0)).toBe(true);
+    expect(before.categories.some((c) => c.kind === 'free')).toBe(true);
+    expect(JSON.stringify(before)).not.toContain('gridRows');
+    await ask(r, sid, 'Reply with exactly the word: pong');
+    await r.sub.waitFor(isResult);
+    const after = await get('summary');
+    expect(after.totalTokens).toBeGreaterThan(0);
+    expect(after.percentage).toBeGreaterThan(0);
+  }, T);
+
   it('AskUserQuestion: answers go in updatedInput.answers keyed by question text', async () => {
     const r = rig();
     const sid = await r.start();

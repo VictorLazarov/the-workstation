@@ -86,6 +86,8 @@ export interface InitInfo {
   mcpServers: { name: string; status: string; error?: string }[];
   permissionMode?: PermissionMode;
   version?: string;
+  /** set when the server created a git worktree for this session */
+  worktree?: { path: string; branch: string } | null;
 }
 
 export interface UsageTotals {

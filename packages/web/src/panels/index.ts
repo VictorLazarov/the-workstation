@@ -6,6 +6,7 @@
  * Reserved ids (the shell links to them when present): 'changes' (edit cards get an "open in Changes" action,
  * `useUi.getState().inspectorFocus` carries the file path), 'files', 'tasks', 'context', 'terminal', 'preview'.
  */
+import './OverviewPanel';
 import './PlanPanel';
 import './ChangesPanel';
 import './FilesPanel';

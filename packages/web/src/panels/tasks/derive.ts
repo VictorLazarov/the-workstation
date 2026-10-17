@@ -7,6 +7,8 @@ export interface TaskRow {
   /** tool_use id when known (used to scroll the conversation), else the task id */
   id: string;
   toolUseId?: string;
+  /** SDK task id (what `stopTask` takes) when the task_* events told us */
+  taskId?: string;
   kind: 'subagent' | 'background';
   title: string;
   description: string;
@@ -41,7 +43,7 @@ export function deriveTasks(conv: Conversation, sessionRunning: boolean): TaskRo
     const lane = conv.lanes[b.id];
     const laneTools = lane ? lane.items.reduce((n, it) => n + (it.kind === 'assistant' ? it.blocks.filter((x) => x.type === 'tool_use').length : 0), 0) : 0;
     rows.push({
-      id: b.id, toolUseId: b.id, kind: bg ? 'background' : 'subagent',
+      id: b.id, toolUseId: b.id, taskId: info?.taskId, kind: bg ? 'background' : 'subagent',
       title: bg ? 'Background command' : str(b.input.subagent_type) || info?.subagentType || 'Subagent',
       description: bg ? str(b.input.description) || str(b.input.command) : str(b.input.description) || info?.description || '',
       status, tools: info?.toolUses ?? (laneTools || undefined), tokens: info?.totalTokens, durationMs: info?.durationMs,
@@ -51,7 +53,7 @@ export function deriveTasks(conv: Conversation, sessionRunning: boolean): TaskRo
   for (const [key, info] of Object.entries(conv.tasks)) {
     if (seen.has(key) || (info.toolUseId && seen.has(info.toolUseId))) continue;
     rows.push({
-      id: key, toolUseId: info.toolUseId, kind: info.subagentType ? 'subagent' : 'background', title: info.subagentType || 'Background task',
+      id: key, toolUseId: info.toolUseId, taskId: info.taskId, kind: info.subagentType ? 'subagent' : 'background', title: info.subagentType || 'Background task',
       description: info.description, status: info.status === 'running' && !sessionRunning ? 'stopped' : info.status, tools: info.toolUses,
       tokens: info.totalTokens, durationMs: info.durationMs, lastTool: info.lastToolName, summary: info.summary,
     });

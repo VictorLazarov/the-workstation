@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EffortLevel, ImageAttachment, PermissionMode } from '@workstation/protocol';
 import { api } from '../lib/api';
-import { contextWindowFor, debounce, fileToBase64, formatTokens, fuzzy } from '../lib/utils';
+import { debounce, fileToBase64, formatTokens, fuzzy } from '../lib/utils';
 import { ls } from '../lib/storage';
 import { useSessions, type SessionData } from '../store/sessions';
 import { Icon } from './Icon';
-import { IconButton, Kbd } from './ui';
-import { EffortChip, MODES, ModeChip, ModelChip, currentModel } from './Chips';
+import { IconButton } from './ui';
+import { useContextSummary } from '../panels/OverviewPanel';
+import { useUi } from '../store/ui';
+import { EffortChip, MODES, ModeChip, ModelChip } from './Chips';
 import { basename, dirname } from '../lib/utils';
 
 interface Popup { kind: 'mention' | 'slash'; query: string; start: number; end: number }
@@ -136,10 +138,8 @@ export function Composer({ session }: { session: SessionData }) {
     }
   };
 
-  const curModel = currentModel(session, config?.defaultModel);
-  const ctxTokens = session.conv.contextTokens;
-  const ctxWin = contextWindowFor(curModel);
-  const ctxPct = ctxTokens ? Math.min(100, Math.max(1, Math.round((ctxTokens / ctxWin) * 100))) : 0;
+  const { used: ctxTokens, max: ctxWin, pct: rawPct, tone: ctxTone } = useContextSummary(id);
+  const ctxPct = ctxTokens ? Math.min(100, Math.max(1, Math.round(rawPct))) : 0;
   const canSend = (text.trim().length > 0 || images.length > 0);
 
   return (
@@ -184,45 +184,44 @@ export function Composer({ session }: { session: SessionData }) {
             ))}
           </div>
         )}
-        <textarea
-          ref={ta} rows={1} value={text} spellCheck
-          aria-label="Message Claude"
-          placeholder={running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
-          onChange={(e) => { setText(e.target.value); setPopup(detect(e.target.value, e.target.selectionStart)); }}
-          onKeyDown={onKeyDown}
-          onKeyUp={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setPopup(detect(text, e.currentTarget.selectionStart)); }}
-          onClick={(e) => setPopup(detect(text, e.currentTarget.selectionStart))}
-          onBlur={() => setTimeout(() => setPopup(null), 120)}
-          onCompositionStart={() => { composing.current = true; }}
-          onCompositionEnd={() => { composing.current = false; }}
-          onPaste={(e) => { const f = [...e.clipboardData.files].filter((x) => x.type.startsWith('image/')); if (f.length) { e.preventDefault(); void addFiles(f); } }}
-        />
-        <div className="composer-bar">
-          <div className="composer-chips">
-            <IconButton icon="paperclip" label="Attach image" onClick={() => fileInput.current?.click()} />
-            <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
-            <ModeChip session={session} />
-            <ModelChip session={session} />
-            <EffortChip session={session} />
-          </div>
-          <div className="composer-right">
-            {ctxTokens ? (
-              <span className="ctx" title={`Context: ${formatTokens(ctxTokens)} of ${formatTokens(ctxWin)} tokens (${ctxPct}%)`}>
-                <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
-                  <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border-strong)" strokeWidth="2.5" />
-                  <circle cx="10" cy="10" r="8" fill="none" stroke={ctxPct > 85 ? 'var(--danger)' : ctxPct > 65 ? 'var(--warn)' : 'var(--accent)'} strokeWidth="2.5" strokeDasharray={`${(ctxPct / 100) * 50.3} 50.3`} strokeLinecap="round" transform="rotate(-90 10 10)" />
-                </svg>
-                <span>{ctxPct}%</span>
-              </span>
-            ) : null}
-            {running && <button type="button" className="send stop" onClick={() => interrupt(id)} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" size={13} fill /></button>}
-            <button type="button" className="send" disabled={!canSend} onClick={submit} aria-label={running ? 'Queue message' : 'Send message'} title={running ? 'Queue (Enter)' : 'Send (Enter)'}>
-              <Icon name="arrow-up" size={16} />
-            </button>
-          </div>
+        <div className="composer-row">
+          <IconButton icon="plus" label="Attach image" className="composer-plus" onClick={() => fileInput.current?.click()} />
+          <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
+          <textarea
+            ref={ta} rows={1} value={text} spellCheck
+            aria-label="Message Claude"
+            placeholder={running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
+            onChange={(e) => { setText(e.target.value); setPopup(detect(e.target.value, e.target.selectionStart)); }}
+            onKeyDown={onKeyDown}
+            onKeyUp={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setPopup(detect(text, e.currentTarget.selectionStart)); }}
+            onClick={(e) => setPopup(detect(text, e.currentTarget.selectionStart))}
+            onBlur={() => setTimeout(() => setPopup(null), 120)}
+            onCompositionStart={() => { composing.current = true; }}
+            onCompositionEnd={() => { composing.current = false; }}
+            onPaste={(e) => { const f = [...e.clipboardData.files].filter((x) => x.type.startsWith('image/')); if (f.length) { e.preventDefault(); void addFiles(f); } }}
+          />
+          {running && <button type="button" className="send stop" onClick={() => interrupt(id)} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" size={12} fill /></button>}
+          <button type="button" className="send" disabled={!canSend} onClick={submit} aria-label={running ? 'Queue message' : 'Send message'} title={running ? 'Queue (Enter)' : 'Send (Enter)'}>
+            <Icon name="arrow-up" size={15} />
+          </button>
         </div>
       </div>
-      <div className="composer-hint"><Kbd>Enter</Kbd> send · <Kbd>Shift</Kbd>+<Kbd>Enter</Kbd> new line · <Kbd>@</Kbd> files · <Kbd>/</Kbd> commands</div>
+      <div className="composer-meta">
+        <div className="composer-chips">
+          <ModeChip session={session} />
+          <ModelChip session={session} />
+          <EffortChip session={session} />
+        </div>
+        {ctxTokens ? (
+          <button type="button" className={`ctx ${ctxTone}`} title={`Context: ${formatTokens(ctxTokens)} of ${formatTokens(ctxWin)} tokens (${ctxPct}%). Click for the breakdown`} aria-label={`Context ${ctxPct}% used`} onClick={() => useUi.getState().openInspector('overview')}>
+            <svg width="16" height="16" viewBox="0 0 20 20" aria-hidden="true">
+              <circle cx="10" cy="10" r="8" fill="none" stroke="var(--border-strong)" strokeWidth="2.5" />
+              <circle cx="10" cy="10" r="8" fill="none" stroke={ctxPct > 85 ? 'var(--danger)' : 'var(--accent-solid)'} strokeWidth="2.5" strokeDasharray={`${(ctxPct / 100) * 50.3} 50.3`} strokeLinecap="round" transform="rotate(-90 10 10)" />
+            </svg>
+            <span>{ctxPct}%</span>
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

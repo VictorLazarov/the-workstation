@@ -285,7 +285,7 @@ function onSystem(c: Conversation, msg: AnyMsg) {
       c.init = {
         model: msg.model, cwd: msg.cwd, tools: msg.tools ?? [], slashCommands: msg.slash_commands ?? [],
         skills: msg.skills ?? [], agents: msg.agents ?? [], mcpServers: (msg.mcp_servers ?? []).map((s: AnyMsg) => ({ name: s.name, status: s.status })),
-        permissionMode: msg.permissionMode, version: msg.claude_code_version,
+        permissionMode: msg.permissionMode, version: msg.claude_code_version, worktree: msg.worktree ?? null,
       };
       return;
     case 'api_retry':

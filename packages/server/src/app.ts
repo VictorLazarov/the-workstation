@@ -136,6 +136,15 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     });
     return c.json({ messages });
   });
+  app.get('/api/sessions/:id/context', async (c) => {
+    const id = c.req.param('id');
+    if (!uuidish(id)) throw new HttpError(400, 'invalid session id');
+    const live = sessions.get(id);
+    if (!live) throw new HttpError(404, 'session is not live');
+    const detail = c.req.query('detail');
+    if (detail !== undefined && detail !== 'summary' && detail !== 'full') throw new HttpError(400, 'detail must be summary or full');
+    try { return c.json(await sessions.contextUsage(live, detail)); } catch (e) { throw new HttpError(502, e instanceof Error ? e.message : String(e)); }
+  });
   app.patch('/api/sessions/:id', async (c) => {
     const id = c.req.param('id');
     if (!uuidish(id)) throw new HttpError(400, 'invalid session id');

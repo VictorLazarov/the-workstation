@@ -73,6 +73,8 @@ function CommitBox({ sessionId, cwd, count }: { sessionId: string; cwd: string; 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   useEffect(() => { if (msg) ls.set('ws.commitMsg.' + sessionId, msg); else ls.del('ws.commitMsg.' + sessionId); }, [msg, sessionId]);
+  const box = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { const f = () => box.current?.focus(); window.addEventListener('ws:focus-commit', f); return () => window.removeEventListener('ws:focus-commit', f); }, []);
   const can = msg.trim().length > 0 && count > 0 && !busy;
   const submit = async () => {
     if (!can) return;
@@ -86,7 +88,7 @@ function CommitBox({ sessionId, cwd, count }: { sessionId: string; cwd: string; 
   };
   return (
     <div className="ccommit">
-      <textarea value={msg} rows={2} placeholder="Commit message" aria-label="Commit message" onChange={(e) => setMsg(e.target.value)}
+      <textarea ref={box} value={msg} rows={2} placeholder="Commit message" aria-label="Commit message" onChange={(e) => setMsg(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); } }} />
       {err && <div className="ccommit-err" role="alert">{err}</div>}
       <div className="ccommit-row">

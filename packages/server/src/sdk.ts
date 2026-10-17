@@ -12,6 +12,9 @@ export interface QueryHandle extends AsyncGenerator<unknown, void> {
   applyFlagSettings(settings: Record<string, unknown>): Promise<void>;
   rewindFiles(userMessageId: string, options?: { dryRun?: boolean }): Promise<unknown>;
   mcpServerStatus(): Promise<unknown[]>;
+  /** SDK `getContextUsage` (raw SDKControlGetContextUsageResponse; the mock returns the same shape). */
+  stopTask(taskId: string): Promise<void>;
+  getContextUsage(opts?: { detail?: 'summary' | 'full' }): Promise<unknown>;
   toggleMcpServer(name: string, enabled: boolean): Promise<void>;
   reconnectMcpServer(name: string): Promise<void>;
   initializationResult(): Promise<{ commands?: SlashCommand[]; models?: ModelInfo[]; [k: string]: unknown }>;

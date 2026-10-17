@@ -2,9 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '@workstation/protocol';
 import { fuzzy, relativeTime } from '../lib/utils';
 import { projectName, sessionStatus, useSessions, type SessionStatus } from '../store/sessions';
-import { useUi } from '../store/ui';
+import { useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { Icon } from './Icon';
-import { IconButton, MenuList, StatusDot, useOutsideClose, type MenuEntry } from './ui';
+import { IconButton, MenuList, Popover, Segmented, Spinner, useOutsideClose, type MenuEntry } from './ui';
 import { createPortal } from 'react-dom';
 
 interface Entry {
@@ -30,6 +30,42 @@ export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; it
   useOutsideClose(ref, onClose, true);
   const left = Math.min(x, window.innerWidth - 220), top = Math.min(y, window.innerHeight - 220);
   return createPortal(<div ref={ref} className="popover" style={{ position: 'fixed', left, top }}><MenuList items={items} onClose={onClose} /></div>, document.body);
+}
+
+const STATUS_LABEL: Record<SessionStatus, string> = { running: 'Running', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished, unread', idle: '', starting: 'Starting' };
+
+/** Right-hand status glyph of a session row: violet spinner = running, blue dot = needs you, branch glyph = idle. */
+function RowStatus({ e }: { e: Entry }) {
+  switch (e.status) {
+    case 'running': return <span className="sess-st st-run" title="Running"><Spinner size={12} /><span className="run-text sr-only">Running</span></span>;
+    case 'starting': return <span className="sess-st" title="Starting"><Spinner size={12} /><span className="sr-only">Starting</span></span>;
+    case 'needs-input': return <span className="sess-st" title="Needs your input"><i className="st-dot st-attn" /><span className="attn-text sr-only">Needs input</span></span>;
+    case 'error': return <span className="sess-st" title="Error"><i className="st-dot st-error" /><span className="sr-only">Error</span></span>;
+    case 'done': return <span className="sess-st" title="Finished, unread"><i className="st-dot st-done" /><span className="sr-only">Finished, unread</span></span>;
+    default: return e.branch && !/^(main|master)$/.test(e.branch) ? <span className="sess-st sess-branch"><Icon name="branch" size={12} /></span> : null;
+  }
+}
+
+function AppearanceMenu() {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLButtonElement>(null);
+  const theme = useUi((s) => s.theme);
+  const brand = useUi((s) => s.brand);
+  const density = useUi((s) => s.density);
+  return (
+    <>
+      <button ref={ref} type="button" className={`icon-btn${open ? ' active' : ''}`} aria-label="Appearance" title="Appearance: theme, brand, density" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <Icon name="sliders" size={15} />
+      </button>
+      <Popover anchor={ref} open={open} onClose={() => setOpen(false)} className="appearance">
+        <div className="appearance-body" role="dialog" aria-label="Appearance">
+          <div className="ap-row"><span>Theme</span><Segmented<Theme> value={theme} onChange={(t) => useUi.getState().setTheme(t)} options={[{ id: 'system', label: 'Auto' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} /></div>
+          <div className="ap-row"><span>Brand</span><Segmented<Brand> value={brand} onChange={(b) => useUi.getState().setBrand(b)} options={[{ id: 'horizon', label: 'Horizon' }, { id: 'warm', label: 'Warm' }]} /></div>
+          <div className="ap-row"><span>Density</span><Segmented<Density> value={density} onChange={(d) => useUi.getState().setDensity(d)} options={[{ id: 'compact', label: 'Compact' }, { id: 'comfortable', label: 'Roomy' }]} /></div>
+        </div>
+      </Popover>
+    </>
+  );
 }
 
 export function Sidebar() {
@@ -90,13 +126,13 @@ export function Sidebar() {
         <div className="brand"><span className="brand-mark" aria-hidden="true" /><span className="brand-name serif">Workstation</span></div>
         <IconButton icon="sidebar" label="Hide sidebar (Ctrl+B)" onClick={() => useUi.getState().set({ sidebarOpen: false })} />
       </div>
-      <div className="sidebar-actions">
-        <button type="button" className="btn primary block" onClick={startNew}><Icon name="plus" size={15} /> New session</button>
-        <div className="search">
-          <Icon name="search" size={14} />
-          <input value={query} onChange={(e) => useUi.getState().set({ sidebarQuery: e.target.value })} placeholder="Search sessions" aria-label="Search sessions" />
+      <div className="side-quick">
+        <button type="button" className="qa" onClick={startNew} title="New session (Ctrl+N)"><Icon name="plus" size={15} /><span>New session</span></button>
+        <label className="qa search">
+          <Icon name="search" size={15} />
+          <input value={query} onChange={(e) => useUi.getState().set({ sidebarQuery: e.target.value })} placeholder="Search" aria-label="Search sessions" />
           {query && <IconButton icon="x" label="Clear search" size={12} onClick={() => useUi.getState().set({ sidebarQuery: '' })} />}
-        </div>
+        </label>
       </div>
       <nav className="sidebar-list">
         {groups.length === 0 && (
@@ -113,9 +149,9 @@ export function Sidebar() {
             <section key={g.cwd} className="proj">
               <div className="proj-head">
                 <button type="button" className="proj-toggle" onClick={() => setCollapsed({ ...collapsed, [g.cwd]: !isC })} aria-expanded={!isC} title={g.cwd}>
-                  <Icon name="chevron-down" size={12} className={`proj-chev${isC ? ' closed' : ''}`} />
-                  <Icon name="folder" size={14} /><span className="proj-name">{projectName(g.cwd)}</span>
-                  {running > 0 && <span className="proj-live">{running}</span>}
+                  <Icon name="chevron-down" size={11} className={`proj-chev${isC ? ' closed' : ''}`} />
+                  <span className="proj-name">{projectName(g.cwd)}</span>
+                  {running > 0 && <span className="proj-live" title={`${running} running or waiting`}>{running}</span>}
                 </button>
                 <IconButton icon="plus" label={`New session in ${projectName(g.cwd)}`} size={14} className="proj-add" onClick={() => newSession(g.cwd)} />
               </div>
@@ -124,19 +160,16 @@ export function Sidebar() {
                   {g.es.slice(0, limit).map((e) => (
                     <li key={e.id}>
                       <button
-                        type="button" className={`sess${activeId === e.id ? ' active' : ''}${e.status === 'needs-input' ? ' attn' : ''}`}
+                        type="button" className={`sess${activeId === e.id ? ' active' : ''}${e.status === 'needs-input' ? ' attn' : ''}${e.status === 'running' ? ' run' : ''}`}
                         onClick={() => open(e)} onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, e }); }}
                         aria-current={activeId === e.id ? 'true' : undefined}
+                        title={[e.title, [e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
                       >
-                        <StatusDot status={e.status} />
-                        <span className="sess-main">
-                          <span className="sess-title">{e.title}</span>
-                          <span className="sess-meta">
-                            {e.status === 'needs-input' ? <b className="attn-text">Needs input</b> : e.status === 'running' ? <b className="run-text">Running</b> : null}
-                            {e.branch && <><Icon name="branch" size={11} />{e.branch}</>}
-                          </span>
+                        <span className="sess-title">{e.title}</span>
+                        <RowStatus e={e} />
+                        <span className="sess-hover" aria-hidden="true">
+                          <span className="sess-time">{relativeTime(e.time)}</span>
                         </span>
-                        <span className="sess-time">{relativeTime(e.time)}</span>
                         <span className="sess-more" role="button" tabIndex={-1} aria-label="Session actions" onClick={(ev) => { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom + 4, e }); }}><Icon name="more" size={15} /></span>
                       </button>
                     </li>
@@ -151,7 +184,11 @@ export function Sidebar() {
       </nav>
       <div className="sidebar-foot">
         <button type="button" className="foot-btn" onClick={() => useUi.getState().set({ pickerOpen: true })}><Icon name="folder-open" size={15} /> Open project</button>
-        <IconButton icon="settings" label="Settings (Ctrl+,)" onClick={() => useUi.getState().set({ settingsOpen: true })} />
+        <div className="foot-icons">
+          <IconButton icon="search" label="Command palette (Ctrl+K)" onClick={() => useUi.getState().set({ paletteOpen: true })} />
+          <AppearanceMenu />
+          <IconButton icon="settings" label="Settings (Ctrl+,)" onClick={() => useUi.getState().set({ settingsOpen: true })} />
+        </div>
       </div>
       {menu && <ContextMenu x={menu.x} y={menu.y} items={menuItems(menu.e)} onClose={() => setMenu(null)} />}
     </aside>

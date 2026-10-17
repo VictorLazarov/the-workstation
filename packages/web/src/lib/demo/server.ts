@@ -2,7 +2,7 @@
  * In-browser fake server used for `?demo=1`: speaks the same protocol as the real server
  * (ClientMessage in, ServerMessage out) with deterministic, scripted SDK-shaped events.
  */
-import type { ClientMessage, PermissionDecision, ServerMessage, SessionRuntimeState } from '@workstation/protocol';
+import type { ClientMessage, ContextUsage, PermissionDecision, ServerMessage, SessionRuntimeState } from '@workstation/protocol';
 import type { ConnStatus, Transport } from '../transport/types';
 import { demoGitCommit, demoGitDiff, demoGitRevert, demoGitStatus, demoReadFile } from './git';
 import {
@@ -22,6 +22,33 @@ type B =
   | { type: 'thinking'; text: string }
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: Record<string, unknown> };
+
+/** Plausible context breakdown for the offline demo; the message share grows with the number of events seen. */
+function demoContextUsage(seq: number, detail: 'summary' | 'full'): ContextUsage {
+  const max = 200_000;
+  const messages = 2_400 + seq * 310;
+  const mcpTools = [
+    { name: 'mcp__github__create_pull_request', serverName: 'github', tokens: 640, isLoaded: true },
+    { name: 'mcp__github__list_issues', serverName: 'github', tokens: 520, isLoaded: true },
+    { name: 'mcp__github__search_code', serverName: 'github', tokens: 480, isLoaded: true },
+    { name: 'mcp__playwright__browser_click', serverName: 'playwright', tokens: 410, isLoaded: true },
+    { name: 'mcp__playwright__browser_navigate', serverName: 'playwright', tokens: 390, isLoaded: true },
+  ];
+  const mcp = mcpTools.reduce((n, t) => n + t.tokens, 0);
+  const used = messages + 11_800 + mcp + 3_100 + 640 + 420;
+  const buffer = 33_000;
+  return {
+    source: 'sdk', detail, model: 'claude-sonnet-4-5', totalTokens: used, maxTokens: max, rawMaxTokens: max, percentage: (used / max) * 100, mcpTools,
+    categories: [
+      { name: 'Messages', tokens: messages, color: '', kind: 'used' }, { name: 'System tools', tokens: 11_800, color: '', kind: 'used' },
+      { name: 'MCP tools', tokens: mcp, color: '', kind: 'used' }, { name: 'System prompt', tokens: 3_100, color: '', kind: 'used' },
+      { name: 'Skills', tokens: 640, color: '', kind: 'used' }, { name: 'MCP server instructions', tokens: 420, color: '', kind: 'used' },
+      { name: 'System tools (deferred)', tokens: 5_200, color: '', kind: 'deferred', isDeferred: true },
+      { name: 'Autocompact buffer', tokens: buffer, color: '', kind: 'buffer' }, { name: 'Free space', tokens: max - used - buffer, color: '', kind: 'free' },
+    ],
+    isAutoCompactEnabled: true, autoCompactThreshold: max - buffer, apiUsage: null, at: Date.now(),
+  };
+}
 
 class DemoBackend implements Transport {
   status: ConnStatus = 'closed';
@@ -118,6 +145,13 @@ class DemoBackend implements Transport {
       case 'set.model': { const s = this.sessions.get(msg.sessionId); if (s) this.state(s, { model: msg.model }); return; }
       case 'set.permissionMode': { const s = this.sessions.get(msg.sessionId); if (s) this.state(s, { permissionMode: msg.mode }); return; }
       case 'set.effort': { const s = this.sessions.get(msg.sessionId); if (s) this.state(s, { effort: msg.effort }); return; }
+      case 'context.usage': {
+        const s = this.sessions.get(msg.sessionId);
+        if (!s) { this.out({ type: 'error', reqId: msg.reqId, sessionId: msg.sessionId, message: `no live session ${msg.sessionId}` }); return; }
+        this.out({ type: 'ack', reqId: msg.reqId, ok: true, data: demoContextUsage(s.seq, msg.detail ?? 'full') });
+        return;
+      }
+      case 'task.stop': this.out({ type: 'ack', reqId: msg.reqId, ok: true, data: { stopped: true } }); return;
       case 'rewind':
         this.out({ type: 'ack', reqId: msg.reqId, ok: true, data: msg.dryRun ? { canRewind: true, filesChanged: ['src/styles/theme.css', 'src/lib/useTheme.ts'], insertions: 25, deletions: 1 } : { canRewind: true } });
         return;

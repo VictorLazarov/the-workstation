@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type {
-  AppConfig, ClientMessage, EffortLevel, ImageAttachment, ModelOption, PermissionDecision, PermissionMode,
+  AppConfig, ClientMessage, ContextUsage, EffortLevel, ImageAttachment, ModelOption, PermissionDecision, PermissionMode,
   ServerMessage, SessionRuntimeState, SessionSummary, SlashCommandInfo,
 } from '@workstation/protocol';
 import { api } from '../lib/api';
@@ -83,6 +83,9 @@ interface Store {
   forkSession: (id: string) => void;
   closeSession: (id: string) => void;
   rewind: (id: string, userMessageId: string, dryRun: boolean) => Promise<unknown>;
+  /** Real context-window breakdown from the live SDK query (rejects when the session is not live). */
+  contextUsage: (id: string, detail?: 'summary' | 'full') => Promise<ContextUsage>;
+  stopTask: (id: string, taskId: string) => Promise<void>;
   mcpToggle: (id: string, server: string, enabled: boolean) => void;
   mcpReconnect: (id: string, server: string) => void;
   reconnectNow: () => void;
@@ -514,6 +517,13 @@ export const useSessions = create<Store>((set, get) => {
     },
     async rewind(id, userMessageId, dryRun) {
       return request({ type: 'rewind', reqId: uid('req'), sessionId: id, userMessageId, dryRun });
+    },
+
+    async contextUsage(id, detail = 'full') {
+      return (await request({ type: 'context.usage', reqId: uid('req'), sessionId: id, detail })) as ContextUsage;
+    },
+    async stopTask(id, taskId) {
+      await request({ type: 'task.stop', reqId: uid('req'), sessionId: id, taskId });
     },
 
     reconnectNow() { transport?.connect(); },

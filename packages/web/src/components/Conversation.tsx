@@ -5,7 +5,7 @@ import { formatDuration, relativeTime } from '../lib/utils';
 import { Icon } from './Icon';
 import { PermissionDock } from './PermissionCards';
 import { RowList } from './RowList';
-import { Spinner } from './ui';
+import { Dots, Spinner } from './ui';
 import { useUi } from '../store/ui';
 
 const SUGGESTIONS = [
@@ -84,7 +84,7 @@ export function Conversation({ session }: { session: SessionData }) {
           )}
           {conv.statusText === 'compacting' && <div className="banner info"><Spinner size={13} /> Compacting conversation…</div>}
           {(showWorking || lastIsUser) && running && (
-            <div className="working" role="status"><Spinner size={13} /><span className="shimmer">Working</span><span className="working-time"><Elapsed since={session.turnStartedAt} /></span></div>
+            <div className="working" role="status"><Dots /><span className="shimmer">Working</span><span className="working-time"><Elapsed since={session.turnStartedAt} /></span></div>
           )}
           <div className="conv-end" />
         </div>

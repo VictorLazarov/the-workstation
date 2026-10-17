@@ -8,6 +8,7 @@ import type { ConfigStore } from './config.js';
 import { HttpError, requireDir } from './files.js';
 import { createWorktree, gitRoot } from './git.js';
 import { headSha, removeWorktree, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
+import { normalizeContextUsage } from './context-usage.js';
 import { buildCliEnv, type QueryHandle, type SdkAdapter } from './sdk.js';
 
 export interface Subscriber {
@@ -192,6 +193,18 @@ export class SessionManager {
           this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: await s.query.mcpServerStatus() } });
           return;
         }
+        case 'task.stop': {
+          const s = this.must(msg.sessionId);
+          if (typeof msg.taskId !== 'string' || !msg.taskId || msg.taskId.length > 200) throw new Error('taskId required');
+          await s.query.stopTask(msg.taskId);
+          sub.send({ type: 'ack', reqId: msg.reqId, ok: true, data: { stopped: true } });
+          return;
+        }
+        case 'context.usage': {
+          const data = await this.contextUsage(this.must(msg.sessionId), msg.detail);
+          sub.send({ type: 'ack', reqId: msg.reqId, ok: true, data });
+          return;
+        }
         case 'worktree.remove': {
           const res = await this.removeSessionWorktree(msg.sessionId, !!msg.force);
           sub.send({ type: 'ack', reqId: msg.reqId, ok: true, data: res });
@@ -203,6 +216,13 @@ export class SessionManager {
     } catch (e) {
       sub.send({ type: 'error', reqId, sessionId, message: e instanceof Error ? e.message : String(e) });
     }
+  }
+
+  /** Real context-window breakdown from the SDK query (`getContextUsage`), reduced to the wire shape. */
+  async contextUsage(s: LiveSession, detail?: unknown) {
+    const d: 'summary' | 'full' = detail === 'summary' ? 'summary' : 'full';
+    if (typeof s.query.getContextUsage !== 'function') throw new Error('This Claude Code version cannot report context usage');
+    return normalizeContextUsage(await s.query.getContextUsage({ detail: d }), d, this.adapter.mock ? 'mock' : 'sdk');
   }
 
   private must(id: unknown): LiveSession {
