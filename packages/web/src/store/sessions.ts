@@ -10,11 +10,16 @@ import {
 import type { Conversation, ImageRef, PermissionRequest } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
 import { basename, truncate, uid } from '../lib/utils';
-import { isDemo, ls } from '../lib/storage';
+import { clearFailed, failMessage, hasFailed, markAllFailed, nextSendable, type QueuedPrompt } from '../lib/queue';
+import { getServerBase, getToken, isDemo, ls } from '../lib/storage';
+import { probeAccess } from '../lib/access';
 import { applyTheme, useUi } from './ui';
 import { platform } from '../platform';
 
-export interface QueuedPrompt { id: string; text: string; images: ImageAttachment[] }
+export type { QueuedPrompt };
+
+/** Whether this browser may talk to the server: `missing`/`invalid` token are terminal states with their own screen. */
+export type Access = 'checking' | 'ok' | 'missing' | 'invalid';
 
 export interface SessionData {
   id: string;
@@ -51,6 +56,7 @@ export function sessionStatus(s: Pick<SessionData, 'perms' | 'runtime' | 'failed
 
 interface Store {
   conn: ConnStatus;
+  access: Access;
   ready: boolean;
   hello?: { version: string; serverCwd: string; mock: boolean };
   config: AppConfig | null;
@@ -73,6 +79,8 @@ interface Store {
   setActive: (id: string | null) => void;
   send: (id: string, text: string, images?: ImageAttachment[]) => void;
   cancelQueued: (id: string, qid: string) => void;
+  /** Re-send queued messages that failed to reach the server (offline / session ended). */
+  retryQueued: (id: string) => void;
   interrupt: (id: string) => void;
   respondPermission: (id: string, requestId: string, decision: PermissionDecision) => void;
   setModel: (id: string, model?: string) => void;
@@ -89,6 +97,8 @@ interface Store {
   mcpToggle: (id: string, server: string, enabled: boolean) => void;
   mcpReconnect: (id: string, server: string) => void;
   reconnectNow: () => void;
+  /** Re-checks the access token against /api/health (Retry on the access screen). */
+  recheckAccess: () => Promise<void>;
 }
 
 let transport: Transport | null = null;
@@ -131,7 +141,7 @@ export const useSessions = create<Store>((set, get) => {
     const s = get().sessions[id];
     const isActive = get().activeId === id && !document.hidden;
     if (isActive) return;
-    useUi.getState().toast({ kind, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, ttl: kind === 'attention' ? 10_000 : 5000 });
+    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, ttl: kind === 'attention' ? 10_000 : 5000 });
     if (document.hidden) platform.notify({ title, body: s?.title ?? body, tag: id, onClick: () => get().setActive(id) });
   };
 
@@ -140,7 +150,12 @@ export const useSessions = create<Store>((set, get) => {
     if (!s) return;
     const refs: ImageRef[] = images.map((i) => ({ mediaType: i.mediaType, dataBase64: i.dataBase64, name: i.name }));
     const ok = transport?.send({ type: 'prompt', sessionId: id, text, images: images.length ? images : undefined, clientMsgId: qid }) ?? false;
-    if (!ok) { useUi.getState().toast({ kind: 'error', title: 'Not connected', body: 'Your message was not sent. Reconnecting…' }); return; }
+    if (!ok) {
+      // Not lost: it goes (back) to the queue marked as not sent; reconnecting re-sends it, and it has a Retry button.
+      patch(id, (x) => ({ queue: failMessage(x.queue, { id: qid, text, images }) }));
+      useUi.getState().toast({ kind: 'error', title: 'Not connected', body: 'Your message was not sent. It will be sent when the connection is back, or retry it from the queue.' });
+      return;
+    }
     const conv = addLocalUser(s.conv, qid, text, refs);
     patch(id, (x) => ({
       conv, runtime: { ...x.runtime, status: 'running' }, turnStartedAt: Date.now(), failed: false, lastActivity: Date.now(),
@@ -150,9 +165,10 @@ export const useSessions = create<Store>((set, get) => {
 
   const flushQueue = (id: string) => {
     const s = get().sessions[id];
-    if (!s || !s.live || s.runtime.status !== 'idle' || !s.queue.length || s.perms.length) return;
-    const [next, ...rest] = s.queue;
-    patch(id, () => ({ queue: rest }));
+    if (!s || !s.live || s.runtime.status !== 'idle' || s.perms.length) return;
+    const next = nextSendable(s.queue);
+    if (!next) return;
+    patch(id, () => ({ queue: s.queue.filter((q) => q.id !== next.id) }));
     sendNow(id, next.text, next.images, next.id);
   };
 
@@ -167,7 +183,12 @@ export const useSessions = create<Store>((set, get) => {
       model: s.runtime.model ?? cfg?.defaultModel, effort: s.runtime.effort ?? cfg?.defaultEffort,
       permissionMode: s.runtime.permissionMode, worktree: s.worktree || undefined,
     });
-    if (!ok) { pendingStarts.delete(reqId); toast({ kind: 'error', title: 'Not connected', body: 'Could not start the session.' }); return; }
+    if (!ok) {
+      pendingStarts.delete(reqId);
+      patch(localId, (x) => ({ queue: markAllFailed(x.queue) }));
+      toast({ kind: 'error', title: 'Not connected', body: 'Could not start the session. Your message is kept; it is sent when the connection is back.' });
+      return;
+    }
     patch(localId, () => ({ starting: true, runtime: { ...s.runtime, status: 'starting' } }));
   };
 
@@ -215,7 +236,7 @@ export const useSessions = create<Store>((set, get) => {
         if (m.reqId && pendingStarts.has(m.reqId)) {
           const lid = pendingStarts.get(m.reqId)!;
           pendingStarts.delete(m.reqId);
-          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, conv: addNotice(s.conv, 'error', m.message) }));
+          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', m.message) }));
         } else if (m.sessionId && get().sessions[m.sessionId]) {
           patch(m.sessionId, (s) => ({ conv: addNotice(finishStreaming(s.conv), 'error', m.message), failed: true, runtime: { ...s.runtime, status: s.runtime.status === 'closed' ? 'closed' : 'idle' } }));
         }
@@ -246,6 +267,8 @@ export const useSessions = create<Store>((set, get) => {
       case 'session.ended':
         patch(m.sessionId, (s) => ({
           live: false, starting: false, runtime: { ...s.runtime, status: 'idle' }, perms: [],
+          // nothing will flush a queue on a dead session: mark it not sent (re-sent when the session can start again)
+          queue: markAllFailed(s.queue),
           conv: addNotice(finishStreaming(s.conv), m.reason === 'closed' || m.reason === 'user' ? 'info' : 'warn', `Session ended${m.reason ? ` (${m.reason})` : ''}`),
         }));
         return;
@@ -310,7 +333,16 @@ export const useSessions = create<Store>((set, get) => {
         void reattach(sum.sessionId, true);
       }
     }
-    set({ ready: true });
+    set({ ready: true, access: 'ok' });
+    // Reload / reopen: go back to the session that was open (only when nothing else was opened meanwhile).
+    const last = ls.get('ws.activeId');
+    if (last && !get().activeId && !isDemo()) {
+      const sum = get().summaries.find((x) => x.sessionId === last);
+      if (sum) get().openSession(sum);
+    }
+    // After an outage: what was queued while offline is sent now, and git status (which failed meanwhile) is re-read.
+    for (const s of Object.values(get().sessions)) if (hasFailed(s.queue)) get().retryQueued(s.id);
+    window.dispatchEvent(new Event('ws:reconnected'));
   }
 
   async function reattach(id: string, withHistory = false) {
@@ -323,23 +355,36 @@ export const useSessions = create<Store>((set, get) => {
   }
 
   return {
-    conn: 'connecting', ready: false, config: null, models: [], commands: [], sessions: {}, summaries: [], summariesLoading: false,
+    conn: 'connecting', access: 'checking', ready: false, config: null, models: [], commands: [], sessions: {}, summaries: [], summariesLoading: false,
     activeId: null, projects: [],
 
     async init() {
       if (initStarted) return;
       initStarted = true;
+      if (!isDemo() && !getToken()) {
+        // No token: nothing is sent to the server at all; the UI shows the access screen.
+        set({ access: 'missing', conn: 'closed' });
+        return;
+      }
+      if (isDemo()) set({ access: 'ok' });
       transport = await createTransport();
       transport.onStatus((conn) => {
         const was = get().conn;
         set({ conn });
-        if (conn === 'closed' && was === 'open') {
+        if ((conn === 'closed' || conn === 'offline') && was === 'open') {
           // streaming state is stale until we re-attach
           for (const s of Object.values(get().sessions)) if (s.live) patch(s.id, (x) => ({ conv: finishStreaming(x.conv) }));
         }
+        // A refused WebSocket upgrade looks like any network error: ask /api/health whether the token is the problem.
+        if ((conn === 'closed' || conn === 'offline') && !isDemo()) void get().recheckAccess();
+      });
+      useSessions.subscribe((st, prev) => {
+        if (st.activeId === prev.activeId) return;
+        if (st.activeId && !st.activeId.startsWith('new_')) ls.set('ws.activeId', st.activeId); else if (!st.activeId) ls.del('ws.activeId');
       });
       transport.onMessage(onServer);
       transport.connect();
+      if (!isDemo()) void get().recheckAccess();
       if (isDemo()) {
         // open the rich demo session so the first paint is meaningful
         const rich = 'demo-rich';
@@ -420,6 +465,7 @@ export const useSessions = create<Store>((set, get) => {
 
     setActive(id) {
       set({ activeId: id });
+      if (id) useUi.getState().dismissToastsByTag(id); // its "needs you" / "finished" toast is now moot
       if (id && get().sessions[id]?.unread) patch(id, () => ({ unread: false }));
     },
 
@@ -436,6 +482,15 @@ export const useSessions = create<Store>((set, get) => {
     },
 
     cancelQueued(id, qid) { patch(id, (s) => ({ queue: s.queue.filter((q) => q.id !== qid) })); },
+
+    retryQueued(id) {
+      const s = get().sessions[id];
+      if (!s || !hasFailed(s.queue)) return;
+      patch(id, (x) => ({ queue: clearFailed(x.queue) }));
+      const cur = get().sessions[id]!;
+      if (cur.live && cur.runtime.status === 'idle' && !cur.perms.length) flushQueue(id);
+      else if (!cur.live && !cur.starting) startServerSession(id, { resume: cur.isDraft ? undefined : id });
+    },
 
     interrupt(id) {
       transport?.send({ type: 'interrupt', sessionId: id });
@@ -526,7 +581,14 @@ export const useSessions = create<Store>((set, get) => {
       await request({ type: 'task.stop', reqId: uid('req'), sessionId: id, taskId });
     },
 
-    reconnectNow() { transport?.connect(); },
+    reconnectNow() { void get().recheckAccess(); transport?.connect(); },
+
+    async recheckAccess() {
+      if (isDemo()) return;
+      const r = await probeAccess();
+      if (r === 'missing' || r === 'invalid') { transport?.close(); set({ access: r, conn: 'closed' }); }
+      else if (r === 'ok' && get().access !== 'ok') { set({ access: 'ok' }); if (get().conn !== 'open') transport?.connect(); }
+    },
   };
 });
 

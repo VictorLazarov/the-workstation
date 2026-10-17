@@ -9,10 +9,12 @@ import { useUi } from '../store/ui';
 import { registerPanel, type PanelProps } from './registry';
 import { matchesFocus, mergeChanges, sessionFiles, totals, type ChangeFile, type ChangeStatus } from './changes/derive';
 import { FileDiff } from './changes/FileDiff';
-import { refreshGit, selectGit, useGit, useGitSync, type GitState } from './changes/store';
+import { refreshGit, selectGit, useBranch, useGit, useGitSync, type GitState } from './changes/store';
 import './panels.css';
 
 type Mode = 'unified' | 'split';
+/** Inspector width (px) from which the side-by-side diff is offered: two panes of at least ~290px plus gutters. */
+export const SPLIT_MIN_WIDTH = 620;
 type Scope = 'all' | 'session';
 const LETTER: Record<ChangeStatus, string> = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', untracked: 'U' };
 const TITLE: Record<ChangeStatus, string> = { modified: 'Modified', added: 'Added', deleted: 'Deleted', renamed: 'Renamed', untracked: 'Untracked (new file)' };
@@ -103,7 +105,20 @@ function CommitBox({ sessionId, cwd, files }: { sessionId: string; cwd: string; 
 function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
   useGitSync(sessionId, cwd);
   const { files: all, git } = useChanges(sessionId, cwd);
+  const branch = useBranch(sessionId);
   const [mode, setMode] = useState<Mode>(() => (ls.get('ws.diffMode') as Mode) || 'unified');
+  // Split needs room for two readable panes; in a narrow inspector it falls back to unified (the preference is kept).
+  const root = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(1000);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
+    ro.observe(el); setWidth(el.clientWidth);
+    return () => ro.disconnect();
+  }, []);
+  const canSplit = width >= SPLIT_MIN_WIDTH;
+  const shownMode: Mode = mode === 'split' && canSplit ? 'split' : 'unified';
   const [scope, setScope] = useState<Scope>(() => (ls.get('ws.changesScope') as Scope) || 'all');
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
   const [allState, setAllState] = useState<'default' | 'open' | 'closed'>('default');
@@ -141,17 +156,17 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
   if (!git.loaded && !all.length) return <div className="panel-empty"><Spinner size={18} /><span>Checking for changes…</span></div>;
 
   return (
-    <div className="changes">
+    <div className="changes" ref={root}>
       <div className="changes-bar">
         <div className="changes-sum">
-          {git.isRepo && git.branch && <span className="chip-branch" title="Current branch"><Icon name="branch" size={12} />{git.branch}</span>}
+          {git.isRepo && branch && <span className="chip-branch" title="Current branch"><Icon name="branch" size={12} />{branch}</span>}
           <span><b>{files.length}</b> file{files.length === 1 ? '' : 's'}</span>
           <span className="stats"><span className="add">+{tot.added}</span><span className="del">−{tot.removed}</span></span>
         </div>
         <div className="changes-tools">
-          <Segmented<Mode> value={mode} onChange={setModeP} options={[{ id: 'unified', label: 'Unified' }, { id: 'split', label: 'Split' }]} />
-          <IconButton icon={anyOpen ? 'chevron-up' : 'chevron-down'} label={anyOpen ? 'Collapse all' : 'Expand all'} size={15}
-            onClick={() => { setToggled({}); setAllState(anyOpen ? 'closed' : 'open'); }} />
+          {files.length > 0 && <Segmented<Mode> value={shownMode} onChange={setModeP} options={[{ id: 'unified', label: 'Unified' }, { id: 'split', label: 'Split', disabled: !canSplit, title: canSplit ? undefined : 'Split needs a wider inspector: drag its edge to widen it' }]} />}
+          {files.length > 0 && <IconButton icon={anyOpen ? 'chevron-up' : 'chevron-down'} label={anyOpen ? 'Collapse all' : 'Expand all'} size={15}
+            onClick={() => { setToggled({}); setAllState(anyOpen ? 'closed' : 'open'); }} />}
           <IconButton icon="refresh" label="Refresh" size={15} onClick={() => void refreshGit(sessionId, cwd)} disabled={git.loading} />
         </div>
       </div>
@@ -171,7 +186,7 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
             <span>{git.isRepo ? 'The working tree is clean. Files Claude edits will appear here for review.' : 'Files Claude edits will appear here for review.'}</span>
           </div>
         ) : files.map((f, i) => (
-          <FileCard key={f.path} f={f} mode={mode} open={isOpen(f, i)} focused={f.path === focusPath}
+          <FileCard key={f.path} f={f} mode={shownMode} open={isOpen(f, i)} focused={f.path === focusPath}
             onToggle={() => setToggled({ ...toggled, [f.path]: !isOpen(f, i) })}
             canRevert={f.source === 'git' && git.isRepo && f.status !== 'renamed'} onRevert={() => void revert(f)} />
         ))}

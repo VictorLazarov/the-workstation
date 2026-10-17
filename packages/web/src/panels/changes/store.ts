@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { create } from 'zustand';
 import { api } from '../../lib/api';
 import { useSessions } from '../../store/sessions';
-import { absPath, type GitSnapshot } from './derive';
+import { absPath, resolveBranch, type GitSnapshot } from './derive';
 import { parseGitDiff } from './gitdiff';
 
 export interface GitState extends GitSnapshot { loading: boolean; loaded: boolean; error?: string; branch?: string; at: number }
@@ -68,9 +68,27 @@ export function useGitSync(id: string, cwd: string) {
   }, [id, cwd, status, turns, results]);
   useEffect(() => {
     if (!cwd) return;
+    const back = () => void refreshGit(id, cwd); // the server was away: status requests failed meanwhile
+    window.addEventListener('ws:reconnected', back);
+    return () => window.removeEventListener('ws:reconnected', back);
+  }, [id, cwd]);
+  useEffect(() => {
+    if (!cwd) return;
     const on = () => { if (!document.hidden) void refreshGit(id, cwd); };
     window.addEventListener('focus', on);
     document.addEventListener('visibilitychange', on);
     return () => { window.removeEventListener('focus', on); document.removeEventListener('visibilitychange', on); };
   }, [id, cwd]);
+}
+
+/**
+ * The ONE branch a session shows (topbar, Overview > Environment, Changes header, empty-session header).
+ * Source of truth: the worktree branch when the session runs in one, else the live `git status` of its checkout.
+ * Until git has answered (or if it cannot), fall back to the branch recorded in the session metadata.
+ */
+export function useBranch(id: string): string | undefined {
+  const worktree = useSessions((s) => s.sessions[id]?.conv.init?.worktree?.branch);
+  const recorded = useSessions((s) => s.sessions[id]?.branch);
+  const git = useGit(selectGit(id));
+  return resolveBranch({ worktree, recorded, git });
 }

@@ -79,7 +79,8 @@ let commits = 0;
 
 const rel = (p: string) => (p.startsWith(DEMO_CWD + '/') ? p.slice(DEMO_CWD.length + 1) : p);
 
-export function demoGitStatus() {
+export function demoGitStatus(cwd?: string) {
+  if (cwd && cwd !== DEMO_CWD) return { isRepo: true, branch: 'feat/rate-limit', root: cwd, files: [] as { path: string; index: string; worktree: string }[] };
   return { isRepo: true, branch: 'feat/dark-mode', root: DEMO_CWD, files: Object.entries(state).map(([path, e]) => ({ path, ...e.status })) };
 }
 export function demoGitDiff(path?: string): string {

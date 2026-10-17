@@ -6,6 +6,7 @@ import { useUi } from '../store/ui';
 import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
 import { MODES } from './Chips';
+import { newSessionShortcut } from '../lib/shortcuts';
 
 /* ───────── toasts ───────── */
 export function Toasts() {
@@ -37,6 +38,8 @@ export function ConfirmHost() {
         footer={<><button type="button" className="btn ghost" onClick={() => c?.resolve(false)}>Cancel</button><button type="button" className={`btn ${c?.danger ? 'danger-solid' : 'primary'}`} onClick={() => c?.resolve(true)} autoFocus>{c?.confirmLabel ?? 'Confirm'}</button></>}>
         {c?.body && <p className="dlg-p">{c.body}</p>}
         {c?.details && c.details.length > 0 && <ul className="dlg-list">{c.details.map((d, i) => <li key={i}>{d}</li>)}</ul>}
+        {c?.summary && <p className="dlg-summary">{c.summary}</p>}
+        {c?.note && <p className="dlg-note"><Icon name="info" size={14} /><span>{c.note}</span></p>}
       </Dialog>
       <Dialog open={!!p} onClose={() => p?.resolve(null)} title={p?.title} width={420}
         footer={<><button type="button" className="btn ghost" onClick={() => p?.resolve(null)}>Cancel</button><button type="button" className="btn primary" onClick={() => p?.resolve(val)}>{p?.confirmLabel ?? 'OK'}</button></>}>
@@ -66,11 +69,12 @@ export function ConnectionBanner() {
   }
   if (conn === 'open' && !cfgErr) return null;
   if (!grace && !ready) return null;
+  const offline = conn === 'offline';
   return (
     <div className="conn-banner" role="alert">
-      {conn === 'open' ? <Icon name="alert" size={14} /> : <Spinner size={13} />}
-      <span>{conn === 'open' ? `Server error: ${cfgErr}. Check your access token.` : ready ? 'Connection lost. Reconnecting…' : 'Connecting to the server…'}</span>
-      {conn !== 'open' && <button type="button" className="link-btn" onClick={() => useSessions.getState().reconnectNow()}>Retry now</button>}
+      {conn === 'open' || offline ? <Icon name="alert" size={14} /> : <Spinner size={13} />}
+      <span>{conn === 'open' ? `Server error: ${cfgErr}.` : offline ? 'Cannot reach the server. Check that it is still running.' : ready ? 'Connection lost. Reconnecting…' : 'Connecting to the server…'}</span>
+      {conn !== 'open' && <button type="button" className="link-btn" onClick={() => useSessions.getState().reconnectNow()}>{offline ? 'Retry' : 'Retry now'}</button>}
     </div>
   );
 }
@@ -80,7 +84,7 @@ export function shortcutList(): { keys: string; label: string }[] {
   const m = isMac() ? '⌘' : 'Ctrl';
   return [
     { keys: `${m} K`, label: 'Command palette' },
-    { keys: `${m} N`, label: 'New session' },
+    { keys: newSessionShortcut().replace(/^Alt\+/, 'Alt '), label: 'New session' },
     { keys: `${m} O`, label: 'Open project' },
     { keys: `${m} B`, label: 'Toggle sidebar' },
     { keys: `${m} Alt B`, label: 'Toggle inspector' },
@@ -126,7 +130,7 @@ export function CommandPalette() {
     if (!open) return [];
     const S = useSessions.getState(), U = useUi.getState();
     const out: Cmd[] = [
-      { id: 'new', label: 'New session', icon: 'plus', group: 'Actions', hint: isMac() ? '⌘N' : 'Ctrl N', run: () => { const c = active?.cwd ?? projects[0]; c ? S.newSession(c) : U.set({ pickerOpen: true }); } },
+      { id: 'new', label: 'New session', icon: 'plus', group: 'Actions', hint: newSessionShortcut(), run: () => { const c = active?.cwd ?? projects[0]; c ? S.newSession(c) : U.set({ pickerOpen: true }); } },
       { id: 'open', label: 'Open project…', icon: 'folder-open', group: 'Actions', run: () => U.set({ pickerOpen: true }) },
       { id: 'sidebar', label: 'Toggle sidebar', icon: 'sidebar', group: 'View', run: () => U.set({ sidebarOpen: !U.sidebarOpen }) },
       { id: 'inspector', label: 'Toggle inspector', icon: 'panel-right', group: 'View', run: () => U.set({ inspectorOpen: !U.inspectorOpen }) },
@@ -157,7 +161,7 @@ export function CommandPalette() {
 
   const run = (c?: Cmd) => { if (!c) return; close(); setTimeout(c.run, 0); };
   return (
-    <Dialog open={open} onClose={close} width={600} className="palette">
+    <Dialog open={open} onClose={close} width={600} className="palette" label="Command palette">
       <div className="pal-input">
         <Icon name="search" size={16} />
         <input

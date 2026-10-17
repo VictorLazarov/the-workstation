@@ -2,6 +2,10 @@ import type { ClientMessage, ServerMessage } from '@workstation/protocol';
 import type { ConnStatus, Transport } from './types';
 import { getServerBase } from '../storage';
 
+export const MAX_RETRIES = 10;
+/** Delay before automatic retry number `n` (0-based): 0.5s, 1s, 2s … capped at 30s. */
+export const reconnectDelay = (n: number): number => Math.min(30_000, 500 * 2 ** n);
+
 export class WsTransport implements Transport {
   status: ConnStatus = 'closed';
   private ws: WebSocket | null = null;
@@ -12,7 +16,9 @@ export class WsTransport implements Transport {
   private ping: ReturnType<typeof setInterval> | undefined;
   private stopped = false;
 
-  constructor(private token: string | null) {}
+  constructor(private token: string | null) {
+    if (typeof window !== 'undefined') window.addEventListener('online', () => { if (this.status === 'offline') this.connect(); });
+  }
 
   private set(s: ConnStatus) {
     if (this.status === s) return;
@@ -20,7 +26,13 @@ export class WsTransport implements Transport {
     this.statusCbs.forEach((cb) => cb(s));
   }
 
+  /** Manual (re)connect: gives automatic retries a fresh budget. */
   connect() {
+    this.retry = 0;
+    this.open();
+  }
+
+  private open() {
     this.stopped = false;
     clearTimeout(this.timer);
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
@@ -45,16 +57,20 @@ export class WsTransport implements Transport {
     ws.onclose = () => {
       clearInterval(this.ping);
       this.ws = null;
-      this.set('closed');
-      if (!this.stopped) this.scheduleReconnect();
+      if (!this.stopped) this.scheduleReconnect(); else this.set('closed');
     };
     ws.onerror = () => { try { ws.close(); } catch { /* ignore */ } };
   }
 
+  /**
+   * Backoff 0.5s, 1s, 2s … capped at 30s, for at most MAX_RETRIES attempts (about 2 minutes), then `offline`: no
+   * endless retrying against a server that is down or rejecting us. Coming back online (or Retry) starts over.
+   */
   private scheduleReconnect() {
+    if (this.retry >= MAX_RETRIES) { this.set('offline'); return; }
     this.set('closed');
-    const delay = Math.min(5000, 400 * 2 ** this.retry++);
-    this.timer = setTimeout(() => this.connect(), delay);
+    const delay = reconnectDelay(this.retry++);
+    this.timer = setTimeout(() => this.open(), delay);
   }
 
   close() {

@@ -27,8 +27,14 @@ export async function openApp(page: Page, opts: { token?: string | null; path?: 
   const token = opts.token === undefined ? TOKEN : opts.token;
   const q = token === null ? '' : `?token=${encodeURIComponent(token)}`;
   await page.goto((opts.path ?? '/') + q);
-  await expect(page.getByRole('complementary', { name: 'Sessions' })).toBeVisible();
-  if (token === TOKEN) await expect(page.getByRole('main').getByText('Connecting…')).toHaveCount(0);
+  if (token === TOKEN) {
+    // below 800px the sidebar is a drawer that starts closed: the topbar is what is always there
+    await expect(page.locator('.topbar')).toBeVisible();
+    if ((page.viewportSize()?.width ?? 1280) > 800) await expect(page.getByRole('complementary', { name: 'Sessions' })).toBeVisible();
+    await expect(page.getByRole('main').getByText('Connecting…')).toHaveCount(0);
+  } else {
+    await expect(page.locator('.topbar, .access')).toBeVisible();
+  }
 }
 
 export const composer = (page: Page) => page.getByRole('textbox', { name: 'Message Claude' });
@@ -43,6 +49,7 @@ export async function sendPrompt(page: Page, text: string) {
 
 /** Creates a new session in the fixture project through the picker and returns once the draft is open. */
 export async function newSessionInProject(page: Page) {
+  await openSidebar(page);
   await page.getByRole('button', { name: 'New session', exact: true }).click();
   const picker = page.getByRole('dialog', { name: 'Open a project' });
   if (await picker.isVisible().catch(() => false)) {
@@ -67,4 +74,43 @@ export function toolCard(page: Page, kind: string, text?: string): Locator {
 export async function expandTool(card: Locator) {
   const head = card.locator('.tool-head');
   if ((await head.getAttribute('aria-expanded')) === 'false') await head.click();
+}
+
+/** At <= 800px the sidebar is a drawer: open it with the hamburger (no-op when it is already visible). */
+export async function openSidebar(page: Page) {
+  const side = page.getByRole('complementary', { name: 'Sessions' });
+  if (await side.isVisible()) return;
+  await page.getByRole('button', { name: /Open sessions menu|Show sidebar/ }).click();
+  await expect(side).toBeVisible();
+}
+
+/** Opens the inspector (a docked pane, or an overlay drawer on narrow windows) and optionally selects a tab. */
+export async function openInspector(page: Page, tab?: string) {
+  const insp = page.getByRole('complementary', { name: 'Inspector' });
+  if (!(await insp.isVisible())) await page.getByRole('button', { name: /Toggle inspector/ }).click();
+  await expect(insp).toBeVisible();
+  if (tab) await page.locator(`.itab[data-panel="${tab}"]`).click();
+}
+
+/** Dismisses an open sidebar/inspector drawer by clicking its scrim (does nothing when nothing is open). */
+export async function closeDrawers(page: Page) {
+  const w = page.viewportSize()?.width ?? 1280;
+  for (let i = 0; i < 3; i++) {
+    if (await page.getByTestId('sidebar-scrim').count()) await page.mouse.click(w - 4, 450);
+    else if (await page.getByTestId('inspector-scrim').count()) await page.mouse.click(4, 450);
+    else return;
+    await page.waitForTimeout(120);
+  }
+}
+
+/** Sets theme / brand / density before the app loads (the same keys Settings writes). */
+export async function setAppearance(page: Page, a: { theme?: 'light' | 'dark'; brand?: 'horizon' | 'warm'; density?: 'compact' | 'comfortable' }) {
+  await page.emulateMedia({ colorScheme: a.theme === 'dark' ? 'dark' : 'light' });
+  await page.addInitScript((v) => {
+    try {
+      if (v.theme) localStorage.setItem('ws.theme', v.theme);
+      if (v.brand) localStorage.setItem('ws.brand', v.brand);
+      if (v.density) localStorage.setItem('ws.density', v.density);
+    } catch { /* storage may be blocked */ }
+  }, a);
 }

@@ -112,7 +112,7 @@ class DemoBackend implements Transport {
           } };
           this.sessions.set(id, s);
           if (!this.summaries.some((x) => x.sessionId === id))
-            this.summaries.unshift({ sessionId: id, title: 'New session', cwd, gitBranch: 'main', lastModified: Date.now(), live: true });
+            this.summaries.unshift({ sessionId: id, title: 'New session', cwd, gitBranch: demoGitStatus(cwd).branch, lastModified: Date.now(), live: true });
         }
         const sum = this.summaries.find((x) => x.sessionId === id); if (sum) sum.live = true;
         this.out({ type: 'ack', reqId: msg.reqId, ok: true });
@@ -398,7 +398,7 @@ export async function demoRest<T>(method: string, path: string, q: Record<string
     const needle = (q.q ?? '').toLowerCase();
     return ok(demoFiles.filter((f) => !needle || f.toLowerCase().includes(needle)).slice(0, 8));
   }
-  if (path === '/api/git/status') return ok(demoGitStatus());
+  if (path === '/api/git/status') return ok(demoGitStatus(q.cwd));
   if (path === '/api/git/diff') return ok({ diff: demoGitDiff(q.path) });
   if (path === '/api/git/commit') return ok(demoGitCommit((body as { message?: unknown })?.message));
   if (path === '/api/git/revert') return ok(demoGitRevert((body as { path?: unknown })?.path));

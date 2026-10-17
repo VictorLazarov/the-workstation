@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 import type { SessionStatus } from '../store/sessions';
 import { platform } from '../platform';
+import { placePopover } from '../lib/popover';
 
 export function StatusDot({ status, size = 8 }: { status: SessionStatus; size?: number }) {
   const label = { running: 'Running', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished (unread)', idle: 'Idle', starting: 'Starting' }[status];
@@ -10,12 +11,12 @@ export function StatusDot({ status, size = 8 }: { status: SessionStatus; size?: 
 }
 
 export function Spinner({ size = 14 }: { size?: number }) {
-  return <span className="spinner" style={{ width: size, height: size }} role="status" aria-label="Working" />;
+  return <span className="spinner" style={{ width: size, height: size }} role="img" aria-label="Working" />;
 }
 
 /** Three animated violet dots: "the agent is doing something" (violet is reserved for agent surfaces). */
 export function Dots() {
-  return <span className="dots" role="status" aria-label="Working"><i /><i /><i /></span>;
+  return <span className="dots" role="img" aria-label="Working"><i /><i /><i /></span>;
 }
 
 export function Kbd({ children }: { children: ReactNode }) { return <kbd className="kbd">{children}</kbd>; }
@@ -46,15 +47,16 @@ export function CopyButton({ text, label = 'Copy', className = '' }: { text: str
   );
 }
 
-export function useOutsideClose(ref: React.RefObject<HTMLElement>, onClose: () => void, active: boolean) {
+export function useOutsideClose(ref: React.RefObject<HTMLElement>, onClose: () => void, active: boolean, ignore?: React.RefObject<HTMLElement>) {
   useEffect(() => {
     if (!active) return;
-    const down = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) onClose(); };
+    // The trigger is "outside" the popover, but a click on it must toggle (not close and immediately reopen).
+    const down = (e: MouseEvent) => { const t = e.target as Node; if (ref.current && !ref.current.contains(t) && !ignore?.current?.contains(t)) onClose(); };
     const key = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
     document.addEventListener('mousedown', down);
     document.addEventListener('keydown', key, true);
     return () => { document.removeEventListener('mousedown', down); document.removeEventListener('keydown', key, true); };
-  }, [ref, onClose, active]);
+  }, [ref, ignore, onClose, active]);
 }
 
 export interface MenuItem {
@@ -102,24 +104,34 @@ export function MenuList({ items, onClose }: { items: MenuEntry[]; onClose: () =
   );
 }
 
-/** Anchored popover rendered in a portal, flips above/below. */
+/**
+ * Anchored popover rendered in a portal. It first renders hidden at the viewport origin with `width: max-content`
+ * (transparent, still focusable) so it can be measured at its real size, then (still before paint) is placed next to its trigger. It follows
+ * resizes and content changes, and the trigger itself does not count as an outside click.
+ */
 export function Popover({ anchor, open, onClose, children, align = 'start', width, className = '' }: {
   anchor: React.RefObject<HTMLElement>; open: boolean; onClose: () => void; children: ReactNode; align?: 'start' | 'end'; width?: number; className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<CSSProperties>({ visibility: 'hidden' });
-  useOutsideClose(ref, onClose, open);
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  useOutsideClose(ref, onClose, open, anchor);
   useLayoutEffect(() => {
-    if (!open || !anchor.current) return;
-    const r = anchor.current.getBoundingClientRect();
-    const h = ref.current?.offsetHeight ?? 240;
-    const w = ref.current?.offsetWidth ?? width ?? 240;
-    const below = window.innerHeight - r.bottom > h + 12 || r.top < h + 12;
-    const left = align === 'end' ? Math.max(8, r.right - w) : Math.min(r.left, window.innerWidth - w - 8);
-    setPos({ position: 'fixed', left, top: below ? r.bottom + 6 : undefined, bottom: below ? undefined : window.innerHeight - r.top + 6, minWidth: width });
+    if (!open) { setPos(null); return; }
+    const place = () => {
+      const a = anchor.current, el = ref.current;
+      if (!a || !el) return;
+      const { left, top } = placePopover(a.getBoundingClientRect(), { w: el.offsetWidth, h: el.offsetHeight }, { w: document.documentElement.clientWidth, h: window.innerHeight }, align);
+      setPos((p) => (p && Math.abs(p.left - left) < 0.5 && Math.abs(p.top - top) < 0.5 ? p : { left, top }));
+    };
+    place();
+    window.addEventListener('resize', place);
+    const ro = typeof ResizeObserver !== 'undefined' && ref.current ? new ResizeObserver(place) : null;
+    if (ro && ref.current) ro.observe(ref.current);
+    return () => { window.removeEventListener('resize', place); ro?.disconnect(); };
   }, [open, anchor, align, width]);
   if (!open) return null;
-  return createPortal(<div ref={ref} className={`popover ${className}`} style={pos}>{children}</div>, document.body);
+  const style: CSSProperties = { position: 'fixed', left: pos?.left ?? 0, top: pos?.top ?? 0, width: 'max-content', maxWidth: 'calc(100vw - 16px)', minWidth: width, ...(pos ? {} : { opacity: 0 }) };
+  return createPortal(<div ref={ref} className={`popover ${className}`} style={style}>{children}</div>, document.body);
 }
 
 export function Dropdown({ trigger, items, align = 'start', disabled, title }: {
@@ -127,20 +139,25 @@ export function Dropdown({ trigger, items, align = 'start', disabled, title }: {
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+  const close = () => { setOpen(false); ref.current?.focus(); };
   return (
     <>
       <button ref={ref} type="button" className="chip-btn" disabled={disabled} title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {trigger(open)}
       </button>
-      <Popover anchor={ref} open={open} onClose={() => setOpen(false)} align={align}>
-        <MenuList items={items} onClose={() => setOpen(false)} />
+      <Popover anchor={ref} open={open} onClose={close} align={align}>
+        <MenuList items={items} onClose={close} />
       </Popover>
     </>
   );
 }
 
-export function Dialog({ open, onClose, title, children, width = 520, footer, className = '' }: {
-  open: boolean; onClose: () => void; title?: ReactNode; children: ReactNode; width?: number; footer?: ReactNode; className?: string;
+/** Open dialogs, topmost last: only the topmost handles Esc and the Tab trap (a confirm opened over Settings, say). */
+const dialogStack: object[] = [];
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+
+export function Dialog({ open, onClose, title, label, children, width = 520, footer, className = '' }: {
+  open: boolean; onClose: () => void; title?: ReactNode; /** accessible name when there is no string title */ label?: string; children: ReactNode; width?: number; footer?: ReactNode; className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -154,14 +171,29 @@ export function Dialog({ open, onClose, title, children, width = 520, footer, cl
   }, [open]);
   useEffect(() => {
     if (!open) return;
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.stopPropagation(); onClose(); } };
+    const token = {};
+    dialogStack.push(token);
+    const k = (e: KeyboardEvent) => {
+      if (dialogStack[dialogStack.length - 1] !== token) return;
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      if (e.key !== 'Tab') return;
+      // focus trap: Tab and Shift+Tab cycle inside the dialog
+      const root = ref.current;
+      if (!root) return;
+      const items = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.getClientRects().length > 0);
+      if (!items.length) { e.preventDefault(); root.focus(); return; }
+      const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+      if (!root.contains(cur) || cur === root) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+      else if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', k, true);
-    return () => document.removeEventListener('keydown', k, true);
+    return () => { document.removeEventListener('keydown', k, true); const i = dialogStack.indexOf(token); if (i >= 0) dialogStack.splice(i, 1); };
   }, [open, onClose]);
   if (!open) return null;
   return createPortal(
     <div className="scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={ref} className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={typeof title === 'string' ? title : undefined} style={{ width }} tabIndex={-1}>
+      <div ref={ref} className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={label ?? (typeof title === 'string' ? title : undefined)} style={{ width }} tabIndex={-1}>
         {title && <div className="dialog-head"><h2>{title}</h2><IconButton icon="x" label="Close" onClick={onClose} /></div>}
         <div className="dialog-body">{children}</div>
         {footer && <div className="dialog-foot">{footer}</div>}
@@ -171,11 +203,11 @@ export function Dialog({ open, onClose, title, children, width = 520, footer, cl
   );
 }
 
-export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { id: T; label: string; icon?: IconName }[]; onChange: (v: T) => void }) {
+export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { id: T; label: string; icon?: IconName; disabled?: boolean; title?: string }[]; onChange: (v: T) => void }) {
   return (
     <div className="segmented" role="radiogroup">
       {options.map((o) => (
-        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} onClick={() => onChange(o.id)}>
+        <button key={o.id} type="button" role="radio" aria-checked={value === o.id} className={value === o.id ? 'on' : ''} disabled={o.disabled} title={o.title} onClick={() => onChange(o.id)}>
           {o.icon && <Icon name={o.icon} size={14} />}{o.label}
         </button>
       ))}

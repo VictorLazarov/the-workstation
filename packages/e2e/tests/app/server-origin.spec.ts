@@ -33,8 +33,7 @@ test.describe('server origin (B1)', () => {
       page.on('websocket', (w) => { if (w.url().includes(new URL(foreign.origin).host)) browserHits.push(w.url()); });
       // 1) the victim follows an attacker link
       await page.goto(`/?server=${encodeURIComponent(foreign.origin)}`);
-      await expect(page.getByRole('complementary', { name: 'Sessions' })).toBeVisible();
-      await expect(page).toHaveURL((u) => !u.search.includes('server'));
+      await expect(page).toHaveURL((u) => !u.search.includes('server')); // no token here, so the shell may be the access screen
       // 2) later, the victim opens the genuine tokenized URL
       await openApp(page);
       await page.waitForTimeout(1500);

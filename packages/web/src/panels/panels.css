@@ -35,11 +35,13 @@
 .cdiff-empty { padding: 8px 10px; color: var(--muted); font-size: var(--fs-sm); display: flex; gap: 6px; align-items: center; }
 .cdiff-scroll { overflow-x: auto; max-height: 480px; overflow-y: auto; }
 .cdiff-table { min-width: 100%; width: max-content; }
-.cdiff-table.split { table-layout: fixed; width: 100%; min-width: 620px; }
-.cdiff-table.split col.c-no { width: 40px; }
-.cdiff-table.split .diff-no { min-width: 0; }
-.cdiff-table.split .diff-code { overflow: hidden; padding: 0 8px; }
-.cdiff-table.split tr.split-row > td:nth-child(3) { border-left: 1px solid var(--border); }
+.split-panes { display: flex; min-width: 0; }
+.split-pane { flex: 1 1 0; min-width: 0; overflow: auto; max-height: 480px; overscroll-behavior: contain; }
+.split-pane.old { border-right: 1px solid var(--border); scrollbar-width: none; } .split-pane.old::-webkit-scrollbar { display: none; }
+.split-table { min-width: 100%; width: max-content; }
+.split-table .diff-no { min-width: 36px; }
+.split-table .diff-code { padding: 0 8px; }
+.split-table .diff-sep td { text-align: left; padding-left: 12px; height: 1.45em; }
 .cdiff-table .diff-code.diff-add { background: var(--diff-add); } .cdiff-table .diff-code.diff-del { background: var(--diff-del); }
 .cdiff-table .diff-no.diff-add { background: var(--diff-add-strong); opacity: 1; } .cdiff-table .diff-no.diff-del { background: var(--diff-del); }
 .cdiff-table .diff-empty { background: var(--surface-2); }

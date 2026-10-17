@@ -110,3 +110,18 @@ export function humanizeError(code: string): string {
   };
   return map[code] ?? code;
 }
+
+/** The single live checklist of a lane: id of its most recent TodoWrite (older snapshots collapse to a quiet line). */
+export function latestTodoId(rows: Row[]): string | undefined {
+  for (let i = rows.length - 1; i >= 0; i--) { const r = rows[i]; if (r.kind === 'tool' && r.block.name === 'TodoWrite') return r.block.id; }
+  return undefined;
+}
+
+/** Tense of a web step follows its state: nothing is "Fetched" while it still waits for permission or is in flight. */
+export function webVerb(search: boolean, status: string): string {
+  if (status === 'done') return search ? 'Searched the web' : 'Fetched';
+  if (status === 'error') return search ? 'Web search failed' : 'Could not fetch';
+  if (status === 'denied') return search ? 'Web search denied' : 'Fetch denied';
+  if (status === 'stopped') return search ? 'Web search stopped' : 'Fetch stopped';
+  return search ? 'Searching the web…' : 'Fetching…';
+}

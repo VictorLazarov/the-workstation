@@ -145,3 +145,15 @@ export function matchesFocus(f: ChangeFile, focus: string | undefined, cwd: stri
   const a = absPath(focus, cwd);
   return a === f.path;
 }
+
+/**
+ * The ONE branch a session shows (topbar, Overview > Environment, Changes header, empty-session header).
+ * Source of truth: the worktree branch when the session runs in one, else the live `git status` of its checkout.
+ * Until git has answered (or if it cannot), fall back to the branch recorded in the session metadata.
+ */
+export function resolveBranch(i: { worktree?: string; recorded?: string; git: { loaded: boolean; isRepo: boolean; branch?: string } }): string | undefined {
+  if (i.worktree) return i.worktree;
+  if (i.git.loaded) return i.git.isRepo ? i.git.branch : undefined;
+  return i.recorded;
+}
+

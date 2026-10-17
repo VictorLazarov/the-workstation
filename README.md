@@ -22,7 +22,7 @@ Flags: `--host <addr>` (default `127.0.0.1`), `--port <n>` (default `7777`), `--
 ### Dev Container
 ```jsonc
 {
-  "features": { "ghcr.io/VictorLazarov/the-workstation/workstation:1": {} },
+  "features": { "ghcr.io/victorlazarov/the-workstation/workstation:1": {} },
   "forwardPorts": [7777],
   "portsAttributes": { "7777": { "label": "The Workstation", "onAutoForward": "notify" } },
   "remoteEnv": { "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}" }

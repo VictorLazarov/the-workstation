@@ -48,13 +48,14 @@ export const demoDirs: Record<string, { name: string; kind: 'dir' | 'file' }[]> 
   '/home/dev/acme-web/src/styles': [{ name: 'theme.css', kind: 'file' }],
 };
 
+/** Every session of a project checkout reports the checkout's ONE branch (the same as the demo `git status`). */
 export const demoSessions: SessionSummary[] = [
-  { sessionId: 'demo-live', title: 'Migrate build to Vite 6', cwd: DEMO_CWD, gitBranch: 'chore/vite-6', lastModified: now - 20_000, live: true },
+  { sessionId: 'demo-live', title: 'Migrate build to Vite 6', cwd: DEMO_CWD, gitBranch: 'feat/dark-mode', lastModified: now - 20_000, live: true },
   { sessionId: 'demo-rich', title: 'Add dark mode to settings page', cwd: DEMO_CWD, gitBranch: 'feat/dark-mode', lastModified: now - 12 * min, live: false },
-  { sessionId: 'demo-auth', title: 'Refactor auth middleware', cwd: DEMO_CWD, gitBranch: 'refactor/auth', lastModified: now - 3 * hr, live: false },
-  { sessionId: 'demo-flaky', title: 'Fix flaky checkout test', cwd: DEMO_CWD, gitBranch: 'main', lastModified: now - 1 * day - 2 * hr, live: false },
+  { sessionId: 'demo-auth', title: 'Refactor auth middleware', cwd: DEMO_CWD, gitBranch: 'feat/dark-mode', lastModified: now - 3 * hr, live: false },
+  { sessionId: 'demo-flaky', title: 'Fix flaky checkout test', cwd: DEMO_CWD, gitBranch: 'feat/dark-mode', lastModified: now - 1 * day - 2 * hr, live: false },
   { sessionId: 'demo-rate', title: 'Design token-bucket rate limiter', cwd: DEMO_CWD2, gitBranch: 'feat/rate-limit', lastModified: now - 5 * hr, live: false },
-  { sessionId: 'demo-cors', title: 'Debug CORS preflight failures', cwd: DEMO_CWD2, gitBranch: 'main', lastModified: now - 4 * day, live: false },
+  { sessionId: 'demo-cors', title: 'Debug CORS preflight failures', cwd: DEMO_CWD2, gitBranch: 'feat/rate-limit', lastModified: now - 4 * day, live: false },
 ];
 
 /* ───────── SDK-shaped history for the rich demo session ───────── */

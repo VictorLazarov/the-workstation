@@ -7,7 +7,7 @@
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "22" },
-    "ghcr.io/VictorLazarov/the-workstation/workstation:1": {}
+    "ghcr.io/victorlazarov/the-workstation/workstation:1": {}
   },
   "forwardPorts": [7777],
   "portsAttributes": { "7777": { "label": "The Workstation", "onAutoForward": "notify" } },

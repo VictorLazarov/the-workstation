@@ -54,6 +54,7 @@ const P: Record<string, string> = {
   layers: 'M12 3l9 5-9 5-9-5zM3 13l9 5 9-5M3 17.500l9 5 9-5',
   plug: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 01-12 0zM12 17v4',
   home: 'M4 11l8-7 8 7v9h-5v-6H9v6H4z',
+  menu: 'M4 6h16M4 12h16M4 18h16',
 };
 
 export type IconName = keyof typeof P;

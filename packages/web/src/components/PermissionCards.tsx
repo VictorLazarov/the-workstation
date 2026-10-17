@@ -9,10 +9,17 @@ import { Shell } from './ToolCards';
 
 type Respond = (d: PermissionDecision) => void;
 
-function describe(perm: PermissionRequest): string {
-  if (perm.title) return perm.title;
+/** Project-relative paths in permission copy (the absolute path stays available in the tooltip of the file name). */
+function relativize(text: string, cwd?: string): string {
+  const root = cwd?.replace(/\/+$/, '');
+  return root ? text.split(root + '/').join('') : text;
+}
+
+function describe(perm: PermissionRequest, cwd?: string): string {
+  // The command is already shown (once) in the step above; do not repeat it in the title.
+  if (perm.toolName === 'Bash') return 'Claude wants to run this command';
+  if (perm.title) return relativize(perm.title, cwd);
   switch (perm.toolName) {
-    case 'Bash': return 'Claude wants to run this command';
     case 'Edit': case 'MultiEdit': return 'Claude wants to edit this file';
     case 'Write': return 'Claude wants to write this file';
     case 'WebFetch': return 'Claude wants to fetch this URL';
@@ -21,19 +28,19 @@ function describe(perm: PermissionRequest): string {
 }
 
 /** Allow once / Always allow / Deny with feedback. */
-export function PermissionActions({ perm, onRespond, compact }: { perm: PermissionRequest; onRespond: Respond; compact?: boolean }) {
+export function PermissionActions({ perm, onRespond, compact, cwd }: { perm: PermissionRequest; onRespond: Respond; compact?: boolean; cwd?: string }) {
   const [denying, setDenying] = useState(false);
   const [feedback, setFeedback] = useState('');
+  // For Bash the description is already the step's title, so it is not repeated here.
+  const reason = [perm.toolName === 'Bash' ? undefined : perm.description, perm.decisionReason, perm.blockedPath && `Path: ${relativize(perm.blockedPath, cwd)}`].filter(Boolean).join(' · ');
   return (
     <div className="perm" role="group" aria-label="Permission request">
       {!compact && (
         <div className="perm-msg">
           <Icon name="shield" size={15} />
           <div>
-            <div className="perm-title">{describe(perm)}</div>
-            {(perm.description || perm.decisionReason || perm.blockedPath) && (
-              <div className="perm-reason">{[perm.description, perm.decisionReason, perm.blockedPath && `Path: ${perm.blockedPath}`].filter(Boolean).join(' · ')}</div>
-            )}
+            <div className="perm-title" title={perm.title}>{describe(perm, cwd)}</div>
+            {reason && <div className="perm-reason">{reason}</div>}
           </div>
         </div>
       )}
@@ -149,7 +156,13 @@ export function PlanCard({ block, perm, result, status, sessionId, onRespond }: 
   const [draft, setDraft] = useState(plan);
   const [rejecting, setRejecting] = useState(false);
   const [feedback, setFeedback] = useState('');
+  // The card mounts while the plan is still streaming in, so the draft is seeded from the FINAL plan when editing starts.
+  const startEdit = () => { setDraft(plan); setEditing(true); };
+  // Never approve an empty plan (the SDK would proceed with nothing to follow).
+  const finalPlan = editing ? draft : plan;
+  const canApprove = finalPlan.trim().length > 0;
   const approve = (mode?: 'acceptEdits') => {
+    if (!canApprove) return;
     // `setMode` rides on the approval itself so it is applied atomically with leaving plan mode (a separate set.permissionMode races it)
     onRespond({ behavior: 'allow', updatedInput: editing ? { ...block.input, plan: draft } : undefined, ...(mode ? { setMode: mode } : {}) });
   };
@@ -157,11 +170,12 @@ export function PlanCard({ block, perm, result, status, sessionId, onRespond }: 
     <Shell kind="plan" status={perm ? 'waiting' : status} defaultOpen forceOpen={!!perm} title="Plan" subtitle={perm ? 'awaiting your review' : result?.isError || status === 'denied' ? 'not approved' : status === 'done' ? 'approved' : undefined}>
       <div className="plan">
         {editing ? <textarea className="plan-edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={Math.min(18, draft.split('\n').length + 2)} aria-label="Edit plan" /> : <Markdown text={plan} />}
+        {perm && !rejecting && !canApprove && <div className="perm-reason" role="status">{editing ? 'The plan is empty. Write something to approve, or discard your edits.' : 'The plan is empty, so it cannot be approved. Ask for changes with “Keep planning…”.'}</div>}
         {perm && !rejecting && (
           <div className="perm-actions">
-            <button type="button" className="btn primary" onClick={() => approve()}>{editing ? 'Approve edited plan' : 'Approve plan'}</button>
-            <button type="button" className="btn" onClick={() => approve('acceptEdits')} title="Approve and auto-accept file edits for the rest of the session">Approve &amp; auto-accept edits</button>
-            <button type="button" className="btn ghost" onClick={() => setEditing(!editing)}>{editing ? 'Discard edits' : 'Edit'}</button>
+            <button type="button" className="btn primary" disabled={!canApprove} onClick={() => approve()}>{editing ? 'Approve edited plan' : 'Approve plan'}</button>
+            <button type="button" className="btn" disabled={!canApprove} onClick={() => approve('acceptEdits')} title="Approve and auto-accept file edits for the rest of the session">Approve &amp; auto-accept edits</button>
+            <button type="button" className="btn ghost" onClick={() => (editing ? setEditing(false) : startEdit())}>{editing ? 'Discard edits' : 'Edit'}</button>
             <button type="button" className="btn ghost" onClick={() => setRejecting(true)}>Keep planning…</button>
           </div>
         )}

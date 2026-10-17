@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import type { Conversation, PermissionRequest, TaskInfo, ToolResult, ToolUseBlock } from '../lib/types';
 import { MAIN_LANE } from '../lib/types';
 import { collapseContext, diffLines, diffStats, fromStructuredPatch, type DiffLine } from '../lib/diff';
-import { hostOf, mcpParts, str, toolKind, toolPath, toolTitle } from '../lib/tools';
+import { hostOf, mcpParts, str, toolKind, toolPath, toolTitle, webVerb } from '../lib/tools';
 import { basename, formatDuration, formatTokens, isHttpUrl, relPath, truncate } from '../lib/utils';
 import { useHasPanel } from '../panels/registry';
 import { useUi } from '../store/ui';
@@ -24,6 +24,8 @@ export interface ToolProps {
   sessionId: string;
   cwd: string;
   elapsed?: number;
+  /** TodoWrite only: true for the most recent snapshot, which is the one live checklist; older ones collapse to a quiet line */
+  todoLatest?: boolean;
 }
 
 export function toolStatus(p: Pick<ToolProps, 'block' | 'result' | 'perm' | 'outcome' | 'sessionRunning'>): ToolStatus {
@@ -43,7 +45,7 @@ function StatusIcon({ status }: { status: ToolStatus }) {
 }
 
 const KIND_ICON: Record<string, IconName> = {
-  bash: 'terminal', edit: 'file-edit', write: 'file-plus', read: 'eye', search: 'search', web: 'globe', task: 'bot',
+  'todo-step': 'list-checks', bash: 'terminal', edit: 'file-edit', write: 'file-plus', read: 'eye', search: 'search', web: 'globe', task: 'bot',
   todo: 'list-checks', ask: 'help', plan: 'list', mcp: 'zap', other: 'wrench',
 };
 /** Steps that need the reader (checklist, questions, plan review) keep a card; everything else is a one-line row. */
@@ -110,8 +112,8 @@ function BashCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const desc = str(p.block.input.description);
   return (
     <Shell kind="bash" status={p.status} defaultOpen={p.status === 'waiting' || p.status === 'error'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
-      title={desc || <>{p.status === 'done' || p.status === 'error' ? 'Ran' : 'Run'} <span className="tool-code">{truncate(cmd.split('\n')[0], 80)}</span></>}
-      subtitle={desc ? <span className="tool-code">{truncate(cmd.split('\n')[0], 70)}{bg ? ' (background)' : ''}</span> : bg ? 'background' : undefined}
+      title={p.status === 'waiting' ? (desc || 'Run command') : desc || <>{p.status === 'done' || p.status === 'error' ? 'Ran' : 'Run'} <span className="tool-code">{truncate(cmd.split('\n')[0], 80)}</span></>}
+      subtitle={p.status === 'waiting' ? (bg ? 'background' : undefined) : desc ? <span className="tool-code">{truncate(cmd.split('\n')[0], 70)}{bg ? ' (background)' : ''}</span> : bg ? 'background' : undefined}
       meta={<>{exit && exit !== '0' ? <span className="meta-err">exit {exit}</span> : p.status === 'done' ? <span>exit {exit ?? '0'}</span> : null}</>}>
       <div className="cmd">
         <span className="cmd-prompt">$</span>
@@ -177,7 +179,7 @@ function WebCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   const text = p.result?.content ?? '';
   return (
     <Shell kind="web" status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
-      title={isSearch ? <>Searched the web</> : <>Fetched <span className="mono">{hostOf(url)}</span></>}
+      title={isSearch ? <>{webVerb(true, p.status)}</> : <>{webVerb(false, p.status)} <span className="mono">{hostOf(url)}</span></>}
       subtitle={isSearch ? <span className="query">“{truncate(str(p.block.input.query), 70)}”</span> : <span className="query">{truncate(str(p.block.input.prompt), 70)}</span>}>
       {!isSearch && url && (isHttpUrl(url)
         ? <a className="source-link" href={url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={13} />{url}</a>
@@ -188,12 +190,13 @@ function WebCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   );
 }
 
-export function TodoList({ todos, compact }: { todos: { content: string; status: string; activeForm?: string }[]; compact?: boolean }) {
+/** `live`: the agent is still working. A finished turn shows its in-progress item as paused, with no spinner. */
+export function TodoList({ todos, compact, live = true }: { todos: { content: string; status: string; activeForm?: string }[]; compact?: boolean; live?: boolean }) {
   return (
     <ul className={`todos${compact ? ' compact' : ''}`}>
       {todos.map((t, i) => (
         <li key={i} className={`todo ${t.status}`}>
-          <span className="todo-box" aria-hidden="true">{t.status === 'completed' ? <Icon name="check" size={11} /> : t.status === 'in_progress' ? <Spinner size={10} /> : null}</span>
+          <span className="todo-box" aria-hidden="true">{t.status === 'completed' ? <Icon name="check" size={11} /> : t.status === 'in_progress' ? (live ? <Spinner size={10} /> : <i className="todo-paused" />) : null}</span>
           <span className="todo-text">{t.status === 'in_progress' && t.activeForm ? t.activeForm : t.content}</span>
         </li>
       ))}
@@ -204,9 +207,12 @@ export function TodoList({ todos, compact }: { todos: { content: string; status:
 function TodoCard(p: ToolProps & { status: ToolStatus }) {
   const todos = (Array.isArray(p.block.input.todos) ? p.block.input.todos : []) as { content: string; status: string; activeForm?: string }[];
   const done = todos.filter((t) => t.status === 'completed').length;
+  const sub = todos.length ? `${done}/${todos.length} done` : undefined;
+  // One live checklist: only the latest TodoWrite is a card; earlier snapshots are a muted one-line step.
+  if (p.todoLatest === false) return <Shell kind="todo-step" status={p.status === 'running' || p.status === 'streaming' ? 'done' : p.status} title="Updated plan" subtitle={sub} />;
   return (
-    <Shell kind="todo" status={p.status === 'done' ? 'done' : p.status} defaultOpen title="Plan" subtitle={todos.length ? `${done}/${todos.length} done` : undefined}>
-      <TodoList todos={todos} />
+    <Shell kind="todo" status={p.status === 'done' ? 'done' : p.status} defaultOpen title="Plan" subtitle={sub}>
+      <TodoList todos={todos} live={p.sessionRunning} />
     </Shell>
   );
 }
@@ -273,7 +279,7 @@ export const ToolCard = memo(function ToolCard(p: ToolProps & { conv?: Conversat
   const status = toolStatus(p);
   const kind = toolKind(p.block.name);
   const footer = p.perm && kind !== 'ask' && kind !== 'plan'
-    ? <PermissionActions perm={p.perm} onRespond={p.onRespond} />
+    ? <PermissionActions perm={p.perm} onRespond={p.onRespond} cwd={p.cwd} />
     : p.outcome && !p.result ? <div className="perm-outcome">{p.outcome === 'allowed' ? 'Allowed' : 'Denied'}</div> : null;
   const q = { ...p, status, footer };
   switch (kind) {

@@ -54,7 +54,8 @@
 .tool-head { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 24px; padding: 0 6px 0 2px; border-radius: 6px; cursor: default; user-select: none; color: var(--muted); text-align: left; }
 .tool-head[role='button'], button.tool-head { cursor: pointer; } .tool-head[role='button']:hover, button.tool-head:hover { background: var(--hover); color: var(--text-2); }
 .tool-ico { color: var(--muted); display: inline-grid; place-items: center; flex: none; opacity: 0.85; }
-.tool-title { font-weight: 500; font-size: var(--fs-base); color: var(--text-2); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 100%; display: inline-flex; align-items: center; gap: 5px; }
+.tool-title { font-weight: 500; font-size: var(--fs-base); color: var(--text-2); white-space: nowrap; flex: 0 1 auto; min-width: 0; max-width: 100%; display: block; overflow: hidden; text-overflow: ellipsis; }
+.tool-title .tool-code, .tool-title .mono, .tool-title .agent-name { margin: 0 2px; }
 .tool-sub { color: var(--muted); font-size: var(--fs-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 0 1 auto; }
 .tool-spacer { flex: 1; }
 .tool-meta { display: inline-flex; gap: 0; align-items: center; flex: none; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
@@ -70,10 +71,11 @@
 .tool.st-error > .tool-head .tool-ico, .tool.st-error > .tool-head .tool-title { color: var(--danger); }
 .tool.st-denied > .tool-head .tool-title { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 60%, transparent); }
 .tool-task > .tool-head .tool-ico { color: var(--ai); opacity: 1; }
+.tool-todo-step > .tool-head .tool-ico { color: var(--muted); }
 /* expanded body: a bordered panel hanging off the row */
 .tool-body { margin: 2px 0 6px 11px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; padding: 6px var(--pad-card); display: grid; gap: 6px; color: var(--text); } .tool-body.flush { padding: 0; gap: 0; }
 /* waiting for permission: a prominent card */
-.tool.st-waiting { border: 1px solid color-mix(in srgb, var(--accent-solid) 55%, var(--border)); box-shadow: 0 0 0 2px var(--accent-soft); border-radius: var(--radius); background: var(--surface); overflow: hidden; color: var(--text); margin: 4px 0; }
+.tool.st-waiting { border: 1px solid color-mix(in srgb, var(--accent-solid) 55%, var(--border)); border-radius: var(--radius); background: var(--surface); overflow: hidden; color: var(--text); margin: 4px 0; }
 .tool.st-waiting > .tool-head { display: flex; padding: 3px var(--pad-card); min-height: var(--tool-head-h); border-radius: 0; color: var(--text); } .tool.st-waiting > .tool-head .tool-spacer { flex: 1; }
 .tool.st-waiting > .tool-head .tool-meta { margin-left: auto; }
 .tool.st-waiting > .tool-body { margin: 0; border: 0; border-top: 1px solid var(--border); border-radius: 0; background: transparent; }
@@ -120,7 +122,7 @@
 .todo { display: flex; align-items: flex-start; gap: 8px; font-size: var(--fs-base); line-height: 1.4; }
 .todo-box { width: 14px; height: 14px; flex: none; border-radius: 5px; border: 1.5px solid var(--border-strong); display: grid; place-items: center; margin-top: 1px; color: #fff; }
 .todo.completed .todo-box { background: var(--ok); border-color: var(--ok); } .todo.completed .todo-text { color: var(--muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--muted) 50%, transparent); }
-.todo.in_progress .todo-box { border-color: var(--ai-fill); } .todo.in_progress .todo-text { font-weight: 550; }
+.todo.in_progress .todo-box { border-color: var(--ai-fill); } .todo-paused { width: 6px; height: 6px; border-radius: 50%; background: var(--ai-fill); opacity: 0.7; } .todo.in_progress .todo-text { font-weight: 550; }
 
 /* subagent */
 .agent-name { font-family: var(--font-mono); font-size: var(--fs-sm); padding: 0 6px; border-radius: 6px; background: var(--ai-soft); color: var(--ai); font-weight: 600; }
@@ -131,7 +133,7 @@
 .subagent-result { font-size: var(--fs-base); padding-top: 4px; border-top: 1px dashed var(--border); } .subagent-result-label { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
 
 /* permission + question + plan */
-.perm { padding: 8px var(--pad-card); border-top: 1px solid var(--border); border-left: 3px solid var(--accent-solid); background: var(--surface-2); display: grid; gap: 6px; }
+.perm { padding: 8px var(--pad-card); border-top: 1px solid var(--border); background: var(--surface-2); display: grid; gap: 6px; }
 .tool-body > .perm, .tool-body.flush > .perm { margin: 0; } .tool-body:not(.flush) > .perm { margin: 0 calc(-1 * var(--pad-card)) -6px; }
 .perm-msg { display: flex; gap: 7px; align-items: flex-start; color: var(--accent); } .perm-title { color: var(--text); font-weight: 600; font-size: var(--fs-base); } .perm-reason { color: var(--text-2); font-size: var(--fs-sm); margin-top: 1px; }
 .perm-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; } .perm-deny { display: grid; gap: 6px; }

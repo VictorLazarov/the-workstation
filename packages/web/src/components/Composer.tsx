@@ -18,7 +18,7 @@ const draftKey = (id: string) => 'ws.draft.' + id;
 
 export function Composer({ session }: { session: SessionData }) {
   const id = session.id;
-  const { send, interrupt, setMode, cancelQueued } = useSessions.getState();
+  const { send, interrupt, setMode, cancelQueued, retryQueued } = useSessions.getState();
     const config = useSessions((s) => s.config);
   const commands = useSessions((s) => s.commands);
   const [text, setText] = useState(() => ls.get(draftKey(id)) ?? '');
@@ -154,10 +154,12 @@ export function Composer({ session }: { session: SessionData }) {
       {session.queue.length > 0 && (
         <div className="queue" aria-label="Queued messages">
           {session.queue.map((q) => (
-            <div key={q.id} className="queue-item">
-              <Icon name="clock" size={13} />
+            <div key={q.id} className={`queue-item${q.failed ? ' failed' : ''}`}>
+              <Icon name={q.failed ? 'alert' : 'clock'} size={13} />
               <span className="queue-text">{q.text || `${q.images.length} image(s)`}</span>
-              <span className="muted queue-tag">{session.starting ? 'starts with session' : 'queued'}</span>
+              {q.failed
+                ? <><span className="queue-tag queue-failed">Not sent</span><button type="button" className="link-btn" onClick={() => retryQueued(id)}>Retry</button></>
+                : <span className="muted queue-tag">{session.starting ? 'starts with session' : 'queued'}</span>}
               <IconButton icon="x" label="Remove from queue" size={13} onClick={() => cancelQueued(id, q.id)} />
             </div>
           ))}
@@ -197,7 +199,7 @@ export function Composer({ session }: { session: SessionData }) {
           <textarea
             ref={ta} rows={1} value={text} spellCheck
             aria-label="Message Claude"
-            placeholder={running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
+            placeholder={session.perms.length ? 'Waiting for your decision above. Type to queue a follow-up…' : running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
             onChange={(e) => { setText(e.target.value); setPopup(detect(e.target.value, e.target.selectionStart)); }}
             onKeyDown={onKeyDown}
             onKeyUp={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setPopup(detect(text, e.currentTarget.selectionStart)); }}

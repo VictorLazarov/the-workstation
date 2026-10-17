@@ -6,6 +6,7 @@ import { registerPanel, type PanelProps } from './registry';
 
 function PlanPanel({ sessionId }: PanelProps) {
   const conv = useSessions((s) => s.sessions[sessionId]?.conv);
+  const live = useSessions((s) => { const r = s.sessions[sessionId]?.runtime.status; return r === 'running' || r === 'waiting_permission'; });
   const todos = conv?.todos ?? [];
   const done = todos.filter((t) => t.status === 'completed').length;
   const plan = conv?.plan;
@@ -24,7 +25,7 @@ function PlanPanel({ sessionId }: PanelProps) {
         <section>
           <div className="panel-title"><span>Progress</span><span className="muted">{done}/{todos.length}</span></div>
           <div className="progress" role="progressbar" aria-valuenow={done} aria-valuemax={todos.length}><i style={{ width: `${(done / todos.length) * 100}%` }} /></div>
-          <TodoList todos={todos} />
+          <TodoList todos={todos} live={live} />
         </section>
       )}
       {plan && (

@@ -6,6 +6,8 @@
  * Dark applies for data-theme="dark", or for the OS dark scheme unless data-theme="light".
  * Cascade note: warm-light sits before horizon-dark so horizon-dark beats it; warm-dark has higher specificity than both.
  *
+ * Warning colour is a gold-yellow (hue ~50°, never orange): #786600 light, #f2cc0c dark, both AA on their surfaces.
+ *
  * Colour roles
  *   --accent / --accent-hover   interactive TEXT colour (links, active labels). Always AA on its surfaces.
  *   --accent-solid(-hover)      fills with white text (primary button, send, checked marks). Brand blue #0070f2.
@@ -87,8 +89,8 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(120, 88, 255, 0.11), rgba(0, 112, 242, 0.06));
   --ok: #256f3a;
   --ok-soft: rgba(37, 111, 58, 0.12);
-  --warn: #8a5700;
-  --warn-soft: rgba(214, 150, 0, 0.13);
+  --warn: #786600;
+  --warn-soft: rgba(230, 190, 0, 0.16);
   --danger: #aa0808;
   --danger-soft: rgba(170, 8, 8, 0.09);
   --info: #0064d9;
@@ -142,8 +144,8 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(193, 95, 60, 0.1), rgba(193, 95, 60, 0.1));
   --ok: #3d8b5a;
   --ok-soft: rgba(61, 139, 90, 0.12);
-  --warn: #c0861a;
-  --warn-soft: rgba(192, 134, 26, 0.13);
+  --warn: #7a6400;
+  --warn-soft: rgba(200, 160, 0, 0.14);
   --danger: #c8412f;
   --danger-soft: rgba(200, 65, 47, 0.1);
   --info: #3b6fb6;
@@ -192,8 +194,8 @@
     --ai-grad-soft: linear-gradient(90deg, rgba(157, 139, 255, 0.16), rgba(77, 177, 255, 0.07));
     --ok: #97dd40;
     --ok-soft: rgba(151, 221, 64, 0.13);
-    --warn: #ffc247;
-    --warn-soft: rgba(255, 194, 71, 0.13);
+    --warn: #f2cc0c;
+    --warn-soft: rgba(242, 204, 12, 0.14);
     --danger: #fa6161;
     --danger-soft: rgba(250, 97, 97, 0.1);
     --info: #4db1ff;
@@ -240,8 +242,8 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(157, 139, 255, 0.16), rgba(77, 177, 255, 0.07));
   --ok: #97dd40;
   --ok-soft: rgba(151, 221, 64, 0.13);
-  --warn: #ffc247;
-  --warn-soft: rgba(255, 194, 71, 0.13);
+  --warn: #f2cc0c;
+  --warn-soft: rgba(242, 204, 12, 0.14);
   --danger: #fa6161;
   --danger-soft: rgba(250, 97, 97, 0.1);
   --info: #4db1ff;
@@ -289,8 +291,8 @@
     --ai-grad-soft: linear-gradient(90deg, rgba(217, 119, 87, 0.12), rgba(217, 119, 87, 0.12));
     --ok: #5cb97f;
     --ok-soft: rgba(92, 185, 127, 0.15);
-    --warn: #e0a83a;
-    --warn-soft: rgba(224, 168, 58, 0.15);
+    --warn: #e6c04a;
+    --warn-soft: rgba(230, 192, 74, 0.15);
     --danger: #ea6a58;
     --danger-soft: rgba(234, 106, 88, 0.14);
     --info: #6a9be0;
@@ -336,8 +338,8 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(217, 119, 87, 0.12), rgba(217, 119, 87, 0.12));
   --ok: #5cb97f;
   --ok-soft: rgba(92, 185, 127, 0.15);
-  --warn: #e0a83a;
-  --warn-soft: rgba(224, 168, 58, 0.15);
+  --warn: #e6c04a;
+  --warn-soft: rgba(230, 192, 74, 0.15);
   --danger: #ea6a58;
   --danger-soft: rgba(234, 106, 88, 0.14);
   --info: #6a9be0;

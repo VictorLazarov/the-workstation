@@ -7,6 +7,7 @@ import { PermissionDock } from './PermissionCards';
 import { RowList } from './RowList';
 import { Dots, Spinner } from './ui';
 import { useUi } from '../store/ui';
+import { useBranch } from '../panels/changes/store';
 
 const SUGGESTIONS = [
   { icon: 'search' as const, text: 'Give me a tour of this codebase and how it is organized' },
@@ -99,13 +100,14 @@ export function Conversation({ session }: { session: SessionData }) {
 }
 
 function EmptySession({ session }: { session: SessionData }) {
+  const branch = useBranch(session.id);
   return (
     <div className="empty-session">
       <div className="empty-mark" aria-hidden="true"><Icon name="sparkles" size={22} /></div>
       <h1 className="serif">What should we work on?</h1>
       <p className="muted">
         <Icon name="folder" size={13} /> {projectName(session.cwd)}
-        {session.branch && <> <span className="sep">·</span> <Icon name="branch" size={13} /> {session.branch}</>}
+        {branch && <> <span className="sep">·</span> <Icon name="branch" size={13} /> {branch}</>}
       </p>
       <div className="suggestions">
         {SUGGESTIONS.map((s) => (
@@ -130,7 +132,7 @@ export function Home() {
       <div className="home-inner">
         <div className="empty-mark" aria-hidden="true"><Icon name="sparkles" size={22} /></div>
         <h1 className="serif">Welcome to The Workstation</h1>
-        <p className="muted">Run Claude Code agents side by side in your projects. Pick up where you left off, or start something new.</p>
+        <p className="muted">Run coding agents side by side in your projects. Pick up where you left off, or start something new.</p>
         <div className="home-actions">
           <button type="button" className="btn primary lg" onClick={() => useUi.getState().set({ pickerOpen: true })}><Icon name="folder-open" size={16} /> Open a project</button>
         </div>

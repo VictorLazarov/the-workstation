@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '@workstation/protocol';
 import { fuzzy, relativeTime } from '../lib/utils';
 import { projectName, sessionStatus, useSessions, type SessionStatus } from '../store/sessions';
-import { useUi, type Brand, type Density, type Theme } from '../store/ui';
+import { sidebarIsDrawer, useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { Icon } from './Icon';
+import { newSessionShortcut } from '../lib/shortcuts';
 import { IconButton, MenuList, Popover, Segmented, Spinner, useOutsideClose, type MenuEntry } from './ui';
 import { createPortal } from 'react-dom';
 
@@ -28,7 +29,7 @@ function useEntries(): Entry[] {
 export function ContextMenu({ x, y, items, onClose }: { x: number; y: number; items: MenuEntry[]; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   useOutsideClose(ref, onClose, true);
-  const left = Math.min(x, window.innerWidth - 220), top = Math.min(y, window.innerHeight - 220);
+  const left = Math.max(8, Math.min(x, window.innerWidth - 228)), top = Math.max(8, Math.min(y, window.innerHeight - 220));
   return createPortal(<div ref={ref} className="popover" style={{ position: 'fixed', left, top }}><MenuList items={items} onClose={onClose} /></div>, document.body);
 }
 
@@ -39,7 +40,7 @@ function RowStatus({ e }: { e: Entry }) {
   switch (e.status) {
     case 'running': return <span className="sess-st st-run" title="Running"><Spinner size={12} /><span className="run-text sr-only">Running</span></span>;
     case 'starting': return <span className="sess-st" title="Starting"><Spinner size={12} /><span className="sr-only">Starting</span></span>;
-    case 'needs-input': return <span className="sess-st" title="Needs your input"><i className="st-dot st-attn" /><span className="attn-text sr-only">Needs input</span></span>;
+    case 'needs-input': return <span className="sess-st sess-attn" title="Needs your input"><i className="st-dot st-attn" /><span className="attn-text">Needs input</span></span>;
     case 'error': return <span className="sess-st" title="Error"><i className="st-dot st-error" /><span className="sr-only">Error</span></span>;
     case 'done': return <span className="sess-st" title="Finished, unread"><i className="st-dot st-done" /><span className="sr-only">Finished, unread</span></span>;
     default: return e.branch && !/^(main|master)$/.test(e.branch) ? <span className="sess-st sess-branch"><Icon name="branch" size={12} /></span> : null;
@@ -93,7 +94,9 @@ export function Sidebar() {
     return list.filter((g) => !query || g.es.length).sort((a, b) => (b.es[0]?.time ?? 0) - (a.es[0]?.time ?? 0));
   }, [entries, projects, query]);
 
-  const open = (e: Entry) => (e.summary ? openSession({ ...e.summary, live: e.live }) : setActive(e.id));
+  // On a narrow window the sidebar is a drawer: choosing something closes it.
+  const dismissDrawer = () => { if (sidebarIsDrawer()) useUi.getState().set({ sidebarOpen: false }); };
+  const open = (e: Entry) => { dismissDrawer(); if (e.summary) openSession({ ...e.summary, live: e.live }); else setActive(e.id); };
 
   const rename = async (e: Entry) => {
     const t = await useUi.getState().askText({ title: 'Rename session', initial: e.title, confirmLabel: 'Rename' });
@@ -117,6 +120,7 @@ export function Sidebar() {
   const first = projects[0];
   const startNew = () => {
     const cwd = (activeId && useSessions.getState().sessions[activeId]?.cwd) || first;
+    dismissDrawer();
     if (cwd) newSession(cwd); else useUi.getState().set({ pickerOpen: true });
   };
 
@@ -127,7 +131,7 @@ export function Sidebar() {
         <IconButton icon="sidebar" label="Hide sidebar (Ctrl+B)" onClick={() => useUi.getState().set({ sidebarOpen: false })} />
       </div>
       <div className="side-quick">
-        <button type="button" className="qa" onClick={startNew} title="New session (Ctrl+N)"><Icon name="plus" size={15} /><span>New session</span></button>
+        <button type="button" className="qa" onClick={startNew} title={`New session (${newSessionShortcut()})`}><Icon name="plus" size={15} /><span>New session</span></button>
         <label className="qa search">
           <Icon name="search" size={15} />
           <input value={query} onChange={(e) => useUi.getState().set({ sidebarQuery: e.target.value })} placeholder="Search" aria-label="Search sessions" />
@@ -158,10 +162,11 @@ export function Sidebar() {
               {!isC && (
                 <ul className="sess-list">
                   {g.es.slice(0, limit).map((e) => (
-                    <li key={e.id}>
+                    <li key={e.id} className="sess-item">
                       <button
                         type="button" className={`sess${activeId === e.id ? ' active' : ''}${e.status === 'needs-input' ? ' attn' : ''}${e.status === 'running' ? ' run' : ''}`}
                         onClick={() => open(e)} onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, e }); }}
+                        onKeyDown={(ev) => { if (ev.key === 'ContextMenu' || (ev.key === 'F10' && ev.shiftKey)) { ev.preventDefault(); const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left + 24, y: r.bottom, e }); } }}
                         aria-current={activeId === e.id ? 'true' : undefined}
                         title={[e.title, [e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
                       >
@@ -170,8 +175,8 @@ export function Sidebar() {
                         <span className="sess-hover" aria-hidden="true">
                           <span className="sess-time">{relativeTime(e.time)}</span>
                         </span>
-                        <span className="sess-more" role="button" tabIndex={-1} aria-label="Session actions" onClick={(ev) => { ev.stopPropagation(); const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom + 4, e }); }}><Icon name="more" size={15} /></span>
                       </button>
+                      <button type="button" className="sess-more" aria-label={`Actions for ${e.title}`} aria-haspopup="menu" onClick={(ev) => { const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left, y: r.bottom + 4, e }); }}><Icon name="more" size={15} /></button>
                     </li>
                   ))}
                   {g.es.length === 0 && <li className="sess-none">No sessions yet</li>}

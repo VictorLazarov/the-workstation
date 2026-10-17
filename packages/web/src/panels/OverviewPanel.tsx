@@ -11,7 +11,7 @@ import { registerPanel, type PanelProps } from './registry';
 import { mcpEnabled, mcpTone } from './context/derive';
 import { pctLabel, tone, usageView } from './context/usage';
 import { mergeChanges, sessionFiles, totals } from './changes/derive';
-import { selectGit, useGit, useGitSync } from './changes/store';
+import { selectGit, useBranch, useGit, useGitSync } from './changes/store';
 import { deriveTasks, isActive, sortTasks, type TaskRow } from './tasks/derive';
 import { scrollToToolCall } from './TasksPanel';
 import './panels.css';
@@ -43,9 +43,8 @@ const openTab = (tab: string, focus?: string) => useUi.getState().openInspector(
 /* ───────── Environment ───────── */
 function EnvironmentCard({ sessionId }: { sessionId: string }) {
   const s = useSessions((x) => x.sessions[sessionId]);
-  const git = useGit(selectGit(sessionId));
+  const branch = useBranch(sessionId);
   if (!s) return null;
-  const branch = git.branch ?? s.branch;
   const wt = s.conv.init?.worktree;
   return (
     <OvCard id="env" title="Environment" icon="folder">
@@ -67,8 +66,12 @@ export function useContextSummary(sessionId: string) {
   const model = useSessions((x) => x.sessions[sessionId]?.runtime.model ?? x.sessions[sessionId]?.conv.init?.model);
   const measured = useSessions((x) => x.sessions[sessionId]?.conv.contextTokens ?? 0);
   const view = useMemo(() => (entry.data ? usageView(entry.data, entry.prevTotal) : null), [entry.data, entry.prevTotal]);
-  const used = view?.used ?? measured;
-  const max = view?.max ?? contextWindowFor(model);
+  // After a reload / resume the live breakdown is not there yet and the transcript only knows the last turn: show the
+  // last real snapshot (kept per session) instead of a misleading near-zero number until the live one arrives.
+  const stored = useMemo(() => ls.getJson<{ used: number; max: number } | null>('ws.ctx.' + sessionId, null), [sessionId, view]);
+  useEffect(() => { if (view && view.used > 0) ls.setJson('ws.ctx.' + sessionId, { used: view.used, max: view.max }); }, [view, sessionId]);
+  const used = view?.used ?? (stored?.used || measured);
+  const max = view?.max ?? (stored?.max || contextWindowFor(model));
   const pct = view?.pct ?? (max ? Math.min(100, (used / max) * 100) : 0);
   return { entry, view, used, max, pct, tone: tone(pct) };
 }

@@ -17,8 +17,8 @@ major="$(node -p 'process.versions.node.split(".")[0]')"
 
 if [ -d "$DIR/.git" ]; then
   echo "Updating $DIR"
-  git -C "$DIR" fetch --depth 1 origin "$REF" && git -C "$DIR" -c advice.detachedHead=false checkout -q FETCH_HEAD \
-    || fail "could not fetch '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"
+  if git -C "$DIR" fetch --depth 1 origin "$REF"; then git -C "$DIR" -c advice.detachedHead=false checkout -q FETCH_HEAD
+  else fail "could not fetch '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"; fi
 else
   echo "Cloning $REPO ($REF) into $DIR"; mkdir -p "$(dirname "$DIR")"
   git clone -q --depth 1 --branch "$REF" "$REPO" "$DIR" 2>/dev/null \

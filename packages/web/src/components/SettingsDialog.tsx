@@ -20,6 +20,8 @@ export function SettingsDialog() {
   const [server, setServer] = useState(getServerBase());
   const [serverToken, setServerToken] = useState('');
   const [saving, setSaving] = useState(false);
+  // the welcome title is for the very first visit only (people signed in through a Claude login never need keys)
+  let firstRunPending = true; try { firstRunPending = localStorage.getItem('ws.firstRunDone') !== '1'; } catch { /* ignore */ }
   const close = () => { useUi.getState().set({ settingsOpen: false }); try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* ignore */ } };
 
   useEffect(() => {
@@ -62,10 +64,10 @@ export function SettingsDialog() {
   const notif = platform.notificationPermission();
 
   return (
-    <Dialog open={open} onClose={close} title={config && !config.hasApiKey && !config.hasAuthToken && !config.anthropicBaseUrl ? 'Welcome. Set up your connection' : 'Settings'} width={560}
+    <Dialog open={open} onClose={close} title={firstRunPending && config && !config.hasApiKey && !config.hasAuthToken && !config.anthropicBaseUrl ? 'Welcome. Set up your connection' : 'Settings'} width={560}
       footer={<><button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save'}</button></>}>
       <div className="settings">
-        <p className="muted small">Credentials are sent to your local Workstation server and used as environment for Claude Code. If Claude Code is already signed in on this machine, you can leave these empty.</p>
+        <p className="muted small">Credentials are sent to your local Workstation server and used as the environment of the agent (built on the Claude Agent SDK). If you are already signed in on this machine, you can leave these empty.</p>
         <section>
           <h3>Provider</h3>
           <label className="lbl">Anthropic base URL<input className="field" value={f.baseUrl} onChange={set('baseUrl')} placeholder="https://api.anthropic.com (default)" spellCheck={false} /></label>

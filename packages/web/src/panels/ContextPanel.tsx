@@ -107,7 +107,7 @@ function Loaded({ sessionId }: { sessionId: string }) {
       <dl className="kv">
         {init.model && <><dt>Model</dt><dd>{modelLabel(init.model)}</dd></>}
         {init.permissionMode && <><dt>Mode</dt><dd>{init.permissionMode}</dd></>}
-        {init.version && <><dt>Claude Code</dt><dd>{init.version}</dd></>}
+        {init.version && <><dt>Agent runtime</dt><dd>{init.version}</dd></>}
       </dl>
     </Section>
   );
