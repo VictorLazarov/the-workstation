@@ -67,12 +67,18 @@ test.describe('projects and sessions', () => {
   });
 
   test('the sidebar truncates a long project list and can expand it or collapse the project', async ({ page }) => {
+    // Seven full round trips plus scrolling: give it more room than the default per-test budget.
+    test.setTimeout(120_000);
     await openApp(page);
-    await newSessionInProject(page);
+    // Open the fixture project explicitly: the sidebar's plain "New session" uses the most recent project,
+    // which other tests may have changed.
+    await page.getByRole('button', { name: 'Open project', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Open a project' }).getByRole('button', { name: /^Open “project”$/ }).click();
+    await expect(page.getByRole('heading', { name: 'What should we work on?' })).toBeVisible();
     // Ensure more than six sessions exist in this project, each with a distinct title.
     const stamp = Date.now().toString(36);
     for (let i = 0; i < 7; i++) {
-      await page.getByRole('button', { name: 'New session', exact: true }).click();
+      await page.getByRole('button', { name: 'New session in project', exact: true }).click();
       await expect(page.getByRole('heading', { name: 'What should we work on?' })).toBeVisible();
       await sendPrompt(page, `bulk session ${stamp} ${i}`);
       await expectIdle(page);

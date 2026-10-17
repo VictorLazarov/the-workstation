@@ -3,6 +3,7 @@ import { ls } from '../lib/storage';
 import { uid } from '../lib/utils';
 
 export type Theme = 'system' | 'light' | 'dark';
+export type Brand = 'horizon' | 'warm';
 export interface Toast {
   id: string; kind: 'info' | 'success' | 'error' | 'attention'; title: string; body?: string;
   action?: { label: string; run: () => void }; ttl: number;
@@ -14,6 +15,7 @@ export interface PromptOpts { title: string; label?: string; initial?: string; c
 
 interface UiState {
   theme: Theme;
+  brand: Brand;
   sidebarOpen: boolean; sidebarWidth: number;
   inspectorOpen: boolean; inspectorWidth: number; inspectorTab: string; inspectorFocus?: string;
   paletteOpen: boolean; settingsOpen: boolean; pickerOpen: boolean; shortcutsOpen: boolean;
@@ -24,6 +26,7 @@ interface UiState {
   firstRunChecked: boolean;
   set: (p: Partial<UiState>) => void;
   setTheme: (t: Theme) => void;
+  setBrand: (b: Brand) => void;
   toast: (t: Omit<Toast, 'id' | 'ttl'> & { ttl?: number }) => string;
   dismissToast: (id: string) => void;
   ask: (o: ConfirmOpts) => Promise<boolean>;
@@ -36,10 +39,17 @@ export function applyTheme(t: Theme) {
   if (t === 'system') delete el.dataset.theme; else el.dataset.theme = t;
 }
 
+/** 'horizon' is the default look (no attribute); 'warm' is the original Claude-warm palette. */
+export function applyBrand(b: Brand) {
+  const el = document.documentElement;
+  if (b === 'warm') el.dataset.brand = 'warm'; else delete el.dataset.brand;
+}
+
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 
 export const useUi = create<UiState>((set, get) => ({
   theme: (ls.get('ws.theme') as Theme) || 'system',
+  brand: ls.get('ws.brand') === 'warm' ? 'warm' : 'horizon',
   sidebarOpen: ls.get('ws.sidebarOpen') !== '0',
   sidebarWidth: clamp(Number(ls.get('ws.sidebarW')) || 288, 220, 480),
   inspectorOpen: ls.get('ws.inspectorOpen') === '1',
@@ -56,6 +66,7 @@ export const useUi = create<UiState>((set, get) => ({
     if ('inspectorTab' in p && p.inspectorTab) ls.set('ws.inspectorTab', p.inspectorTab);
   },
   setTheme: (t) => { ls.set('ws.theme', t); applyTheme(t); set({ theme: t }); },
+  setBrand: (b) => { ls.set('ws.brand', b); applyBrand(b); set({ brand: b }); },
   toast: (t) => {
     const id = uid('t');
     const ttl = t.ttl ?? (t.kind === 'error' ? 8000 : 4500);

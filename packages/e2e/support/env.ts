@@ -25,7 +25,3 @@ export function readState(): E2EState {
   return JSON.parse(raw) as E2EState;
 }
 
-/** Path of the fixture project served as the server cwd. Created by playwright.config.ts. */
-export function projectDir(): string {
-  return readState().project;
-}

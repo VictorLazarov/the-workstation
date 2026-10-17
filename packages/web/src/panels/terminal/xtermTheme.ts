@@ -15,14 +15,14 @@ export function readTermTheme(): Record<string, string> {
     foreground: v('--text', dark ? '#ece9e1' : '#1f1e1b'),
     cursor: v('--accent', '#c15f3c'),
     cursorAccent: v('--code-bg', '#ffffff'),
-    selectionBackground: dark ? 'rgba(217,119,87,0.35)' : 'rgba(193,95,60,0.25)',
+    selectionBackground: root.dataset.brand === 'warm' ? (dark ? 'rgba(217,119,87,0.35)' : 'rgba(193,95,60,0.25)') : (dark ? 'rgba(77,177,255,0.35)' : 'rgba(0,112,242,0.22)'),
   };
 }
 
 /** Calls cb when the theme (data-theme attr or OS scheme) changes. */
 export function onThemeChange(cb: () => void): () => void {
   const mo = new MutationObserver(cb);
-  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'data-brand'] });
   const mq = window.matchMedia('(prefers-color-scheme: dark)');
   mq.addEventListener('change', cb);
   return () => { mo.disconnect(); mq.removeEventListener('change', cb); };

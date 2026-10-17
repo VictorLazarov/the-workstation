@@ -8,7 +8,7 @@ import { deriveContext, groupTools, mcpEnabled, mcpTone, turnCosts, type Categor
 import './panels.css';
 
 const COLOR: Record<Category['id'], string> = {
-  system: 'var(--muted)', user: 'var(--info)', assistant: 'var(--accent)', thinking: 'var(--warn)', calls: 'var(--ok)', results: '#8e6bb8',
+  system: 'var(--muted)', user: 'var(--info)', assistant: 'var(--ai-fill)', thinking: 'var(--warn)', calls: 'var(--ok)', results: 'var(--text-2)',
 };
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {

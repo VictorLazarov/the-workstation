@@ -26,9 +26,10 @@
   --radius-xl: 12px;
   --font-sans: '72', '72full', Arial, Helvetica, sans-serif;
   --font-serif: '72', '72full', Arial, Helvetica, sans-serif;
-  --heading-weight: 700;
+  --heading-weight: 600;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --col: 780px;
+  --chrome: #ffffff;
   --bg: #f5f6f7;
   --surface: #ffffff;
   --surface-2: #eff1f2;
@@ -82,6 +83,7 @@
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', ui-serif, Georgia, serif;
   --heading-weight: 500;
+  --chrome: #faf9f5;
   --bg: #faf9f5;
   --surface: #ffffff;
   --surface-2: #f5f3ec;
@@ -130,6 +132,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
+    --chrome: #1d232a;
     --bg: #12171c;
     --surface: #1d232a;
     --surface-2: #161c22;
@@ -176,6 +179,7 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --chrome: #1d232a;
   --bg: #12171c;
   --surface: #1d232a;
   --surface-2: #161c22;
@@ -223,6 +227,7 @@
 /* ── warm dark (higher specificity than horizon dark) ── */
 @media (prefers-color-scheme: dark) {
   :root[data-brand='warm']:not([data-theme='light']) {
+    --chrome: #1e1d1b;
     --bg: #1e1d1b;
     --surface: #292826;
     --surface-2: #242321;
@@ -268,6 +273,7 @@
   }
 }
 :root[data-brand='warm'][data-theme='dark'] {
+  --chrome: #1e1d1b;
   --bg: #1e1d1b;
   --surface: #292826;
   --surface-2: #242321;

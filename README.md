@@ -1,8 +1,8 @@
 # The Workstation
 
-A browser UI for [Claude Code](https://claude.com/claude-code), built on the Claude Agent SDK. Streaming chat, tool-call
-cards, permission prompts, plan mode, session history, model picker and more: the Claude Code Desktop experience, served
-from any machine or container you can reach with a browser.
+A desktop-style workspace for coding agents that runs in your browser, built on the Claude Agent SDK. Parallel sessions with live status, rich tool cards, inline permission and plan review, diff review and commit, files, terminal and MCP panels, and a custom `ANTHROPIC_BASE_URL`. Run it locally or install it into any devcontainer.
+
+New here? Read [docs/PRODUCT.md](docs/PRODUCT.md) for the vision, principles and roadmap.
 
 Your `CLAUDE.md`, skills, hooks, MCP servers and `settings.json` behave as in the CLI (user, project and local settings are loaded).
 

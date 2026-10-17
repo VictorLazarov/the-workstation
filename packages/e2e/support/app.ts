@@ -1,6 +1,5 @@
 import { expect, test as base, type Locator, type Page } from '@playwright/test';
-import path from 'node:path';
-import { projectDir, TOKEN } from './env.ts';
+import { TOKEN } from './env.ts';
 
 /**
  * Test fixture. Every page starts with the first-run settings prompt dismissed (it is a per-viewer
@@ -53,9 +52,6 @@ export async function newSessionInProject(page: Page) {
   await expect(composer(page)).toBeFocused();
 }
 
-/** The conversation's user message bubbles, in order. */
-export const userMessages = (page: Page) => page.locator('.msg-user-text');
-
 /** Waits for the finished-turn marker (the result line or the working indicator to be gone). */
 export async function expectIdle(page: Page) {
   await expect(page.locator('.working')).toHaveCount(0);
@@ -72,5 +68,3 @@ export async function expandTool(card: Locator) {
   const head = card.locator('.tool-head');
   if ((await head.getAttribute('aria-expanded')) === 'false') await head.click();
 }
-
-export const fixtureFile = (rel: string) => path.join(projectDir(), rel);

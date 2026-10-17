@@ -10,7 +10,7 @@ import { TopBar } from './components/TopBar';
 import { Resizer } from './components/ui';
 import { isMac } from './lib/utils';
 import { useActiveSession, useSessions } from './store/sessions';
-import { applyTheme, useUi } from './store/ui';
+import { applyBrand, applyTheme, useUi } from './store/ui';
 import './panels';
 
 function useShortcuts() {
@@ -44,6 +44,7 @@ function useShortcuts() {
 
 function useChrome() {
   const theme = useUi((s) => s.theme);
+  const brand = useUi((s) => s.brand);
   const sessions = useSessions((s) => s.sessions);
   useEffect(() => {
     applyTheme(theme);
@@ -51,6 +52,7 @@ function useChrome() {
     const meta = () => document.querySelector('meta[name=color-scheme]');
     void meta; void mq;
   }, [theme]);
+  useEffect(() => { applyBrand(brand); }, [brand]);
   useEffect(() => {
     const attn = Object.values(sessions).filter((s) => s.perms.length).length;
     document.title = (attn ? `(${attn}) ` : '') + 'The Workstation';

@@ -1,0 +1,112 @@
+# The Workstation — Product Brief
+
+> Read this first. It explains what we are building, why, the principles that decide trade-offs, what is
+> deliberately *not* in scope, and where the product should go next. Supporting docs are listed at the end.
+> Last updated: 2026-10 (early baseline; see "Current state").
+
+## 1. What it is
+**The Workstation** is a personal, desktop-style workspace for coding agents. It runs as a local web app
+(open `http://localhost:7777` in a browser), installs into devcontainers, and is designed to be wrapped in
+Electron/Tauri later. Under the hood it drives the **Claude Agent SDK**; everything the user sees — sessions,
+diffs, permissions, plans, terminals, panels — is our UX/UI on top of it.
+
+It belongs to the same family as Claude Code Desktop, Cursor's Agents window and the GitHub Copilot app:
+a *graphical agent workspace*, not a terminal transcript in a browser.
+
+## 2. Why it exists
+The owner wants a coding-agent tool they can **shape around their own daily work**, instead of settling for
+the UX of existing tools (including opencode's), and that can be pointed at **their own provider/gateway**
+(`ANTHROPIC_BASE_URL`). Ownership is the point: when a workflow is missing, we add it.
+
+The owner's one-line version: *"best-in-class engine, my UX."*
+
+## 3. Who it is for
+- Primary user: the owner — a working developer running several agent tasks in parallel on real repos,
+  locally and inside devcontainers.
+- Secondary: teammates who might later want the same tool. Single-user and local-first today; multi-user,
+  hosted, or team features are **not** goals until the owner says so.
+
+## 4. Principles (use these to settle arguments)
+1. **The SDK is the engine; we do not reinvent it.** Agent loop, tools, permissions, sessions, resume/fork,
+   checkpoints/rewind, MCP, skills, subagents, hooks, settings sources, usage — all SDK. Before building any
+   feature, check whether the SDK already provides it and expose it instead. Our value is UX and workflows.
+2. **A workspace, not a CLI.** Desktop-app patterns: project/session sidebar with live status, rich tool cards
+   (diffs, command output, plans — never raw JSON), review panes, inline approvals. See `UX.md`.
+3. **Parallel agents are first-class.** Many sessions run at once, each optionally in its own git worktree;
+   the sidebar says which one needs you.
+4. **Review is the product.** The time a developer spends is reviewing and steering. Diff review, line
+   comments, rewind, plan approval and honest cost/context visibility matter more than chat polish.
+5. **Honest UI.** Show real state and real limits (e.g. rewind does not track Bash edits; context category split
+   is an estimate). No dead buttons: if a feature is not built, hide it. No hidden costs.
+6. **Safe by default.** The server can run shell commands as the user. Token on every request, strict
+   Host/Origin checks, localhost bind by default, secrets never echoed or leaked to a custom provider.
+7. **Portable by construction.** The UI talks to the server only via `/api` + `/ws` and reaches native features
+   through a `platform` adapter, so Electron/Tauri is a thin shell. See `VISION.md`.
+8. **Extensible at the UI layer.** Panels, tool-card renderers and commands are registries so the owner can add
+   personal workflows quickly.
+9. **Taste matters.** Calm, dense, polished. Brand hints come from SAP's Horizon language (72 typeface, Horizon
+   blues/neutrals, violet reserved for AI surfaces). See `BRAND.md`.
+
+## 5. Explicit non-goals (for now)
+- Our own agent runtime, tool implementations, or model-provider layer. (Providers = Anthropic-API-compatible
+  endpoints/gateways only, because that is what the SDK supports.)
+- Forking opencode. Evaluated and rejected: its UI is bound to its own runtime, SDK and ~40-package monorepo.
+- Multi-user accounts, cloud hosting, billing, sync.
+- Presenting this as "Claude Code" or offering claude.ai login / its rate limits — the SDK terms forbid it.
+  Our name is "The Workstation"; copy says "built on the Claude Agent SDK".
+- Copying any competitor pixel-for-pixel or using SAP logos/wordmarks.
+
+## 6. Architecture in one paragraph
+npm-workspaces monorepo. `packages/server` (Node, hono + ws) hosts one SDK `query()` per live session,
+bridges permissions/questions to the browser, exposes REST for files/git/search/config/worktrees and a
+token-gated PTY terminal socket, and serves the built SPA. `packages/web` (React + Vite + zustand) folds raw SDK
+events into conversation state and renders them; panels register themselves. `packages/protocol` holds the
+shared wire types. `devcontainer/` has a Dev Container Feature + installer. A mock SDK (`WORKSTATION_MOCK=1`)
+drives demos and e2e tests. Details: `ARCHITECTURE.md`.
+
+## 7. Current state (honest snapshot)
+**Built and verified:** server + WebSocket protocol; real-SDK sessions (streaming, permissions incl. remember,
+AskUserQuestion, plan mode, interrupt, model/mode/effort, images, MCP, resume, fork, worktrees); web shell
+(sidebar with status, conversation, tool cards, composer with @files, slash commands, images, queueing);
+inspector panels (Plan, Changes with diff + commit + revert, Files, Tasks, Context/MCP, Terminal); settings
+incl. custom base URL/key; devcontainer feature; CI definitions.
+**Known gaps / unverified:** devcontainer feature never built in a real container; no virtualization for very
+long conversations; worktree toggle and remembered-rules UI not yet exposed; Cursor/Copilot research is from
+search snippets only; browser e2e suite and brand pass in progress; Electron shell not started.
+
+## 8. Roadmap (priority order)
+**Next (wave 3)** — drawn from `RESEARCH.md`:
+1. Worktree toggle per session with setup/cleanup and status in the sidebar.
+2. Click-a-line diff comments, batched back to the agent as one prompt.
+3. Rewind menu (code / conversation / both) that states what it cannot restore.
+4. Editable plan with Approve / Build; side chat that never writes to the thread.
+5. Sidebar filters (status/project), auto-archive, notifications when a session needs input or finishes.
+6. Error banners with codes (auth/model errors link to Settings); remembered-rules viewer.
+7. Horizon brand pass (in progress) with a warm/horizon switch.
+8. Electron shell (`apps/desktop`, a few hundred lines): embed `startServer()` on a free port with a
+   generated token, native menus, folder dialog via the `platform` adapter.
+**Later:** PR/CI bar (fix-CI, address comments; any auto-merge strictly opt-in), preview pane with per-project
+launch config, "My Work" home from issues/PRs, task chips that spawn sessions, PWA, conversation virtualization.
+
+## 9. How we build (team process)
+Work is split by package/directory so agents never collide; a lead integrates and commits. Every slice gets
+typecheck + unit tests + a browser check against the mock server, and risky areas (security, SDK glue) get an
+independent review before release. Use cheaper models for simple implementation, stronger ones for the server
+core, architecture and reviews. Verify claims yourself — agent reports are leads, not proof.
+
+## 10. Decision log
+| Decision | Why |
+|---|---|
+| Build fresh, don't fork opencode | Its UI/runtime are coupled; replacing its backend ≈ rewrite |
+| Claude Agent SDK as the only engine | Best-in-class loop/tools/permissions; no reinventing |
+| Web app first, Electron later | Same code runs in browser, devcontainer, and desktop shell |
+| Token + Host/Origin checks everywhere | Server executes commands; DNS-rebinding/CSWSH must be blocked |
+| Model/effort/mode live in the composer only | Per-message settings belong next to input; no duplicate controls |
+| Strip inherited credentials when a custom base URL is set | Found in testing: they were being sent to the custom endpoint |
+| Violet only for AI surfaces, blue for actions | Semantic colour: users learn "purple = the agent" |
+| Hide unbuilt features | Honest UI; no dead buttons |
+
+## 11. Related documents
+`VISION.md` (owner's intent, portability rules) · `UX.md` (binding UX principles) · `ARCHITECTURE.md`
+(system design) · `RESEARCH.md` (competitor findings, with source caveats) · `BRAND.md` (visual language) ·
+`DEVCONTAINER.md` (install) · `../README.md` (quickstart).

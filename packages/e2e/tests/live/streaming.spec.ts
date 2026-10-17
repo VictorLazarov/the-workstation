@@ -89,7 +89,8 @@ test.describe('queueing while running (slowed mock)', () => {
 
     await sendPrompt(page, 'kept follow up');
     await expect(queue.locator('.queue-item', { hasText: 'kept follow up' })).toBeVisible();
-    await expect(page.locator('.msg-assistant').last()).toContainText('word119', { timeout: 30_000 });
+    // The slow turn finishes first (by content, since the queued reply becomes the last message afterwards).
+    await expect(page.locator('.msg-assistant', { hasText: 'word119' })).toHaveCount(1, { timeout: 30_000 });
     await expect(page.locator('.msg-user-text', { hasText: 'kept follow up' })).toBeVisible({ timeout: 30_000 });
     await expect(page.locator('.msg-user-text', { hasText: 'dropped follow up' })).toHaveCount(0);
     await expect(page.locator('.msg-assistant').last()).toContainText('Here is a mock reply to: "kept follow up"', { timeout: 30_000 });

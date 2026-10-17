@@ -3,7 +3,7 @@ import type { AppConfig, EffortLevel, PermissionMode } from '@workstation/protoc
 import { platform } from '../platform';
 import { getServerBase, setServerBase } from '../lib/storage';
 import { useSessions } from '../store/sessions';
-import { useUi, type Theme } from '../store/ui';
+import { useUi, type Brand, type Theme } from '../store/ui';
 import { modelLabel } from '../lib/utils';
 import { EFFORTS, MODES } from './Chips';
 import { Dialog, Segmented } from './ui';
@@ -12,6 +12,7 @@ export function SettingsDialog() {
   const open = useUi((s) => s.settingsOpen);
   const firstRun = useUi((s) => s.firstRunChecked);
   const theme = useUi((s) => s.theme);
+  const brand = useUi((s) => s.brand);
   const config = useSessions((s) => s.config);
   const models = useSessions((s) => s.models);
   const [f, setF] = useState({ baseUrl: '', apiKey: '', authToken: '', model: '', effort: 'medium' as EffortLevel, mode: 'default' as PermissionMode, custom: '' });
@@ -76,6 +77,7 @@ export function SettingsDialog() {
         <section>
           <h3>Appearance</h3>
           <Segmented<Theme> value={theme} onChange={(t) => useUi.getState().setTheme(t)} options={[{ id: 'system', label: 'System', icon: 'monitor' }, { id: 'light', label: 'Light', icon: 'sun' }, { id: 'dark', label: 'Dark', icon: 'moon' }]} />
+          <div className="row-between"><span>Brand</span><Segmented<Brand> value={brand} onChange={(b) => useUi.getState().setBrand(b)} options={[{ id: 'horizon', label: 'Horizon', icon: 'sparkles' }, { id: 'warm', label: 'Warm', icon: 'sun' }]} /></div>
         </section>
         <section>
           <h3>Notifications and server</h3>

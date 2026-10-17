@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
     <title>The Workstation</title>
+    <link rel="preload" href="/fonts/72-Regular.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/72-Semibold.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <script>
       // Apply theme before first paint to avoid a flash.
       try {
         var t = localStorage.getItem('ws.theme');
         if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+        if (localStorage.getItem('ws.brand') === 'warm') document.documentElement.dataset.brand = 'warm';
       } catch (e) {}
     </script>
   </head>
