@@ -50,15 +50,16 @@ describe('/ws/terminal', () => {
     await new Promise<void>((r) => b.ws.once('close', () => r()));
   });
 
-  it('does not leak server env secrets into the shell', async () => {
+  it('does not leak the server\'s own env/token into the shell, keeps the user\'s own credentials', async () => {
     process.env.WORKSTATION_FOO = 'leak-a';
-    process.env.MY_SECRET_THING = 'leak-b';
+    process.env.ANTHROPIC_API_KEY_X = 'leak-c';
+    process.env.MY_SECRET_THING = 'users-own';
     const a = open('t2');
     await a.opened;
-    a.send({ type: 'input', data: 'echo "[$WORKSTATION_FOO|$MY_SECRET_THING]"; env | grep -c ' + s.token.slice(0, 12) + '\n' });
-    const out = await a.until(/\[\|\][\s\S]*\n0\r?\n/);
+    a.send({ type: 'input', data: 'echo "[$WORKSTATION_FOO|$ANTHROPIC_API_KEY_X|$MY_SECRET_THING]"; env | grep -c ' + s.token.slice(0, 12) + '\n' });
+    const out = await a.until(/\[\|\|users-own\][\s\S]*\n0\r?\n/);
     expect(out).not.toContain('leak-');
-    delete process.env.WORKSTATION_FOO; delete process.env.MY_SECRET_THING;
+    delete process.env.WORKSTATION_FOO; delete process.env.MY_SECRET_THING; delete process.env.ANTHROPIC_API_KEY_X;
   });
 
   it('works with the python fallback backend', async () => {

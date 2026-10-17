@@ -116,7 +116,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   });
 
   // ── REST body size cap (images travel over the WebSocket, not REST) ──
-  app.use('/api/*', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'request body too large (max 2 MB)' }, 413) }));
+  app.use('/api/*', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => { c.header('Connection', 'close'); return c.json({ error: 'request body too large (max 2 MB)' }, 413); } }));
 
   const q = (c: { req: { query(k: string): string | undefined } }, k: string): unknown => c.req.query(k);
   const cwdParam = (c: { req: { query(k: string): string | undefined } }) => requireDir(q(c, 'cwd') ?? serverCwd);
