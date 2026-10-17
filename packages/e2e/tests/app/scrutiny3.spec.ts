@@ -132,10 +132,12 @@ test.describe('N3: toasts', () => {
 
   test('finished/info toasts dismiss themselves after about 4 seconds', async ({ page }) => {
     await openApp(page);
-    await toast(page, { kind: 'success', title: 'Session finished', body: 'auto' });
-    await expect(page.locator('.toast')).toHaveCount(1);
+    while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
+    await toast(page, { kind: 'success', title: 'Auto dismiss me', body: 'auto' });
+    const mine = page.locator('.toast', { hasText: 'Auto dismiss me' });
+    await expect(mine).toHaveCount(1);
     const t0 = Date.now();
-    await expect(page.locator('.toast')).toHaveCount(0, { timeout: 8000 });
+    await expect(mine).toHaveCount(0, { timeout: 8000 });
     const dt = Date.now() - t0;
     expect(dt).toBeGreaterThan(2500);
     expect(dt).toBeLessThan(6500);
