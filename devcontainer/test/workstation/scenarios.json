@@ -1,0 +1,6 @@
+{
+  "local": {
+    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+    "features": { "workstation": { "source": "local", "installClaudeCode": false } }
+  }
+}

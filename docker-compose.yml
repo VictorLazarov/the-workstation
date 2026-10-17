@@ -1,0 +1,14 @@
+services:
+  workstation:
+    build: .
+    ports:
+      - "127.0.0.1:7777:7777"   # keep the 127.0.0.1 prefix unless you know what you are doing
+    environment:
+      # Pass through from your shell / .env (never commit keys)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+    volumes:
+      - workstation-config:/config          # token + settings survive rebuilds
+      - ./:/workspace                       # the project Claude works on
+volumes:
+  workstation-config:

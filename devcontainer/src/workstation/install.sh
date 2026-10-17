@@ -119,8 +119,8 @@ cat > "$PREFIX/bin/workstation-autostart" <<AUTO
 # Runs as postStartCommand. Starts the server in the background and prints the tokenized URL.
 export WORKSTATION_HOME="\${WORKSTATION_HOME:-$CONFIG_DIR}"
 [ -f "$INSTALL_DIR/autostart" ] || exit 0
-PORT="\${WORKSTATION_PORT:-$(cat "$INSTALL_DIR/port")}"
-HOST="\${WORKSTATION_HOST:-$(cat "$INSTALL_DIR/host")}"
+PORT="\${WORKSTATION_PORT:-\$(cat "$INSTALL_DIR/port")}"
+HOST="\${WORKSTATION_HOST:-\$(cat "$INSTALL_DIR/host")}"
 LOG="\$WORKSTATION_HOME/server.log"
 mkdir -p "\$WORKSTATION_HOME"
 if ! (exec 3<>/dev/tcp/127.0.0.1/\$PORT) 2>/dev/null; then
@@ -137,7 +137,7 @@ cat > "$PREFIX/bin/workstation-url" <<URL
 #!/usr/bin/env bash
 # Print the tokenized URL for the running Workstation.
 export WORKSTATION_HOME="\${WORKSTATION_HOME:-$CONFIG_DIR}"
-PORT="\${WORKSTATION_PORT:-$(cat "$INSTALL_DIR/port" 2>/dev/null || echo 7777)}"
+PORT="\${WORKSTATION_PORT:-\$(cat "$INSTALL_DIR/port" 2>/dev/null || echo 7777)}"
 u=\$(grep -ho 'https\\?://[^ ]*token=[^ ]*' "\$WORKSTATION_HOME/server.log" 2>/dev/null | tail -1)
 if [ -z "\$u" ]; then
   t=\$(node -e 'try{console.log(JSON.parse(require("fs").readFileSync(process.argv[1],"utf8")).token||"")}catch{}' "\$WORKSTATION_HOME/config.json")

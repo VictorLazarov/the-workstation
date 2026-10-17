@@ -1,0 +1,24 @@
+# Publishes the Dev Container Feature to ghcr.io/<owner>/<repo>/workstation.
+# Needs no extra secrets: uses the built-in GITHUB_TOKEN (packages: write).
+# After the first publish, set the package visibility to Public in GitHub > Packages so others can pull it.
+name: Release Dev Container Feature
+on:
+  workflow_dispatch:
+  push:
+    tags: ["feature-v*"]   # bump "version" in devcontainer-feature.json, then tag e.g. feature-v1.0.1
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: devcontainers/action@v1
+        with:
+          publish-features: "true"
+          base-path-to-features: ./devcontainer/src
+          generate-docs: "false"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
