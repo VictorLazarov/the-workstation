@@ -1,4 +1,4 @@
-import { expect, expectIdle, newSessionInProject, openApp, sendPrompt, test } from '../../support/app.ts';
+import { expect, expectIdle, newSessionInProject, openApp, sendPrompt, test, TOKEN } from '../../support/app.ts';
 
 const palette = (page: import('@playwright/test').Page) => page.getByRole('textbox', { name: 'Command palette' });
 // The settings dialog is titled "Welcome. Set up your connection" until a key or base URL is configured.
@@ -95,7 +95,7 @@ test.describe('settings dialog', () => {
     await expect(again.getByText('set', { exact: true })).toBeVisible();
     expect(await page.content()).not.toContain(SECRET);
 
-    const cfg = await request.get(`${baseURL}/api/config`, { headers: { Authorization: `Bearer ${(await import('../../support/env.ts')).TOKEN}` } });
+    const cfg = await request.get(`${baseURL}/api/config`, { headers: { Authorization: `Bearer ${TOKEN}` } });
     expect(cfg.status()).toBe(200);
     expect(await cfg.text()).not.toContain(SECRET);
     await again.getByRole('button', { name: 'Cancel' }).click();

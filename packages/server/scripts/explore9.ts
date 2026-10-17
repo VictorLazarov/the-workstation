@@ -30,7 +30,7 @@ if (which === 'noresume') {
   for (const w of ['one', 'two', 'three']) await r.send({ type: 'prompt', sessionId: sid, text: `Reply with exactly: ${w}`, clientMsgId: w });
   const t0 = Date.now();
   await r.sub.waitFor(() => r.sub.sdk().filter((m) => m.type === 'result').length >= 3, 120000).catch(() => {});
-  log('results', r.sub.sdk().filter((m) => m.type === 'result').map((m) => m.result), 'status', r.mgr.runtimeState(r.mgr.get(sid)!).status, 'outstanding', r.mgr.get(sid)!.outstanding);
+  log('results', r.sub.sdk().filter((m) => m.type === 'result').map((m) => m.result), 'status', r.mgr.runtimeState(r.mgr.get(sid)!).status, 'inflight', r.mgr.get(sid)!.inflight.size);
   log(r.sub.msgs.filter((m)=>m.type==='state').map((m:any)=>m.state.status).join(','));
 } else if (which === 'huge') {
   const r = makeRig();

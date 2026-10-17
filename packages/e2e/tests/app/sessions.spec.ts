@@ -27,6 +27,18 @@ test.describe('projects and sessions', () => {
     await expect(page.getByRole('heading', { name: 'What should we work on?' })).toHaveCount(0);
   });
 
+  test('an invalid folder path shows an error and does not open a session', async ({ page }) => {
+    await openApp(page);
+    await page.getByRole('button', { name: 'Open project', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Open a project' });
+    await picker.getByRole('textbox', { name: 'Folder path' }).fill('/definitely/not/a/real/folder-xyz');
+    await picker.getByRole('textbox', { name: 'Folder path' }).press('Enter');
+    await expect(picker.locator('.dir-empty.err')).toBeVisible();
+    await expect(picker).toBeVisible();
+    await picker.getByRole('button', { name: 'Cancel' }).click();
+    await expect(page.getByRole('heading', { name: 'What should we work on?' })).toHaveCount(0);
+  });
+
   test('a prompt streams a markdown reply and the session appears in the sidebar', async ({ page }) => {
     await openApp(page);
     await newSessionInProject(page);
@@ -52,5 +64,33 @@ test.describe('projects and sessions', () => {
     await page.locator('.sess', { hasText: 'remember this across reload' }).click();
     await expect(page.locator('.msg-user-text', { hasText: 'remember this across reload' })).toBeVisible();
     await expect(page.locator('.msg-assistant').last()).toContainText('Here is a mock reply to: "remember this across reload"');
+  });
+
+  test('the sidebar truncates a long project list and can expand it or collapse the project', async ({ page }) => {
+    await openApp(page);
+    await newSessionInProject(page);
+    // Ensure more than six sessions exist in this project, each with a distinct title.
+    const stamp = Date.now().toString(36);
+    for (let i = 0; i < 7; i++) {
+      await page.getByRole('button', { name: 'New session', exact: true }).click();
+      await expect(page.getByRole('heading', { name: 'What should we work on?' })).toBeVisible();
+      await sendPrompt(page, `bulk session ${stamp} ${i}`);
+      await expectIdle(page);
+    }
+    const project = page.locator('section.proj').filter({ has: page.locator('.proj-name', { hasText: 'project' }) }).first();
+    await expect(project.locator('.sess').first()).toBeVisible();
+    await expect(project.locator('.sess')).toHaveCount(6);
+    const more = project.getByRole('button', { name: /^Show \d+ more$/ });
+    await expect(more).toBeVisible();
+    await more.click();
+    await expect(project.locator('.sess').filter({ hasText: `bulk session ${stamp}` })).toHaveCount(7);
+
+    const toggle = project.locator('.proj-toggle');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(project.locator('.sess')).toHaveCount(0);
+    await toggle.click();
+    await expect(project.locator('.sess').first()).toBeVisible();
   });
 });

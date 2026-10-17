@@ -47,8 +47,11 @@ function setup(): E2EState {
     fs.mkdirSync(h, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(h, 'config.json'), JSON.stringify({ token: TOKEN, app: {} }, null, 2), { mode: 0o600 });
   }
+  // Snapshot the built web UI so a rebuild elsewhere in the repo cannot break a run mid-way.
+  const webSnapshot = path.join(home, 'web-dist');
+  fs.cpSync(path.join(repoRoot, 'packages/web/dist'), webSnapshot, { recursive: true });
   return {
-    home, project, mainHome, slowHome,
+    home, project, mainHome, slowHome, webSnapshot,
     mainUrl: `http://127.0.0.1:${freePort()}`,
     slowUrl: `http://127.0.0.1:${freePort()}`,
   };
@@ -59,7 +62,7 @@ const state: E2EState = process.env.E2E_STATE ? JSON.parse(process.env.E2E_STATE
 process.env.E2E_STATE = JSON.stringify(state);
 
 const launchOptions = { executablePath: chromePath() };
-const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1' }) as Record<string, string>;
+const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
 const serverCmd = (url: string) => `node ${path.join(repoRoot, 'packages/server/dist/cli.js')} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${state.project}`;
 
 export default defineConfig({

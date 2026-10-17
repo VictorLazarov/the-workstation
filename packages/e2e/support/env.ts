@@ -16,6 +16,7 @@ export interface E2EState {
   slowUrl: string;
   mainHome: string;
   slowHome: string;
+  webSnapshot: string;
 }
 
 export function readState(): E2EState {

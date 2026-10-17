@@ -28,6 +28,18 @@ test.describe('permission decisions', () => {
     await expectIdle(page);
   });
 
+  test('Ctrl+Enter allows the pending request when the composer is empty', async ({ page }) => {
+    await openApp(page);
+    await newSessionInProject(page);
+    await sendPrompt(page, 'bash via shortcut');
+    await expect(permission(page)).toBeVisible();
+    await page.locator('textarea[aria-label="Message Claude"]').blur();
+    await page.keyboard.press('Control+Enter');
+    await expect(permission(page)).toHaveCount(0);
+    await expect(page.locator('.msg-assistant').last()).toContainText('All 20 tests pass.');
+    await expectIdle(page);
+  });
+
   test('Always allow sends remember:true with the decision', async ({ page }) => {
     const sent: string[] = [];
     page.on('websocket', (ws: WebSocket) => ws.on('framesent', (f) => sent.push(String(f.payload))));

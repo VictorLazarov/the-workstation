@@ -42,6 +42,19 @@ test.describe('streaming and interrupt (slowed mock)', () => {
     await expectIdle(page);
   });
 
+  test('a new turn works normally after a Stop', async ({ page }) => {
+    await openApp(page);
+    await newSessionInProject(page);
+    await sendPrompt(page, 'slow before stop');
+    await expect(stop(page)).toBeVisible();
+    await stop(page).click();
+    await expect(page.locator('.result-line', { hasText: 'Stopped' })).toBeVisible();
+    await expectIdle(page);
+    await sendPrompt(page, 'hello after stop');
+    await expect(page.locator('.msg-assistant').last()).toContainText('Here is a mock reply to: "hello after stop"');
+    await expectIdle(page);
+  });
+
   test('reloading mid-turn reattaches to the running session', async ({ page }) => {
     await openApp(page);
     await newSessionInProject(page);

@@ -77,6 +77,16 @@ test.describe('session features', () => {
     await expect(chips.getByRole('button', { name: /Opus/ })).toBeVisible();
   });
 
+  test('BUG-002: the model chip shows the friendly name of the chosen model', async ({ page }) => {
+    test.fail(true, 'BUG-002: chip shows the raw alias "opus" while the menu says "Opus"; see BUGS.md');
+    await sendPrompt(page, 'hello model label');
+    await expectIdle(page);
+    const chips = page.locator('.composer-chips');
+    await chips.getByRole('button', { name: /Default model/ }).click();
+    await page.getByRole('menuitem', { name: /^Opus/ }).click();
+    await expect(chips.getByRole('button', { name: 'Opus', exact: true })).toBeVisible({ timeout: 3_000 });
+  });
+
   test('a completed turn reports context usage and cost', async ({ page }) => {
     await sendPrompt(page, 'usage check');
     await expectIdle(page);

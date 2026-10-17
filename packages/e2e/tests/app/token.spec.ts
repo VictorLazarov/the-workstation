@@ -18,6 +18,12 @@ test.describe('token handling', () => {
     await expect(page.getByRole('textbox', { name: 'Message Claude' })).toHaveCount(0);
   });
 
+  test('BUG-001: a rejected token is named as an access problem, not an endless connecting state', async ({ page }) => {
+    test.fail(true, 'BUG-001: wrong token shows "Connecting to the server…" forever; see BUGS.md');
+    await openApp(page, { token: 'definitely-wrong-token-value' });
+    await expect(page.getByRole('alert').filter({ hasText: /access token|token was rejected|Unauthorized/i })).toBeVisible({ timeout: 5_000 });
+  });
+
   test('the token is moved out of the URL and kept in sessionStorage', async ({ page }) => {
     await openApp(page);
     await expect(page).toHaveURL((u) => !u.search.includes('token'));
