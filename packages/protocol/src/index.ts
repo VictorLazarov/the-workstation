@@ -94,7 +94,7 @@ export interface GitStatus { branch?: string; ahead?: number; behind?: number; f
  *  GET  /api/commands?cwd=     -> SlashCommandInfo[]
  *  WS   /ws
  */
-export interface ModelOption { id: string; label: string; description?: string }
+export interface ModelOption { id: string; label: string; description?: string; supportsEffort?: boolean; supportedEffortLevels?: EffortLevel[] }
 export interface SlashCommandInfo { name: string; description: string; argumentHint?: string }
 
 export const DEFAULT_PORT = 7777;

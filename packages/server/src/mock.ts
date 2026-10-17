@@ -202,9 +202,10 @@ class MockQuery implements QueryHandle {
   private async ask(tool: string, input: Json, toolUseID: string, extra: { suggestions?: PermissionUpdate[]; title?: string; description?: string; decisionReason?: string; blockedPath?: string } = {}) {
     const cb: CanUseTool | undefined = this.params.options.canUseTool;
     if (!this.needsPermission(tool) || !cb) return { ok: true as const, input };
-    const res = await cb(tool, input, { signal: this.abortCtl.signal, toolUseID, ...extra });
-    if (res.behavior === 'allow') return { ok: true as const, input: (res.updatedInput ?? input) as Json };
-    return { ok: false as const, message: res.message, interrupt: !!res.interrupt };
+    const res = await cb(tool, input, { signal: this.abortCtl.signal, toolUseID, requestId: randomUUID(), ...extra });
+    if (res && res.behavior === 'allow') return { ok: true as const, input: (res.updatedInput ?? input) as Json };
+    const d = res as { message?: string; interrupt?: boolean } | null;
+    return { ok: false as const, message: d?.message ?? 'denied', interrupt: !!d?.interrupt };
   }
 
   // ───── scenarios ─────
@@ -404,7 +405,7 @@ class MockQuery implements QueryHandle {
       const start = Date.now();
       if (!inited) { inited = true; yield this.initMsg(); }
       const content = um.message.content;
-      const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : (content as Json[]);
+      const blocks = typeof content === 'string' ? [{ type: 'text', text: content }] : (content as unknown as Json[]);
       const text = blocks.filter((b) => b.type === 'text').map((b) => String(b.text)).join('\n');
       const images = blocks.filter((b) => b.type === 'image').length;
       const uuid = (um as { uuid?: string }).uuid ?? randomUUID();

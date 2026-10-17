@@ -33,8 +33,8 @@ export function diffLines(oldStr: string, newStr: string, startLine = 1): DiffLi
     let i = 0, j = 0;
     while (i < R || j < C) {
       if (i < R && j < C && am[i] === bm[j]) { out.push({ t: ' ', text: am[i], oldNo: o++, newNo: n++ }); i++; j++; }
-      else if (j < C && (i >= R || dp[i][j + 1] >= dp[i + 1][j])) { out.push({ t: '+', text: bm[j], newNo: n++ }); j++; }
-      else { out.push({ t: '-', text: am[i], oldNo: o++ }); i++; }
+      else if (i < R && (j >= C || dp[i + 1][j] >= dp[i][j + 1])) { out.push({ t: '-', text: am[i], oldNo: o++ }); i++; }
+      else { out.push({ t: '+', text: bm[j], newNo: n++ }); j++; }
     }
   }
   for (let i = a.length - suf; i < a.length; i++) out.push({ t: ' ', text: a[i], oldNo: o++, newNo: n++ });

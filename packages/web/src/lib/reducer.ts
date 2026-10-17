@@ -189,7 +189,8 @@ function onAssistant(c: Conversation, msg: AnyMsg) {
       observeTool(c, b, key);
     } else {
       const at = blocks.findIndex((x) => x.type === b.type && !x.final);
-      if (at >= 0) blocks[at] = b; else blocks.push(b);
+      if (at >= 0) blocks[at] = b;
+      else if (!blocks.some((x) => x.type === b.type && x.final && 'text' in x && x.text === b.text)) blocks.push(b);
     }
   }
   replaceItem(c, key, idx, { ...item, blocks, error: errText ?? item.error });
