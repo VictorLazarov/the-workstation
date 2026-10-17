@@ -28,23 +28,33 @@ export type ClientMessage =
   | { type: 'rewind'; sessionId: SessionId; reqId: string; userMessageId: string; dryRun?: boolean }
   | { type: 'mcp.toggle'; sessionId: SessionId; server: string; enabled: boolean }
   | { type: 'mcp.reconnect'; sessionId: SessionId; server: string }
+  /** Remove the git worktree this server created for the session (acks with { removed, branchDeleted, reason? }). Refuses a dirty worktree unless `force`. */
+  | { type: 'worktree.remove'; reqId: string; sessionId: SessionId; force?: boolean }
   | { type: 'ping' };
 
 export type PermissionDecision =
-  | { behavior: 'allow'; updatedInput?: Record<string, unknown>; remember?: boolean /* apply SDK suggestions */ }
+  | { behavior: 'allow'; updatedInput?: Record<string, unknown>;
+      /** Persist the SDK's rule suggestions (addRules/addDirectories only; never a mode switch). `true` keeps each
+       *  suggestion's own destination (normally `.claude/settings.local.json`); `'session'` keeps them in memory for this session only. */
+      remember?: boolean | 'session';
+      /** Also switch the session's permission mode (e.g. ExitPlanMode "approve & auto-accept edits" => `acceptEdits`). */
+      setMode?: PermissionMode }
   | { behavior: 'deny'; message?: string; interrupt?: boolean };
 
 // ───────────── Server → Client (WebSocket) ─────────────
 export type ServerMessage =
   | { type: 'hello'; version: string; serverCwd: string; mock: boolean }
   | { type: 'ack'; reqId: string; ok: true; data?: unknown }
-  | { type: 'error'; reqId?: string; sessionId?: SessionId; message: string }
+  /** `code` is set for API/runtime failures surfaced from the SDK (e.g. `authentication_failed`, `rate_limit`, `process_exited`). */
+  | { type: 'error'; reqId?: string; sessionId?: SessionId; message: string; code?: string }
   | { type: 'session.started'; reqId: string; sessionId: SessionId; cwd: string; init: unknown /* SDK system/init msg */ }
   | { type: 'session.ended'; sessionId: SessionId; reason: string }
   | { type: 'sdk'; sessionId: SessionId; seq: number; message: unknown /* SDKMessage */ }
   | { type: 'permission.request'; sessionId: SessionId; requestId: string; toolName: string;
       input: Record<string, unknown>; toolUseID: string; title?: string; description?: string;
-      decisionReason?: string; blockedPath?: string; hasSuggestions: boolean; agentID?: string }
+      decisionReason?: string; blockedPath?: string; hasSuggestions: boolean; agentID?: string;
+      /** Raw SDK PermissionUpdate[] that `remember` would apply (for display, e.g. "Always allow `Bash(npm test)`"). */
+      suggestions?: unknown[] }
   | { type: 'permission.cancelled'; sessionId: SessionId; requestId: string }
   | { type: 'state'; sessionId: SessionId; state: SessionRuntimeState }
   | { type: 'pong' };
@@ -54,7 +64,10 @@ export interface SessionRuntimeState {
   model?: string;
   permissionMode: PermissionMode;
   effort?: EffortLevel;
+  /** Permission rules remembered during this session via `remember` (informational list). */
+  rules?: SessionRule[];
 }
+export interface SessionRule { toolName: string; ruleContent?: string; behavior: 'allow' | 'deny' | 'ask'; destination: string }
 
 // ───────────── REST (/api) ─────────────
 export interface SessionSummary {
@@ -66,6 +79,8 @@ export interface AppConfig {
   /** Never returned in full by GET; use `hasApiKey`. Accepted on PUT. */
   apiKey?: string; hasApiKey?: boolean;
   authToken?: string; hasAuthToken?: boolean;
+  /** Auto-deny permission requests that nobody can answer (no browser attached) after this many seconds. Unset/0 = wait forever. */
+  permissionTimeoutSec?: number;
   defaultModel?: string; defaultEffort?: EffortLevel; defaultPermissionMode?: PermissionMode;
   /** Extra env vars passed to Claude Code (e.g. ANTHROPIC_DEFAULT_SONNET_MODEL). */
   env?: Record<string, string>;
@@ -87,7 +102,7 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *  GET  /api/config            PUT /api/config  (partial AppConfig)
  *  GET  /api/sessions?cwd=     -> SessionSummary[]
  *  GET  /api/sessions/:id/messages?cwd=  -> { messages: unknown[] }  (SDK getSessionMessages)
- *  PATCH /api/sessions/:id {title}   DELETE /api/sessions/:id
+ *  PATCH /api/sessions/:id {title}   DELETE /api/sessions/:id[?force=1]  -> { ok, worktree? } (also removes a server-created clean worktree)
  *  GET  /api/models            -> ModelOption[]
  *  GET  /api/fs/list?path=     -> FsEntry[]        (directory browser / file tree)
  *  GET  /api/fs/read?path=     -> { content, encoding, truncated }

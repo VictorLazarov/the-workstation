@@ -69,8 +69,8 @@ export default defineConfig({
   retries: 0,
   timeout: 45_000,
   expect: { timeout: 10_000 },
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
-  outputDir: 'test-results',
+  reporter: [['list'], ['html', { open: 'never', outputFolder: path.join(state.home, 'report') }]],
+  outputDir: path.join(state.home, 'test-results'),
   use: {
     viewport: { width: 1280, height: 860 },
     trace: 'retain-on-failure',

@@ -140,7 +140,7 @@ function Loaded({ sessionId }: { sessionId: string }) {
 
 function ContextPanel({ sessionId }: PanelProps) {
   return (
-    <div className="ctx">
+    <div className="ctxp">
       <Meter sessionId={sessionId} />
       <Usage sessionId={sessionId} />
       <Mcp sessionId={sessionId} />

@@ -20,18 +20,16 @@ export { TOKEN } from './env.ts';
 export const PNG_1PX = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
 /**
- * Opens the app with the given token (default: the fixed test token). With the valid token it also waits
- * for the server's `hello` frame, so the connection is known to be up before a test acts.
+ * Opens the app with the given token (default: the fixed test token). With a valid token it waits until the
+ * store reports `ready` (set after the hello handshake and the initial config/session loads). The UI shows
+ * "Connecting…" on the home screen until then, so the signal is the DOM, not WebSocket frame timing.
  */
 export async function openApp(page: Page, opts: { token?: string | null; path?: string } = {}) {
   const token = opts.token === undefined ? TOKEN : opts.token;
   const q = token === null ? '' : `?token=${encodeURIComponent(token)}`;
-  const connected = token === TOKEN
-    ? page.waitForEvent('websocket').then((ws) => ws.waitForEvent('framereceived', { predicate: (f) => String(f.payload).includes('"type":"hello"'), timeout: 15_000 }))
-    : undefined;
   await page.goto((opts.path ?? '/') + q);
-  if (connected) await connected;
   await expect(page.getByRole('complementary', { name: 'Sessions' })).toBeVisible();
+  if (token === TOKEN) await expect(page.getByRole('main').getByText('Connecting…')).toHaveCount(0);
 }
 
 export const composer = (page: Page) => page.getByRole('textbox', { name: 'Message Claude' });

@@ -127,8 +127,10 @@ function Viewer({ cwd, path, onBack }: { cwd: string; path: string; onBack: () =
   return (
     <div className="fview">
       <div className="fview-head">
-        <IconButton icon="chevron-up" label="Back to files" onClick={onBack} size={15} className="fview-back" />
-        <div className="fview-title" title={path}><b>{basename(path)}</b><span className="muted small">{dirname(rel) || '.'}{data?.size !== undefined ? ` · ${formatBytes(data.size)}` : ''}</span></div>
+        <div className="fview-top">
+          <IconButton icon="chevron-right" label="Back to files" onClick={onBack} size={15} className="fview-back" />
+          <div className="fview-title" title={path}><b>{basename(path)}</b><span className="muted small">{dirname(rel) || '.'}{data?.size !== undefined ? ` · ${formatBytes(data.size)}` : ''}</span></div>
+        </div>
         <div className="fview-actions">
           <button type="button" className="btn ghost sm" title="Insert @path into the message box" onClick={() => mentionInChat(cwd, path)}><Icon name="chat" size={13} /> Mention</button>
           {(kind === 'markdown' || kind === 'svg') && <button type="button" className="btn ghost sm" onClick={() => setRaw(!raw)}>{raw ? 'Preview' : 'Source'}</button>}

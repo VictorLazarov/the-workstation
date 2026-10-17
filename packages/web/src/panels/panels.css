@@ -19,13 +19,13 @@
 .changes-list { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .cfile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; transition: box-shadow 0.4s; }
 .cfile.flash { box-shadow: 0 0 0 2px var(--accent); }
-.cfile-head { display: flex; align-items: center; gap: 7px; padding: 7px 8px 7px 8px; cursor: pointer; min-height: 36px; }
-.cfile-head:hover { background: var(--hover); } .cfile-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.cfile-head { display: flex; align-items: center; padding-right: 6px; min-height: 36px; } .cfile-head:hover { background: var(--hover); }
+.cfile-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 7px; padding: 7px 4px 7px 8px; text-align: left; align-self: stretch; } .cfile-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
 .cfile-chev { flex: none; color: var(--muted); transition: transform 0.12s; } .cfile.open .cfile-chev { transform: rotate(90deg); }
 .cfile-name { min-width: 0; display: flex; align-items: baseline; gap: 6px; overflow: hidden; font-size: 13px; }
-.cfile-name b { font-weight: 600; white-space: nowrap; } .cfile-dir { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+.cfile-name b { font-weight: 600; white-space: nowrap; } .cfile-dir { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfile-spacer { flex: 1; }
-.cfile-actions { display: flex; opacity: 0; transition: opacity 0.12s; } .cfile-head:hover .cfile-actions, .cfile-head:focus-within .cfile-actions { opacity: 1; }
+.cfile-actions { display: flex; flex: none; opacity: 0; transition: opacity 0.12s; } .cfile-head:hover .cfile-actions, .cfile-head:focus-within .cfile-actions { opacity: 1; }
 .cfile-body { border-top: 1px solid var(--border); }
 .cdot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
 .cstatus { flex: none; width: 18px; height: 18px; border-radius: 4px; display: inline-grid; place-items: center; font: 700 10.5px var(--font-mono); }
@@ -36,8 +36,9 @@
 .cdiff-scroll { overflow-x: auto; max-height: 560px; overflow-y: auto; }
 .cdiff-table { min-width: 100%; width: max-content; }
 .cdiff-table.split { table-layout: fixed; width: 100%; min-width: 620px; }
-.cdiff-table.split .diff-no { width: 38px; }
-.cdiff-table.split .diff-code { overflow: hidden; width: calc(50% - 38px); padding: 0 8px; }
+.cdiff-table.split col.c-no { width: 40px; }
+.cdiff-table.split .diff-no { min-width: 0; }
+.cdiff-table.split .diff-code { overflow: hidden; padding: 0 8px; }
 .cdiff-table.split tr.split-row > td:nth-child(3) { border-left: 1px solid var(--border); }
 .cdiff-table .diff-code.diff-add { background: var(--diff-add); } .cdiff-table .diff-code.diff-del { background: var(--diff-del); }
 .cdiff-table .diff-no.diff-add { background: var(--diff-add-strong); opacity: 1; } .cdiff-table .diff-no.diff-del { background: var(--diff-del); }
@@ -64,12 +65,12 @@
 .frow-chev { width: 12px; flex: none; color: var(--muted); transition: transform 0.12s; } .frow-chev.open { transform: rotate(90deg); }
 .frow-ico { flex: none; color: var(--muted); } .frow-ico.dir { color: var(--accent); }
 .frow-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.frow-dir { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; min-width: 0; }
+.frow-dir { margin-left: auto; padding-left: 10px; color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .frow .cdot { margin-left: auto; }
 .fview { display: flex; flex-direction: column; min-height: 100%; }
 .fview-head { position: sticky; top: 0; z-index: 2; background: var(--bg); border-bottom: 1px solid var(--border); padding: 8px 10px; display: grid; gap: 6px; }
 .fview-title { display: grid; min-width: 0; } .fview-title b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; } .fview-title .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fview-back { position: absolute; right: 10px; top: 8px; transform: rotate(-90deg); }
+.fview-top { display: flex; align-items: center; gap: 4px; min-width: 0; } .fview-back { flex: none; transform: rotate(180deg); }
 .fview-actions { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
 .fview-body { flex: 1; min-width: 0; }
 .fcode { overflow-x: auto; background: var(--surface); } .fcode .diff-table { width: max-content; min-width: 100%; }
@@ -95,7 +96,7 @@
 .task-go { flex: none; color: var(--muted); margin-top: 3px; opacity: 0; } .task-row:hover .task-go { opacity: 1; }
 
 /* ── Context ── */
-.ctx { padding: 14px 12px 24px; display: grid; gap: 22px; }
+.ctxp { padding: 14px 12px 24px; display: grid; gap: 22px; }
 .ctx-sec > .panel-title { margin-bottom: 10px; } .ctx-sec .btn { margin-top: 12px; }
 .meter-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
 .meter-pct { font: 600 26px/1 var(--font-serif); letter-spacing: -0.01em; } .meter-pct.warm { color: var(--warn); } .meter-pct.hot { color: var(--danger); }
@@ -127,3 +128,7 @@
 .disc-body { padding: 0 2px 12px; display: grid; gap: 8px; }
 .ctx-chips { display: flex; flex-wrap: wrap; gap: 5px; } .ctx-chips .chip { font-size: 11.5px; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: 12.5px; } .kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Inspector tab strip: when narrow, only the active tab keeps its label (icon + badge for the rest) */
+.inspector { container-type: inline-size; }
+@container (max-width: 520px) { .itab:not(.on) { font-size: 0; gap: 4px; padding: 0 8px; } .itab:not(.on) .itab-badge { font-size: 10.5px; } }

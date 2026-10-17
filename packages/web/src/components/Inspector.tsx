@@ -8,7 +8,7 @@ import { IconButton } from './ui';
 function Tab({ p, active, sessionId }: { p: PanelDef; active: boolean; sessionId: string }) {
   const badge = p.useBadge?.(sessionId);
   return (
-    <button type="button" role="tab" aria-selected={active} className={`itab${active ? ' on' : ''}`} onClick={() => useUi.getState().set({ inspectorTab: p.id, inspectorFocus: undefined })}>
+    <button type="button" role="tab" aria-selected={active} title={p.title} className={`itab${active ? ' on' : ''}`} onClick={() => useUi.getState().set({ inspectorTab: p.id, inspectorFocus: undefined })}>
       <Icon name={p.icon} size={14} />{p.title}{badge !== undefined && badge !== 0 && <span className="itab-badge">{badge}</span>}
     </button>
   );

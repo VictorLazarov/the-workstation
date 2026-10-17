@@ -40,7 +40,7 @@ test.describe('mock scenarios render their cards', () => {
     const card = toolCard(page, 'write');
     await expect(card).toContainText('NOTES.md');
     await expandTool(card);
-    await expect(card).toContainText('File created successfully');
+    await expect(card).toContainText('Created by the mock agent.');
     await expect(page.locator('.msg-assistant').last()).toContainText('Created NOTES.md.');
     await expectIdle(page);
   });
@@ -104,12 +104,13 @@ test.describe('ask and plan review cards', () => {
     await page.getByRole('radio', { name: /^vitest/ }).click();
     await expect(page.getByRole('radio', { name: /^vitest/ })).toHaveAttribute('aria-checked', 'true');
     await expect(submit).toBeDisabled();
-    await page.getByRole('checkbox', { name: /^lint/ }).click();
-    await page.getByRole('checkbox', { name: /^types/ }).click();
+    await page.getByRole('radio', { name: /^vitest/ }).click();
     await expect(submit).toBeDisabled();
+    await page.getByRole('checkbox', { name: /^lint/ }).click();
+    await expect(submit).toBeEnabled();
+    await page.getByRole('checkbox', { name: /^types/ }).click();
     await page.getByRole('checkbox', { name: /^e2e/ }).click();
     await expect(page.getByRole('checkbox', { name: /^e2e/ })).toHaveAttribute('aria-checked', 'true');
-    await expect(submit).toBeEnabled();
     await submit.click();
     await expect(page.locator('.msg-assistant').last()).toContainText('Thanks! Your answers:');
     await expect(page.locator('.msg-assistant').last()).toContainText('vitest');

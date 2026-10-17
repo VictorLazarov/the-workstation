@@ -78,6 +78,12 @@ export class ConfigStore {
       else if (['default', 'acceptEdits', 'plan', 'bypassPermissions', 'auto', 'dontAsk'].includes(p.defaultPermissionMode as string)) next.defaultPermissionMode = p.defaultPermissionMode as AppConfig['defaultPermissionMode'];
       else throw new Error('invalid defaultPermissionMode');
     }
+    if ('permissionTimeoutSec' in p) {
+      const v = p.permissionTimeoutSec;
+      if (v == null || v === 0) delete next.permissionTimeoutSec;
+      else if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 7 * 86400) next.permissionTimeoutSec = Math.round(v);
+      else throw new Error('permissionTimeoutSec must be a positive number of seconds');
+    }
     if ('theme' in p) {
       if (p.theme == null) delete next.theme;
       else if (['system', 'light', 'dark'].includes(p.theme as string)) next.theme = p.theme as AppConfig['theme'];

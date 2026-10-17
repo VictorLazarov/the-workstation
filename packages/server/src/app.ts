@@ -152,11 +152,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (!uuidish(id)) throw new HttpError(400, 'invalid session id');
     const live = sessions.get(id);
     if (live) sessions.close(live, 'deleted');
+    // remove the worktree we created for this session (only if clean, unless ?force=1); kept worktrees are reported back
+    const worktree = sessions.worktrees.get(id) ? await sessions.removeSessionWorktree(id, c.req.query('force') === '1') : undefined;
     const cwdQ = c.req.query('cwd');
     await adapter.deleteSession(id, cwdQ ? { dir: await requireDir(cwdQ) } : undefined).catch((e) => {
-      if (!live) throw new HttpError(404, e instanceof Error ? e.message : 'session not found');
+      if (!live && !worktree?.removed) throw new HttpError(404, e instanceof Error ? e.message : 'session not found');
     });
-    return c.json({ ok: true });
+    return c.json({ ok: true, ...(worktree ? { worktree } : {}) });
   });
 
   app.get('/api/models', async (c) => c.json(await catalog.getModels()));

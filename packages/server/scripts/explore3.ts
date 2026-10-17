@@ -7,7 +7,7 @@ const mgr: any = r.mgr;
 await r.send({ type: 'prompt', sessionId: sid, text: 'We are in plan mode. Plan: create file hello.txt containing "hi". Call ExitPlanMode with a 2-line plan immediately, no exploration. After approval, create the file.', clientMsgId: 'c1' });
 const req: any = await r.sub.waitFor((m) => m.type === 'permission.request');
 console.log('REQ', req.toolName, JSON.stringify(req).slice(0, 700));
-const dec = variant === 'approve' ? { behavior: 'allow' } : variant === 'edits' ? { behavior: 'allow', remember: true } : { behavior: 'deny', message: 'Also add a second file bye.txt to the plan' };
+const dec = variant === 'approve' ? { behavior: 'allow' } : variant === 'edits' ? { behavior: 'allow', setMode: 'acceptEdits' } : { behavior: 'deny', message: 'Also add a second file bye.txt to the plan' };
 await r.send({ type: 'permission.respond', sessionId: sid, requestId: req.requestId, decision: dec as any });
 // wait for either result or another permission request
 const next = await r.sub.waitFor((m) => isResult(m) || (m.type === 'permission.request' && (m as any).requestId !== req.requestId), 90_000, 0);

@@ -3,7 +3,6 @@ import { allToolUses } from '../../lib/reducer';
 import { collapseContext, diffStats, type DiffLine } from '../../lib/diff';
 import { editLines } from '../../components/ToolCards';
 import { toolKind, toolPath } from '../../lib/tools';
-import { relPath } from '../../lib/utils';
 import type { GitFileStatus } from '@workstation/protocol';
 import type { GitFileDiff } from './gitdiff';
 
@@ -15,6 +14,16 @@ export function absPath(p: string, base: string): string {
   const out: string[] = [];
   for (const s of parts) { if (s === '..') out.pop(); else if (s && s !== '.') out.push(s); }
   return '/' + out.join('/');
+}
+
+/** Path relative to `cwd`, with `../` segments when the file lives outside it (e.g. repo root above cwd). */
+export function relFromCwd(abs: string, cwd: string): string {
+  const a = abs.split('/').filter(Boolean), c = cwd.split('/').filter(Boolean);
+  let i = 0;
+  while (i < a.length && i < c.length && a[i] === c[i]) i++;
+  if (i === 0 && (a.length || c.length)) return abs; // nothing in common (different drive / root)
+  const up = c.length - i;
+  return [...Array(up).fill('..'), ...a.slice(i)].join('/') || '.';
 }
 
 export interface SessionFile {
@@ -109,7 +118,7 @@ export function mergeChanges(cwd: string, git: GitSnapshot | null, session: Sess
       const s = sessionBy.get(path);
       seen.add(path);
       out.push({
-        path, rel: relPath(path, cwd), status,
+        path, rel: relFromCwd(path, cwd), status,
         added: d?.added ?? (status === 'untracked' ? s?.added : undefined), removed: d?.removed ?? (status === 'untracked' ? s?.removed : undefined),
         lines: d?.lines ?? (!d && s ? s.lines : undefined), binary: d?.binary, bySession: !!s, source: 'git', oldPath: d?.oldPath ? absPath(d.oldPath, root) : undefined,
       });
@@ -119,7 +128,7 @@ export function mergeChanges(cwd: string, git: GitSnapshot | null, session: Sess
   for (const s of session) {
     if (seen.has(s.path)) continue;
     if (git?.isRepo && inRoot(s.path)) continue; // in the repo and clean: already committed or reverted
-    out.push({ path: s.path, rel: relPath(s.path, cwd), status: s.isNew ? 'added' : 'modified', added: s.added, removed: s.removed, lines: s.lines, bySession: true, source: 'session' });
+    out.push({ path: s.path, rel: relFromCwd(s.path, cwd), status: s.isNew ? 'added' : 'modified', added: s.added, removed: s.removed, lines: s.lines, bySession: true, source: 'session' });
   }
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }

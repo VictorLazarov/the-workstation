@@ -3,7 +3,7 @@ import { composer, expect, expectIdle, newSessionInProject, openApp, sendPrompt,
 test.describe('projects and sessions', () => {
   test('project picker browses folders and opens a new session in the chosen one', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Open a project' });
     await expect(picker).toBeVisible();
     const folders = picker.getByRole('listbox', { name: 'Folders' });
@@ -20,7 +20,7 @@ test.describe('projects and sessions', () => {
 
   test('the picker can be cancelled without opening anything', async ({ page }) => {
     await openApp(page);
-    await page.getByRole('button', { name: 'Open project' }).click();
+    await page.getByRole('button', { name: 'Open project', exact: true }).click();
     const picker = page.getByRole('dialog', { name: 'Open a project' });
     await picker.getByRole('button', { name: 'Cancel' }).click();
     await expect(picker).toHaveCount(0);

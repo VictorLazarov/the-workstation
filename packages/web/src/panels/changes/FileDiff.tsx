@@ -60,6 +60,7 @@ export function FileDiff({ lines, path, mode }: { lines: DiffLine[]; path: strin
     };
     body = (
       <table className="diff-table cdiff-table split">
+        <colgroup><col className="c-no" /><col /><col className="c-no" /><col /></colgroup>
         <tbody>
           {rows.map((r, i) => r.kind === 'sep'
             ? <tr key={i} className="diff-sep"><td colSpan={4}>{hunkLabel(r.text) || '···'}</td></tr>

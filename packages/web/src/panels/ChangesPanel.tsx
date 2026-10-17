@@ -41,17 +41,18 @@ function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert }: {
   const hasBody = !!f.lines?.length || f.binary;
   return (
     <div ref={ref} className={`cfile${open ? ' open' : ''}${flash ? ' flash' : ''}`} data-path={f.path}>
-      <div className="cfile-head" role="button" tabIndex={0} aria-expanded={open} onClick={onToggle}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onToggle(); } }}>
-        <Icon name="chevron-right" size={13} className="cfile-chev" />
-        <span className={`cstatus cs-${f.status}`} title={TITLE[f.status]}>{LETTER[f.status]}</span>
-        <span className="cfile-name" title={f.path}>
-          <b>{basename(f.rel)}</b>{dir && <span className="cfile-dir">{dir}</span>}
-        </span>
-        {f.bySession && <span className="cdot" title="Edited in this session" />}
-        <span className="cfile-spacer" />
-        {f.added !== undefined && <span className="stats"><span className="add">+{f.added}</span><span className="del">−{f.removed ?? 0}</span></span>}
-        <span className="cfile-actions" onClick={(e) => e.stopPropagation()}>
+      <div className="cfile-head">
+        <button type="button" className="cfile-toggle" aria-expanded={open} onClick={onToggle}>
+          <Icon name="chevron-right" size={13} className="cfile-chev" />
+          <span className={`cstatus cs-${f.status}`} title={TITLE[f.status]}>{LETTER[f.status]}</span>
+          <span className="cfile-name" title={f.path}>
+            <b>{basename(f.rel)}</b>{dir && <span className="cfile-dir">{dir}</span>}
+          </span>
+          {f.bySession && <span className="cdot" title="Edited in this session" />}
+          <span className="cfile-spacer" />
+          {f.added !== undefined && <span className="stats"><span className="add">+{f.added}</span><span className="del">−{f.removed ?? 0}</span></span>}
+        </button>
+        <span className="cfile-actions">
           {canRevert && <IconButton icon="undo" label={f.status === 'untracked' || f.status === 'added' ? 'Delete file…' : 'Discard changes…'} size={14} onClick={onRevert} />}
         </span>
       </div>

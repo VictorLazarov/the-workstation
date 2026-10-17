@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyConversation } from '../../lib/reducer';
 import type { Conversation } from '../../lib/types';
-import { absPath, matchesFocus, mergeChanges, porcelainStatus, sessionFiles } from './derive';
+import { absPath, matchesFocus, relFromCwd, mergeChanges, porcelainStatus, sessionFiles } from './derive';
 import { hunkLabel, parseGitDiff, toSplitRows } from './gitdiff';
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
@@ -114,6 +114,8 @@ describe('mergeChanges', () => {
     expect(porcelainStatus({ path: 'a', index: 'A', worktree: ' ' })).toBe('added');
     expect(porcelainStatus({ path: 'a', index: ' ', worktree: 'D' })).toBe('deleted');
     expect(absPath('src/../a.ts', '/p/')).toBe('/p/a.ts');
+    expect(relFromCwd('/r/web/src/a.ts', '/r/web')).toBe('src/a.ts');
+    expect(relFromCwd('/r/e2e/x.ts', '/r/web')).toBe('../e2e/x.ts');
     expect(matchesFocus({ path: '/p/a.ts' } as never, 'a.ts', '/p')).toBe(true);
   });
 });
