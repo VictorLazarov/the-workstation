@@ -71,12 +71,14 @@ test.describe('B2: toasts never cover the composer, inspector tabs or commit box
         if (width > 1100) await expect(page.locator('.ccommit')).toBeVisible();
         if (sidebar === 'hidden') { await closeDrawers(page); if (await page.getByRole('complementary', { name: 'Sessions' }).isVisible()) await page.keyboard.press('Control+b'); }
         if (width > 1100) await expect(page.getByRole('complementary', { name: 'Sessions' })).toHaveCount(sidebar === 'shown' ? 1 : 0);
+        while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
         for (let i = 0; i < 3; i++) {
           await page.keyboard.press('Control+,');
           await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
           await expect(page.getByRole('dialog')).toHaveCount(0);
         }
-        const toasts = page.locator('.toast');
+        // other sessions on the shared mock server may raise their own toasts: ours are the "Settings saved" ones
+        const toasts = page.locator('.toast').filter({ hasText: 'Settings saved' });
         await expect(toasts).toHaveCount(3);
         const protectedBoxes: [string, Locator][] = [['composer', page.locator('.composer')], ['inspector tabs', page.locator('.itabs')], ['commit box', page.locator('.ccommit')]];
         for (let i = 0; i < 3; i++) {

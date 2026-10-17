@@ -258,6 +258,14 @@ function lintInPage(opts: { brand: string }) {
 export interface LintIssue { rule: string; severity: 'error' | 'warn'; sel: string; msg: string }
 
 export async function lintPage(page: Page, opts: { brand?: 'horizon' | 'warm' } = {}): Promise<LintIssue[]> {
+  // let finite animations (dialog pop / fade) finish: contrast is measured on the settled state, not mid-fade
+  await page.evaluate(async () => {
+    for (let i = 0; i < 4; i++) { // new toasts / dialogs can start while we wait: repeat until nothing finite is running
+      const done = document.getAnimations().filter((a) => a.effect?.getComputedTiming().iterations !== Infinity);
+      if (!done.length) return;
+      await Promise.all(done.map((a) => a.finished.catch(() => undefined)));
+    }
+  });
   return page.evaluate(lintInPage, { brand: opts.brand ?? 'horizon' });
 }
 

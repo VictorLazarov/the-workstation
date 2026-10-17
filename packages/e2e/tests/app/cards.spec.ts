@@ -12,7 +12,7 @@ test.describe('mock scenarios render their cards', () => {
     await sendPrompt(page, 'please run bash');
     const card = toolCard(page, 'bash');
     await expect(card).toContainText('Run the test suite');
-    await expect(permission(page)).toContainText('Claude wants to run: npm test -- --reporter=dot');
+    await expect(permission(page)).toContainText('Claude wants to run this command');
     await permission(page).getByRole('button', { name: 'Allow once' }).click();
     await expect(permission(page)).toHaveCount(0);
     await expandTool(card);

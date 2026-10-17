@@ -28,7 +28,8 @@ const Code = ({ html, text }: { html?: string; text: string }) => (html != null 
 function SplitDiff({ rows, hl, idx }: { rows: SplitRow[]; hl: string[] | null; idx: Map<DiffLine, number> }) {
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
-  const sync = (from: HTMLDivElement | null, to: HTMLDivElement | null) => () => {
+  const sync = (src: React.RefObject<HTMLDivElement>, dst: React.RefObject<HTMLDivElement>) => () => {
+    const from = src.current, to = dst.current; // resolved when the scroll happens (refs are empty at first render)
     if (!from || !to) return;
     if (to.scrollTop !== from.scrollTop) to.scrollTop = from.scrollTop;
     if (to.scrollLeft !== from.scrollLeft) to.scrollLeft = from.scrollLeft;
@@ -53,8 +54,8 @@ function SplitDiff({ rows, hl, idx }: { rows: SplitRow[]; hl: string[] | null; i
   );
   return (
     <div className="split-panes">
-      <div className="split-pane old" ref={left} onScroll={sync(left.current, right.current)} aria-label="Before" role="region" tabIndex={-1}>{table('l')}</div>
-      <div className="split-pane new" ref={right} onScroll={sync(right.current, left.current)} aria-label="After" role="region" tabIndex={0}>{table('r')}</div>
+      <div className="split-pane old" ref={left} onScroll={sync(left, right)} aria-label="Before" role="region" tabIndex={-1}>{table('l')}</div>
+      <div className="split-pane new" ref={right} onScroll={sync(right, left)} aria-label="After" role="region" tabIndex={0}>{table('r')}</div>
     </div>
   );
 }

@@ -48,7 +48,7 @@ export function langFromPath(path: string): string | null {
  * The same maps nudge the few stock colours that are under AA (4.5:1) on code, diff-added and diff-removed backgrounds.
  */
 const LIGHT_SWAPS: Record<string, string> = { '#d73a49': '#bd3340', '#6a737d': '#626a73', '#22863a': '#1e7633', '#1b7c83': '#197279', '#e36209': '#17707a', '#b08800': '#6f42c1', '#dbab09': '#6f42c1', '#ffdf5d': '#dbedff', '#ffd33d': '#dbedff', '#f9c513': '#dbedff', '#ffebda': '#ebf8ff' };
-const DARK_SWAPS: Record<string, string> = { '#f47067': '#f57b73', '#768390': '#97a1ab', '#909dab': '#94a1ae', '#539bf5': '#61a3f6', '#57ab5a': '#64b267', '#b083f0': '#b68df1', '#ec775c': '#ee8269', '#e5534b': '#ec807a', '#e0823d': '#56d4dd', '#f69d50': '#76e3ea', '#cc6b2c': '#39c5cf', '#682d0f': '#0d3b40', '#c69026': '#96d0ff', '#ae7c14': '#6cb6ff', '#eac55f': '#96d0ff', '#daaa3f': '#96d0ff', '#966600': '#316dca' };
+const DARK_SWAPS: Record<string, string> = { '#f47067': '#f68881', '#768390': '#9fa9b2', '#909dab': '#9da9b4', '#539bf5': '#6eaaf7', '#57ab5a': '#70b873', '#b083f0': '#bc96f2', '#ec775c': '#f08f78', '#e5534b': '#ee8d87', '#e0823d': '#56d4dd', '#f69d50': '#76e3ea', '#cc6b2c': '#39c5cf', '#682d0f': '#0d3b40', '#c69026': '#96d0ff', '#ae7c14': '#6cb6ff', '#eac55f': '#96d0ff', '#daaa3f': '#96d0ff', '#966600': '#316dca' };
 function noOrange<T extends object>(theme: T, swaps: Record<string, string>): T {
   return JSON.parse(JSON.stringify(theme).replace(/#[0-9a-fA-F]{6}\b/g, (c) => swaps[c.toLowerCase()] ?? c));
 }

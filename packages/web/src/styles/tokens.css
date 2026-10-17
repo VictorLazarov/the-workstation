@@ -143,7 +143,7 @@
   --ai-border: rgba(193, 95, 60, 0.3);
   --ai-grad: linear-gradient(90deg, #c15f3c, #c15f3c);
   --ai-grad-soft: linear-gradient(90deg, rgba(193, 95, 60, 0.1), rgba(193, 95, 60, 0.1));
-  --ok: #2d7a4a;
+  --ok: #276d41;
   --ok-soft: rgba(61, 139, 90, 0.12);
   --warn: #7a6400;
   --warn-soft: rgba(200, 160, 0, 0.14);
@@ -302,7 +302,7 @@
   --danger-fill: #c43d2b;
     --info: #86aff0;
     --diff-add: rgba(92, 185, 127, 0.16);
-    --diff-add-strong: rgba(92, 185, 127, 0.34);
+    --diff-add-strong: rgba(92, 185, 127, 0.13);
     --diff-del: rgba(234, 106, 88, 0.16);
     --code-bg: #242321;
     --user-bubble: #2d2b28;
@@ -350,7 +350,7 @@
   --danger-fill: #c43d2b;
   --info: #86aff0;
   --diff-add: rgba(92, 185, 127, 0.16);
-  --diff-add-strong: rgba(92, 185, 127, 0.34);
+  --diff-add-strong: rgba(92, 185, 127, 0.13);
   --diff-del: rgba(234, 106, 88, 0.16);
   --code-bg: #242321;
   --user-bubble: #2d2b28;

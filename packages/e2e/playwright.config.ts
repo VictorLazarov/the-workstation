@@ -81,7 +81,9 @@ const serverCmd = (url: string) => `node ${path.join(repoRoot, 'packages/server/
 export default defineConfig({
   testDir: './tests',
   fullyParallel: false,
-  workers: 2,
+  // One worker: the app project's tests share ONE mock server, and every page auto-attaches to all live sessions on it,
+  // so parallel tests saw each other's sessions, toasts and 'needs input' rows (the source of run-to-run flakiness).
+  workers: 1,
   retries: 0,
   timeout: 45_000,
   expect: { timeout: 10_000 },
