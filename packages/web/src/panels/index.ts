@@ -11,3 +11,4 @@ import './PlanPanel';
 // import './FilesPanel';
 // import './TasksPanel';
 // import './ContextPanel';
+import './terminal/TerminalPanel';

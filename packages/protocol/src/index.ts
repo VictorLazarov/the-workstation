@@ -76,7 +76,10 @@ export interface AppConfig {
 }
 export interface FsEntry { name: string; path: string; kind: 'file' | 'dir' | 'symlink'; size?: number }
 export interface GitFileStatus { path: string; index: string; worktree: string }
-export interface GitStatus { branch?: string; ahead?: number; behind?: number; files: GitFileStatus[]; isRepo: boolean }
+/** `files[].path` is relative to the repository `root` (git porcelain semantics), not to the requested cwd. */
+export interface GitStatus { branch?: string; ahead?: number; behind?: number; files: GitFileStatus[]; isRepo: boolean; root?: string }
+export interface GitCommitResult { ok: true; commit: string; summary: string }
+export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
 
 /**
  * REST endpoints (all JSON, `Authorization: Bearer <token>`):
@@ -91,6 +94,8 @@ export interface GitStatus { branch?: string; ahead?: number; behind?: number; f
  *  GET  /api/files/search?cwd=&q= -> string[]      (@mention fuzzy search)
  *  GET  /api/git/status?cwd=   -> GitStatus
  *  GET  /api/git/diff?cwd=&path= -> { diff: string }
+ *  POST /api/git/commit {cwd, message}  -> GitCommitResult   (git add -A && git commit; hooks disabled)
+ *  POST /api/git/revert {cwd, path}     -> GitRevertResult   (restore tracked file to HEAD / delete untracked)
  *  GET  /api/commands?cwd=     -> SlashCommandInfo[]
  *  WS   /ws
  */

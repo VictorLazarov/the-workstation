@@ -107,7 +107,7 @@ function BashCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
   );
 }
 
-function editLines(b: ToolUseBlock, result?: ToolResult): { lines: DiffLine[]; isNew: boolean } {
+export function editLines(b: ToolUseBlock, result?: ToolResult): { lines: DiffLine[]; isNew: boolean } {
   const i = b.input;
   if (b.name === 'Write') {
     const lines = diffLines('', str(i.content));

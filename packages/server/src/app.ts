@@ -11,7 +11,7 @@ import { DEFAULT_PORT, type ClientMessage, type ServerMessage, type SessionSumma
 import { Catalog } from './catalog.js';
 import { ConfigStore } from './config.js';
 import { HttpError, listDir, readFile, requireDir, resolveUserPath, searchFiles } from './files.js';
-import { gitDiff, gitStatus } from './git.js';
+import { GitError, gitCommit, gitDiff, gitRevert, gitStatus } from './git.js';
 import { createAdapter, type SdkAdapter } from './sdk.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, securityOptionsFromEnv, tokenMatches, type SecurityOptions } from './security.js';
 import { createTerminalService } from './terminal.js';
@@ -87,7 +87,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   });
 
   app.onError((err, c) => {
-    if (err instanceof HttpError) return c.json({ error: err.message }, err.status as 400);
+    if (err instanceof HttpError || err instanceof GitError) return c.json({ error: err.message }, err.status as 400);
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return c.json({ error: 'not found' }, 404);
     if (code === 'EACCES') return c.json({ error: 'permission denied' }, 403);
@@ -176,6 +176,14 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (p !== undefined && (p.includes('\0') || p.length > 4096)) throw new HttpError(400, 'invalid path');
     return c.json({ diff: await gitDiff(await cwdParam(c), p) });
   });
+
+  const jsonBody = async (c: { req: { json(): Promise<unknown> } }): Promise<Record<string, unknown>> => {
+    const b = await c.req.json().catch(() => null);
+    if (!b || typeof b !== 'object' || Array.isArray(b)) throw new HttpError(400, 'JSON object body required');
+    return b as Record<string, unknown>;
+  };
+  app.post('/api/git/commit', async (c) => { const b = await jsonBody(c); return c.json(await gitCommit(await requireDir(b.cwd), b.message)); });
+  app.post('/api/git/revert', async (c) => { const b = await jsonBody(c); return c.json(await gitRevert(await requireDir(b.cwd), b.path)); });
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
   app.get('/ws', (c) => c.text('WebSocket endpoint', 426));
