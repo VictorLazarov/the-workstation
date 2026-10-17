@@ -3,10 +3,9 @@
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
     "ghcr.io/devcontainers/features/node:1": { "version": "22" },
-    "ghcr.io/OWNER/the-workstation/workstation:1": {
+    "ghcr.io/VictorLazarov/the-workstation/workstation:1": {
       "port": "7777",
-      "autostart": true,
-      "installClaudeCode": true
+      "autostart": true
     }
   },
   "forwardPorts": [7777],

@@ -162,15 +162,18 @@ export function getSpawner(): Promise<Spawner | { error: string }> {
   return spawnerPromise;
 }
 
-const SECRET_NAME = /(TOKEN|SECRET|PASSWORD|PASSWD|API_?KEY|PRIVATE_?KEY|CREDENTIAL)/i;
-
-/** Remove the server's own token/secret env vars (and anything holding the token's value) from the shell env. */
+/**
+ * Shell env for the integrated terminal. The terminal IS the user's own shell (same user as the server), so the user's
+ * dev credentials (GH_TOKEN, SSH_AUTH_SOCK, AWS_PROFILE, …) are kept: `gh`, `git push` etc. must work. Only the server's
+ * own variables are removed: WORKSTATION_*, ANTHROPIC_* / CLAUDE_CODE_* (the agent's provider config, not the shell's)
+ * and anything holding the server token's value. This is NOT a sandbox: the shell can read the server's config file
+ * (token, API keys) like any other file of the same user (docs/ARCHITECTURE.md "Terminal").
+ */
 export function sanitizeEnv(env: NodeJS.ProcessEnv, token?: string): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) continue;
-    if (k.startsWith('WORKSTATION_') || k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_')) continue;
-    if (SECRET_NAME.test(k)) continue;
+    if (k.startsWith('WORKSTATION_') || k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_') || k === 'CLAUDECODE') continue;
     if (token && v.includes(token)) continue;
     out[k] = v;
   }

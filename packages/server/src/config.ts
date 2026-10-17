@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig } from '@workstation/protocol';
+import { buildCliEnv, hasCustomEndpoint, prepareCliHome } from './cli-env.js';
 
 export const MASK = '********';
 const SECRET_KEY_RE = /key|token|secret|password|passwd|credential|auth/i;
@@ -25,6 +26,9 @@ export class ConfigStore {
   constructor(dir = configDir()) {
     this.file = path.join(dir, 'config.json');
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    // mkdir's mode only applies on create: tighten a pre-existing dir/file too (MINOR 6)
+    try { fs.chmodSync(dir, 0o700); } catch { /* not ours / read-only: best effort */ }
+    try { if (fs.existsSync(this.file)) fs.chmodSync(this.file, 0o600); } catch { /* best effort */ }
     this.data = this.load();
   }
 
@@ -130,6 +134,16 @@ export class ConfigStore {
       out.env = Object.fromEntries(Object.entries(env).map(([k, v]) => [k, SECRET_KEY_RE.test(k) && v ? MASK : v]));
     }
     return out;
+  }
+
+  /**
+   * Full environment for a Claude Code process. With a custom endpoint configured this prepares the isolated
+   * CLAUDE_CONFIG_DIR (<config dir>/cli-home) and returns an env without any inherited credential (cli-env.ts).
+   */
+  cliEnv(base: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
+    const provider = this.providerEnv();
+    if (!hasCustomEndpoint(provider)) return buildCliEnv(provider, base);
+    return buildCliEnv(provider, base, prepareCliHome(path.join(path.dirname(this.file), 'cli-home')));
   }
 
   /** Env vars to hand to the Claude Code process. */

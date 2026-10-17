@@ -52,7 +52,8 @@ export const api = {
   searchFiles: (cwd: string, q: string) => request<string[]>('GET', '/api/files/search', { cwd, q }),
   gitStatus: (cwd: string) => request<GitStatus>('GET', '/api/git/status', { cwd }),
   gitDiff: (cwd: string, path?: string) => request<{ diff: string }>('GET', '/api/git/diff', { cwd, path }),
-  gitCommit: (cwd: string, message: string) => request<GitCommitResult>('POST', '/api/git/commit', undefined, { cwd, message }),
+  /** Commits exactly `files` (the changed paths shown in the Changes panel); repository hooks run. */
+  gitCommit: (cwd: string, message: string, files: string[]) => request<GitCommitResult>('POST', '/api/git/commit', undefined, { cwd, message, files }),
   gitRevert: (cwd: string, path: string) => request<GitRevertResult>('POST', '/api/git/revert', undefined, { cwd, path }),
   commands: (cwd?: string) => request<SlashCommandInfo[]>('GET', '/api/commands', { cwd }),
 };

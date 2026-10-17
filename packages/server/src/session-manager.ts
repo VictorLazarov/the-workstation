@@ -9,7 +9,7 @@ import { HttpError, requireDir } from './files.js';
 import { createWorktree, gitRoot } from './git.js';
 import { headSha, removeWorktree, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
 import { normalizeContextUsage } from './context-usage.js';
-import { buildCliEnv, type QueryHandle, type SdkAdapter } from './sdk.js';
+import type { QueryHandle, SdkAdapter } from './sdk.js';
 
 export interface Subscriber {
   id: string;
@@ -235,11 +235,33 @@ export class SessionManager {
   async start(sub: Subscriber, msg: Extract<ClientMessage, { type: 'session.start' }>): Promise<LiveSession> {
     if (typeof msg.cwd !== 'string') throw new Error('cwd required');
     if (msg.resume !== undefined && (typeof msg.resume !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(msg.resume))) throw new Error('invalid resume id');
-    // resuming something that is already live just attaches
-    if (msg.resume && !msg.fork && this.sessions.has(msg.resume)) {
-      this.attach(sub, msg.reqId, msg.resume);
-      return this.sessions.get(msg.resume)!;
+    const resumeId = msg.resume && !msg.fork ? msg.resume : undefined;
+    // A start of the same id is in flight (two tabs, reconnect + click): wait for it, then attach (M3).
+    const inflight = resumeId ? this.starting.get(resumeId) : undefined;
+    if (inflight) {
+      const s = await inflight;
+      this.attach(sub, msg.reqId, s.id);
+      return s;
     }
+    // resuming something that is already live just attaches
+    if (resumeId && this.sessions.has(resumeId)) {
+      this.attach(sub, msg.reqId, resumeId);
+      return this.sessions.get(resumeId)!;
+    }
+    const max = Math.max(1, Number(process.env.WORKSTATION_MAX_SESSIONS) || 20);
+    if (new Set([...this.sessions.keys(), ...this.starting.keys()]).size >= max) throw new Error(`too many live sessions (max ${max}); close one first or raise WORKSTATION_MAX_SESSIONS`);
+    // Registered synchronously, before the first await, so a concurrent start of the same id finds it
+    // (new sessions are registered under a private key so they count against the cap while starting).
+    const key = resumeId ?? `\0new:${randomUUID()}`;
+    const p = this.startNow(sub, msg);
+    this.starting.set(key, p);
+    try { return await p; } finally { this.starting.delete(key); }
+  }
+
+  /** In-flight starts keyed by session id (resume), so concurrent starts yield one live process. */
+  private starting = new Map<string, Promise<LiveSession>>();
+
+  private async startNow(sub: Subscriber, msg: Extract<ClientMessage, { type: 'session.start' }>): Promise<LiveSession> {
     let cwd: string;
     try { cwd = await requireDir(msg.cwd); } catch (e) { throw new Error(e instanceof HttpError ? `cwd: ${e.message}` : String(e)); }
 
@@ -250,7 +272,7 @@ export class SessionManager {
       const root = await gitRoot(cwd);
       const baseSha = await headSha(cwd);
       worktree = await createWorktree(cwd, id.slice(0, 8));
-      if (root && baseSha) {
+      if (root && baseSha && !this.worktrees.get(id)) { // a resumed worktree session keeps its original record
         const name = id.slice(0, 8).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'session';
         this.worktrees.add({ sessionId: id, root, dir: path.join(root, '.claude', 'worktrees', name), branch: worktree.branch, baseSha, createdAt: Date.now() });
       }
@@ -278,7 +300,7 @@ export class SessionManager {
       permissionMode,
       allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, o) => this.canUseTool(s, toolName, input, o),
-      env: buildCliEnv({ CLAUDE_AGENT_SDK_CLIENT_APP: 'the-workstation/0.1.0', ...this.config.providerEnv() }),
+      env: this.config.cliEnv(), // credential isolation for custom endpoints (cli-env.ts)
       stderr: (d) => { if (process.env.WORKSTATION_DEBUG) process.stderr.write(`[claude ${id.slice(0, 8)}] ${d}`); },
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
@@ -293,12 +315,15 @@ export class SessionManager {
 
     // Collect commands/models for the init payload (real init only arrives with the first prompt).
     let boot: { commands?: unknown; models?: unknown; [k: string]: unknown } = {};
+    let initTimer: NodeJS.Timeout | undefined;
     try {
       boot = await Promise.race([
         s.query.initializationResult(),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('init timeout')), 20_000)),
+        new Promise<never>((_, rej) => { initTimer = setTimeout(() => rej(new Error('init timeout')), 20_000); }),
       ]);
+      clearTimeout(initTimer);
     } catch (e) {
+      clearTimeout(initTimer);
       // A session that cannot initialize (bad resume id, bad cwd, CLI missing, ...) is useless: tear it down and report.
       const why = e instanceof Error ? e.message : String(e);
       this.close(s, `failed to start: ${why}`, true);

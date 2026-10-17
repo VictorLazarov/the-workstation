@@ -49,20 +49,5 @@ export function createAdapter(mock = process.env.WORKSTATION_MOCK === '1'): SdkA
 
 export type { Query };
 
-/** Inherited credential variables that must never reach a user-configured (third-party) provider. */
-const INHERITED_CREDENTIAL_VARS = [
-  'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
-  'CLAUDE_CODE_SESSION_ACCESS_TOKEN', 'CLAUDE_SESSION_INGRESS_TOKEN_FILE', 'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST', 'CLAUDE_CODE_REMOTE', 'CLAUDE_CODE_USE_CCR_V2',
-];
-
-/**
- * Environment for the Claude Code process. When the user configured a provider (base URL / key / token) in
- * AppConfig, credentials inherited from the server's own environment are removed so they are neither used in
- * preference to the configured ones nor sent to a third-party endpoint; explicit AppConfig values always win.
- */
-export function buildCliEnv(providerEnv: Record<string, string>, base: NodeJS.ProcessEnv = process.env): Record<string, string | undefined> {
-  const env: Record<string, string | undefined> = { ...base };
-  const custom = ['ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN'].some((k) => providerEnv[k]);
-  if (custom) for (const k of INHERITED_CREDENTIAL_VARS) delete env[k];
-  return { ...env, ...providerEnv };
-}
+/** Environment for the Claude Code process: see cli-env.ts (credential isolation when a custom endpoint is configured). */
+export { buildCliEnv } from './cli-env.js';

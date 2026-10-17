@@ -62,15 +62,21 @@ export function isHostAllowed(hostHeader: string | undefined | null, o: Security
   return false;
 }
 
-/** Absent Origin (non-browser client) is allowed; browsers must present an allowed one. */
+/**
+ * Absent Origin (non-browser client) is allowed; browsers must present an allowed one: either exactly the origin the
+ * request was addressed to (Origin host:port == validated Host header, i.e. same-origin, which also covers the Vite dev
+ * proxy and Docker port mappings), or one listed in WORKSTATION_ALLOWED_ORIGINS. Another port on localhost (any local
+ * dev server, including one the agent started) is a different origin and is refused.
+ */
 export function isOriginAllowed(origin: string | undefined | null, hostHeader: string | undefined | null, o: SecurityOptions): boolean {
   if (origin === undefined || origin === null || origin === '') return true;
   if (origin === 'null') return false;
-  if ((o.allowedOrigins ?? []).includes(origin)) return true;
+  if ((o.allowedOrigins ?? []).map((x) => x.replace(/\/+$/, '').toLowerCase()).includes(origin.toLowerCase())) return true;
   let u: URL;
   try { u = new URL(origin); } catch { return false; }
   if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
-  if (explicitHostnames(o).has(u.hostname.toLowerCase())) return true;
-  // same-origin on a (validated) IP-literal host
-  return !!hostHeader && u.host.toLowerCase() === hostHeader.toLowerCase() && isHostAllowed(hostHeader, o);
+  if (!hostHeader || !isHostAllowed(hostHeader, o)) return false;
+  let h: URL;
+  try { h = new URL(`${u.protocol}//${hostHeader}`); } catch { return false; }
+  return u.hostname.toLowerCase() === h.hostname.toLowerCase() && u.port === h.port;
 }

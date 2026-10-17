@@ -110,7 +110,10 @@ export function Composer({ session }: { session: SessionData }) {
 
   /* ───── images ───── */
   const addFiles = async (files: FileList | File[]) => {
-    const list = [...files].filter((f) => f.type.startsWith('image/'));
+    // 5 MB per image is the API limit; the server's WebSocket frame cap is 16 MB (base64 grows 4/3).
+    const all = [...files].filter((f) => f.type.startsWith('image/'));
+    const list = all.filter((f) => f.size <= 5 * 1024 * 1024);
+    if (list.length < all.length) useUi.getState().toast({ kind: 'error', title: 'Image too large', body: 'Images can be up to 5 MB each.' });
     const added = await Promise.all(list.map(async (f) => ({ mediaType: f.type, dataBase64: await fileToBase64(f), name: f.name, url: URL.createObjectURL(f) })));
     setImages((x) => [...x, ...added].slice(0, 8));
   };
@@ -118,6 +121,10 @@ export function Composer({ session }: { session: SessionData }) {
   const submit = () => {
     const t = text.trim();
     if (!t && !images.length) return;
+    if (images.reduce((n, im) => n + im.dataBase64.length, 0) > 14 * 1024 * 1024) {
+      useUi.getState().toast({ kind: 'error', title: 'Attachments too large', body: 'Send at most about 10 MB of images per message.' });
+      return;
+    }
     send(id, t, images.map(({ url: _u, ...rest }) => rest));
     setText(''); ls.del(draftKey(id)); setImages([]); setPopup(null);
   };

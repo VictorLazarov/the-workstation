@@ -22,7 +22,9 @@ describe('git commit / revert', () => {
   it('requires a non-empty message and something to commit', async () => {
     expect((await post('/api/git/commit', { cwd: s.cwd, message: '   ' })).status).toBe(400);
     expect((await post('/api/git/commit', { cwd: s.cwd })).status).toBe(400);
-    expect((await post('/api/git/commit', { cwd: s.cwd, message: 'x' })).status).toBe(409);
+    // M1: an explicit file list is required, and every file must be a changed one
+    expect((await post('/api/git/commit', { cwd: s.cwd, message: 'x' })).status).toBe(400);
+    expect((await post('/api/git/commit', { cwd: s.cwd, message: 'x', files: ['src/example.ts'] })).status).toBe(400);
   });
   it('reverts tracked, deletes untracked, refuses escapes', async () => {
     const f = path.join(s.cwd, 'src/example.ts');
@@ -37,10 +39,10 @@ describe('git commit / revert', () => {
     expect((await post('/api/git/revert', { cwd: s.cwd, path: '.git/config' })).status).toBe(400);
     expect((await post('/api/git/revert', { cwd: s.cwd, path: 'src/example.ts' })).status).toBe(409);
   });
-  it('commits everything', async () => {
+  it('commits all listed files', async () => {
     fs.writeFileSync(path.join(s.cwd, 'a.txt'), 'a\n');
     fs.writeFileSync(path.join(s.cwd, 'src/example.ts'), 'export const x = 1;\n');
-    const r = await post('/api/git/commit', { cwd: s.cwd, message: '-m weird\n\nbody' });
+    const r = await post('/api/git/commit', { cwd: s.cwd, message: '-m weird\n\nbody', files: ['a.txt', path.join(s.cwd, 'src/example.ts')] });
     expect(r.status).toBe(200);
     expect(r.body.commit).toMatch(/^[0-9a-f]{7,}$/);
     expect(run('log', '-1', '--format=%s')).toBe('-m weird\n');

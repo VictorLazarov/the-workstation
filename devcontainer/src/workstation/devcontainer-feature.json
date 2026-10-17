@@ -1,9 +1,9 @@
 {
   "id": "workstation",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "name": "The Workstation (browser UI for Claude Code)",
   "description": "Installs The Workstation web UI for Claude Code, optionally the Claude Code CLI, and autostarts the server on container start.",
-  "documentationURL": "https://github.com/OWNER/the-workstation/blob/main/docs/DEVCONTAINER.md",
+  "documentationURL": "https://github.com/VictorLazarov/the-workstation/blob/main/docs/DEVCONTAINER.md",
   "options": {
     "source": {
       "type": "string",
@@ -18,13 +18,13 @@
     },
     "version": {
       "type": "string",
-      "default": "main",
-      "description": "Git ref (branch/tag/sha) for source=git, or npm version/dist-tag for source=npm ('latest' is used if you pass 'main' with npm). Ignored for tarball/local."
+      "default": "v0.1.0",
+      "description": "Git ref for source=git: a release tag (default) or, most reproducible, a full 40-char commit SHA (verified after checkout). Branches like 'main' float and are not recommended. npm version for source=npm (a leading 'v' is stripped). Ignored for tarball/local."
     },
     "sourceUrl": {
       "type": "string",
       "default": "",
-      "description": "git: repo URL (default https://github.com/OWNER/the-workstation.git). npm: package name (default 'workstation'). tarball: tarball URL (required)."
+      "description": "git: repo URL (default https://github.com/VictorLazarov/the-workstation.git). npm: package name (default 'workstation'). tarball: tarball URL (required)."
     },
     "localPath": {
       "type": "string",
@@ -38,23 +38,33 @@
     },
     "host": {
       "type": "string",
-      "default": "0.0.0.0",
-      "description": "Bind address. 0.0.0.0 is needed so the forwarded port reaches the server; access is still token-gated."
+      "default": "127.0.0.1",
+      "description": "Bind address. 127.0.0.1 (default) works with VS Code / Codespaces port forwarding, which connects via localhost inside the container. Use 0.0.0.0 only when publishing the port with 'docker run -p' / appPort; the server is then reachable from the network (token-gated)."
     },
     "autostart": {
       "type": "boolean",
       "default": true,
-      "description": "Start the server in the background on every container start and print the tokenized URL."
+      "description": "Start the server in the background on every container start. The sign-in URL (with token) is written to $WORKSTATION_HOME/url (0600); run 'workstation-url' to print it."
+    },
+    "printUrl": {
+      "type": "boolean",
+      "default": false,
+      "description": "Also print the tokenized URL in the postStartCommand output. Off by default because those logs are often shared; 'workstation-url' prints it on demand."
     },
     "installClaudeCode": {
       "type": "boolean",
-      "default": true,
-      "description": "Also install the Claude Code CLI (@anthropic-ai/claude-code) globally. The Agent SDK ships its own runtime; this is for terminal use and 'claude login'."
+      "default": false,
+      "description": "Also install the Claude Code CLI globally (pinned to claudeCodeVersion) for terminal use and 'claude login'. Off by default: the Agent SDK bundles its own runtime."
+    },
+    "claudeCodeVersion": {
+      "type": "string",
+      "default": "2.1.302",
+      "description": "Exact @anthropic-ai/claude-code version installed when installClaudeCode is true (default: the version bundled by the Agent SDK this release uses). Ranges and dist-tags are rejected."
     },
     "nodeVersion": {
       "type": "string",
       "default": "22",
-      "description": "Node.js major version to install if Node >= 20 is not already present."
+      "description": "Node.js major version installed (official nodejs.org tarball, SHA256-verified) if Node >= 20 is not already present. Prefer adding ghcr.io/devcontainers/features/node."
     }
   },
   "containerEnv": {

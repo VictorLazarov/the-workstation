@@ -79,9 +79,9 @@ describe('/ws/terminal', () => {
 });
 
 describe('sanitizeEnv', () => {
-  it('drops secrets and token values', () => {
-    const e = sanitizeEnv({ PATH: '/bin', WORKSTATION_TOKEN: 'x', GITHUB_TOKEN: 'y', FOO: 'has-TOK-inside', ANTHROPIC_API_KEY: 'k' }, 'TOK');
+  it('drops the server\'s own vars and token values, keeps the user\'s dev credentials', () => {
+    const e = sanitizeEnv({ PATH: '/bin', WORKSTATION_TOKEN: 'x', GITHUB_TOKEN: 'y', GH_TOKEN: 'z', SSH_AUTH_SOCK: '/tmp/a', FOO: 'has-TOK-inside', ANTHROPIC_API_KEY: 'k', CLAUDE_CODE_OAUTH_TOKEN: 'o', CLAUDECODE: '1' }, 'TOK');
     expect(e.PATH).toBe('/bin');
-    expect(Object.keys(e).sort()).toEqual(['COLORTERM', 'PATH', 'TERM', 'WORKSTATION_TERMINAL']);
+    expect(Object.keys(e).sort()).toEqual(['COLORTERM', 'GH_TOKEN', 'GITHUB_TOKEN', 'PATH', 'SSH_AUTH_SOCK', 'TERM', 'WORKSTATION_TERMINAL']);
   });
 });

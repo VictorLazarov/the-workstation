@@ -3,7 +3,7 @@ import type { Conversation, PermissionRequest, TaskInfo, ToolResult, ToolUseBloc
 import { MAIN_LANE } from '../lib/types';
 import { collapseContext, diffLines, diffStats, fromStructuredPatch, type DiffLine } from '../lib/diff';
 import { hostOf, mcpParts, str, toolKind, toolPath, toolTitle } from '../lib/tools';
-import { basename, formatDuration, formatTokens, relPath, truncate } from '../lib/utils';
+import { basename, formatDuration, formatTokens, isHttpUrl, relPath, truncate } from '../lib/utils';
 import { useHasPanel } from '../panels/registry';
 import { useUi } from '../store/ui';
 import { Icon, type IconName } from './Icon';
@@ -179,7 +179,9 @@ function WebCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
     <Shell kind="web" status={p.status} defaultOpen={p.status === 'waiting'} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
       title={isSearch ? <>Searched the web</> : <>Fetched <span className="mono">{hostOf(url)}</span></>}
       subtitle={isSearch ? <span className="query">“{truncate(str(p.block.input.query), 70)}”</span> : <span className="query">{truncate(str(p.block.input.prompt), 70)}</span>}>
-      {!isSearch && url && <a className="source-link" href={url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={13} />{url}</a>}
+      {!isSearch && url && (isHttpUrl(url)
+        ? <a className="source-link" href={url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={13} />{url}</a>
+        : <span className="source-link">{url}</span>)}
       {text && <Output text={text} isError={p.result?.isError} max={6} />}
       {p.footer}
     </Shell>

@@ -11,24 +11,24 @@ Your `CLAUDE.md`, skills, hooks, MCP servers and `settings.json` behave as in th
 ### Local
 Requires Node >= 20.
 ```bash
-git clone https://github.com/OWNER/the-workstation && cd the-workstation
+git clone https://github.com/VictorLazarov/the-workstation && cd the-workstation
 npm ci && npm run build
 npm start            # opens http://localhost:7777/?token=...
 ```
-Or the one-liner installer: `curl -fsSL https://raw.githubusercontent.com/OWNER/the-workstation/main/scripts/install.sh | bash`, then `workstation`.
+Or the installer (pinned to a release tag; read it before running): `curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/v0.1.0/scripts/install.sh && bash install.sh`, then `workstation`.
 
 Flags: `--host <addr>` (default `127.0.0.1`), `--port <n>` (default `7777`), `--no-open` (don't launch a browser).
 
 ### Dev Container
 ```jsonc
 {
-  "features": { "ghcr.io/OWNER/the-workstation/workstation:1": {} },
+  "features": { "ghcr.io/VictorLazarov/the-workstation/workstation:1": {} },
   "forwardPorts": [7777],
   "portsAttributes": { "7777": { "label": "The Workstation", "onAutoForward": "notify" } },
   "remoteEnv": { "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}" }
 }
 ```
-The server autostarts and prints the tokenized URL (`workstation-url` reprints it). Full options: [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md).
+The server autostarts on `127.0.0.1` (VS Code / Codespaces forwarding works); run `workstation-url` to get the tokenized URL. Full options: [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md).
 
 ### Docker
 `docker compose up --build` then open the URL printed in the logs.
@@ -50,8 +50,15 @@ The server can run shell commands and edit files as its user, so access control 
 - A random token is generated on first start and stored in `config.json` (mode 0600). Every REST and WebSocket request needs it.
 - Default bind is `127.0.0.1`: only local processes can connect.
 - `Origin`/`Host` are checked to block DNS-rebinding and cross-site WebSocket hijacking.
-- In containers the server binds `0.0.0.0` because port forwarding connects from outside the container's loopback. That is still
-  token-gated, but treat the URL as a password: anyone holding it controls your container.
+- The dev container feature also binds `127.0.0.1` (VS Code / Codespaces forward via localhost inside the container). Bind
+  `0.0.0.0` (feature option `host`, or `--host`) only for `docker run -p`; that is still token-gated, but treat the URL as a
+  password: anyone holding it controls your container.
+- The web UI talks only to the server it was loaded from. Another server can only be chosen in Settings, behind a confirm
+  that names it; nothing in a URL can redirect the token. Only same-origin browser requests (or `WORKSTATION_ALLOWED_ORIGINS`)
+  are accepted, so other local ports (dev servers) cannot drive the API.
+- With a custom endpoint/key/token configured, Claude Code runs with an isolated config dir and environment, so your own
+  Claude login, `apiKeyHelper` and inherited `ANTHROPIC_*` variables never reach that endpoint (docs/ARCHITECTURE.md).
+- The integrated terminal is your own shell, not a sandbox: it can read `config.json` like any file of your user.
 - Forward ports safely: publish as `127.0.0.1:7777:7777` (Docker), keep VS Code / Codespaces ports **private** (never "Public"), and
   prefer an SSH tunnel or an authenticating reverse proxy with TLS for remote machines. Don't expose plain HTTP to the internet.
 - Rotate the token by deleting `config.json` (or the config volume) and restarting. Don't paste tokenized URLs into chats or logs.

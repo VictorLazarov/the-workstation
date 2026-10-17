@@ -22,7 +22,8 @@ describe('provider env', () => {
     expect(custom).toMatchObject({ PATH: '/bin', ANTHROPIC_BASE_URL: 'http://x', ANTHROPIC_API_KEY: 'mine' });
     expect(custom.CLAUDE_CODE_OAUTH_TOKEN).toBeUndefined();
     expect(custom.CLAUDE_CODE_REMOTE).toBeUndefined();
-    expect(buildCliEnv({ ANTHROPIC_BASE_URL: 'http://x' }, base).ANTHROPIC_API_KEY).toBeUndefined();
+    // M2: no configured key -> a non-secret sentinel, so the CLI never falls back to OAuth/keychain/well-known files
+    expect(buildCliEnv({ ANTHROPIC_BASE_URL: 'http://x' }, base).ANTHROPIC_API_KEY).toBe('workstation-no-credential');
   });
 });
 
@@ -181,6 +182,35 @@ describe('worktree cleanup', () => {
     expect(r2.worktree).toMatchObject({ removed: true, branchDeleted: true });
     expect(fs.existsSync(live.cwd)).toBe(false);
     expect(execSync('git worktree list', { cwd: repo, encoding: 'utf8' }).trim().split('\n')).toHaveLength(1);
+    c.close();
+  });
+
+  it('resuming a worktree session reuses its worktree (branch exists), also after the dir was pruned', async () => {
+    const repo = gitRepo();
+    const c = await connect(s);
+    const sid = await startSession(c, repo, { worktree: true });
+    const first = s.sessions.get(sid)!;
+    const wt = first.cwd;
+    fs.writeFileSync(path.join(wt, 'work.txt'), 'in progress');
+    const baseSha = s.sessions.worktrees.get(sid)!.baseSha;
+    c.send({ type: 'session.close', sessionId: sid });
+    await new Promise((r) => setTimeout(r, 200));
+    // resume from the main checkout and from inside the worktree (the session's own cwd)
+    for (const cwd of [repo, wt]) {
+      const again = await startSession(c, cwd, { resume: sid, worktree: true });
+      expect(again).toBe(sid);
+      expect(fs.realpathSync(s.sessions.get(sid)!.cwd)).toBe(fs.realpathSync(wt));
+      expect(fs.readFileSync(path.join(wt, 'work.txt'), 'utf8')).toBe('in progress');
+      expect(s.sessions.worktrees.get(sid)!.baseSha).toBe(baseSha);
+      c.send({ type: 'session.close', sessionId: sid });
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    // worktree dir gone but branch kept: re-attached to the existing branch
+    execSync(`git worktree remove --force ${wt}`, { cwd: repo });
+    const third = await startSession(c, repo, { resume: sid, worktree: true });
+    expect(third).toBe(sid);
+    expect(fs.existsSync(s.sessions.get(sid)!.cwd)).toBe(true);
+    expect(execSync('git branch --show-current', { cwd: s.sessions.get(sid)!.cwd, encoding: 'utf8' }).trim()).toBe(first.worktree!.branch);
     c.close();
   });
 

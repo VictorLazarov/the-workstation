@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # One-liner installer for The Workstation (any container / VM / laptop with Node >= 20).
-#   curl -fsSL https://raw.githubusercontent.com/OWNER/the-workstation/main/scripts/install.sh | bash
-# Env: WORKSTATION_REPO (git url), WORKSTATION_REF (branch/tag, default main),
-#      WORKSTATION_DIR (default ~/.local/share/workstation), WORKSTATION_BIN (default ~/.local/bin)
+#   curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/v0.1.0/scripts/install.sh
+#   less install.sh && bash install.sh
+# Env: WORKSTATION_REPO (git url), WORKSTATION_REF (release tag or full commit SHA, default v0.1.0; a branch such as
+#      main floats), WORKSTATION_DIR (default ~/.local/share/workstation), WORKSTATION_BIN (default ~/.local/bin)
 set -euo pipefail
-REPO="${WORKSTATION_REPO:-https://github.com/OWNER/the-workstation.git}"
-REF="${WORKSTATION_REF:-main}"
+REPO="${WORKSTATION_REPO:-https://github.com/VictorLazarov/the-workstation.git}"
+REF="${WORKSTATION_REF:-v0.1.0}"
 DIR="${WORKSTATION_DIR:-$HOME/.local/share/workstation}"
 BIN="${WORKSTATION_BIN:-$HOME/.local/bin}"
 
@@ -15,11 +16,19 @@ major="$(node -p 'process.versions.node.split(".")[0]')"
 [ "$major" -ge 20 ] || fail "Node >= 20 required (found $(node -v))"
 
 if [ -d "$DIR/.git" ]; then
-  echo "Updating $DIR"; git -C "$DIR" fetch --depth 1 origin "$REF" && git -C "$DIR" checkout -q FETCH_HEAD
+  echo "Updating $DIR"
+  git -C "$DIR" fetch --depth 1 origin "$REF" && git -C "$DIR" -c advice.detachedHead=false checkout -q FETCH_HEAD \
+    || fail "could not fetch '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"
 else
   echo "Cloning $REPO ($REF) into $DIR"; mkdir -p "$(dirname "$DIR")"
-  git clone --depth 1 --branch "$REF" "$REPO" "$DIR"
+  git clone -q --depth 1 --branch "$REF" "$REPO" "$DIR" 2>/dev/null \
+    || { rm -rf "$DIR"; git clone -q "$REPO" "$DIR" && git -C "$DIR" -c advice.detachedHead=false checkout -q "$REF"; } \
+    || fail "could not check out '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"
 fi
+if printf '%s' "$REF" | grep -Eq '^[0-9a-f]{40}$'; then
+  [ "$(git -C "$DIR" rev-parse HEAD)" = "$REF" ] || fail "checked-out commit does not match $REF"
+fi
+echo "Building commit $(git -C "$DIR" rev-parse HEAD)"
 ( cd "$DIR" && npm ci --no-audit --no-fund && npm run build )
 [ -f "$DIR/packages/server/dist/cli.js" ] || fail "build failed: packages/server/dist/cli.js missing"
 

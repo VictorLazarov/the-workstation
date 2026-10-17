@@ -70,7 +70,11 @@ async function getHl(): Promise<HighlighterCore> {
 
 const cache = new Map<string, string>();
 
-/** Returns highlighted HTML (dual-theme via CSS vars) or null if the language is unsupported. */
+/**
+ * Returns highlighted HTML (dual-theme via CSS vars) or null if the language is unsupported.
+ * SECURITY: this (escaped Shiki output) is the ONLY value allowed into dangerouslySetInnerHTML; on null, callers render
+ * plain text. Never add a raw-HTML fallback here (pinned by lib/html-sinks.test.ts).
+ */
 export async function highlight(code: string, lang?: string | null): Promise<string | null> {
   const l = resolveLang(lang ?? undefined);
   if (!l) return null;

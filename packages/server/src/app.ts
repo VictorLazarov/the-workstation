@@ -3,9 +3,10 @@ import fsp from 'node:fs/promises';
 import type { IncomingMessage, Server } from 'node:http';
 import type { Duplex } from 'node:stream';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { DEFAULT_PORT, type ClientMessage, type ServerMessage, type SessionSummary } from '@workstation/protocol';
 import { Catalog } from './catalog.js';
@@ -58,6 +59,22 @@ export function defaultWebDist(): string | null {
 
 function uuidish(s: string) { return /^[A-Za-z0-9_-]{1,100}$/.test(s); }
 
+/**
+ * CSP for the SPA: scripts only from this origin (plus the hashes of index.html's own inline scripts, computed here so
+ * the policy follows the build); no framing (approve buttons cannot be clickjacked). Styles allow 'unsafe-inline'
+ * because Shiki emits style attributes and xterm injects <style>; connect-src stays open because a user-confirmed
+ * remote server (Settings) is a different origin.
+ */
+export function spaCsp(html: string): string {
+  const hashes = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => `'sha256-${createHash('sha256').update(m[1]!, 'utf8').digest('base64')}'`);
+  return [
+    "default-src 'self'", `script-src 'self' ${hashes.join(' ')}`.trim(), "style-src 'self' 'unsafe-inline'", "img-src 'self' data: blob:",
+    "font-src 'self' data:", "connect-src 'self' http: https: ws: wss:", "worker-src 'self' blob:", "object-src 'none'", "base-uri 'none'",
+    "form-action 'self'", "frame-ancestors 'none'",
+  ].join('; ');
+}
+
 export async function startServer(opts: ServerOptions = {}): Promise<RunningServer> {
   const host = opts.host ?? '127.0.0.1';
   const config = opts.config ?? new ConfigStore();
@@ -87,12 +104,19 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   });
 
   app.onError((err, c) => {
-    if (err instanceof HttpError || err instanceof GitError) return c.json({ error: err.message }, err.status as 400);
+    if ((err instanceof HttpError || err instanceof GitError) && err.status < 500) return c.json({ error: err.message }, err.status as 400);
     const code = (err as NodeJS.ErrnoException).code;
     if (code === 'ENOENT') return c.json({ error: 'not found' }, 404);
     if (code === 'EACCES') return c.json({ error: 'permission denied' }, 403);
-    return c.json({ error: err instanceof Error ? err.message : String(err) }, 500);
+    // 5xx: details (paths, git stderr) stay in the server log; the client gets a generic message + request id
+    const requestId = randomUUID().slice(0, 8);
+    const status = (err instanceof HttpError || err instanceof GitError) ? err.status : 500;
+    console.error(`[workstation] ${requestId} ${c.req.method} ${new URL(c.req.url).pathname} -> ${status}:`, err instanceof Error ? err.stack ?? err.message : err);
+    return c.json({ error: `internal error (request id ${requestId}; details in the server log)`, requestId }, status as 500);
   });
+
+  // ── REST body size cap (images travel over the WebSocket, not REST) ──
+  app.use('/api/*', bodyLimit({ maxSize: 2 * 1024 * 1024, onError: (c) => c.json({ error: 'request body too large (max 2 MB)' }, 413) }));
 
   const q = (c: { req: { query(k: string): string | undefined } }, k: string): unknown => c.req.query(k);
   const cwdParam = (c: { req: { query(k: string): string | undefined } }) => requireDir(q(c, 'cwd') ?? serverCwd);
@@ -193,7 +217,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (!b || typeof b !== 'object' || Array.isArray(b)) throw new HttpError(400, 'JSON object body required');
     return b as Record<string, unknown>;
   };
-  app.post('/api/git/commit', async (c) => { const b = await jsonBody(c); return c.json(await gitCommit(await requireDir(b.cwd), b.message)); });
+  app.post('/api/git/commit', async (c) => { const b = await jsonBody(c); return c.json(await gitCommit(await requireDir(b.cwd), b.message, b.files)); });
   app.post('/api/git/revert', async (c) => { const b = await jsonBody(c); return c.json(await gitRevert(await requireDir(b.cwd), b.path)); });
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
@@ -220,6 +244,10 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       const body = await fsp.readFile(file);
       c.header('Content-Type', MIME[ext] ?? 'application/octet-stream');
       c.header('Cache-Control', ext === '.html' ? 'no-store' : 'public, max-age=3600');
+      if (ext === '.html') {
+        c.header('Content-Security-Policy', spaCsp(body.toString('utf8')));
+        c.header('X-Frame-Options', 'DENY');
+      }
       return c.body(body);
     });
   } else {
@@ -236,7 +264,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const port = typeof addr === 'object' && addr ? addr.port : opts.port ?? DEFAULT_PORT;
 
   const terminals = createTerminalService({ security, token: () => config.token, defaultCwd: serverCwd });
-  const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
+  // 16 MB per frame: a prompt with ~10 MB of images (base64) fits; anything bigger closes only that socket (1009).
+  const wss = new WebSocketServer({ noServer: true, maxPayload: Math.max(1, Number(process.env.WORKSTATION_WS_MAX_MB) || 16) * 1024 * 1024 });
   const reject = (socket: Duplex, code: number, text: string) => {
     socket.write(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
     socket.destroy();

@@ -111,6 +111,11 @@ export function fileToBase64(file: Blob): Promise<string> {
   });
 }
 
+/** Only http(s) URLs may become links (model/tool input can carry javascript:, data:, file: …). */
+export function isHttpUrl(u: string): boolean {
+  try { const p = new URL(u).protocol; return p === 'http:' || p === 'https:'; } catch { return false; }
+}
+
 export function groupBy<T>(xs: T[], key: (x: T) => string): Record<string, T[]> {
   const o: Record<string, T[]> = {};
   for (const x of xs) (o[key(x)] ??= []).push(x);

@@ -68,7 +68,8 @@ function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert }: {
   );
 }
 
-function CommitBox({ sessionId, cwd, count }: { sessionId: string; cwd: string; count: number }) {
+function CommitBox({ sessionId, cwd, files }: { sessionId: string; cwd: string; files: string[] }) {
+  const count = files.length;
   const [msg, setMsg] = useState(() => ls.get('ws.commitMsg.' + sessionId) ?? '');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -80,7 +81,7 @@ function CommitBox({ sessionId, cwd, count }: { sessionId: string; cwd: string; 
     if (!can) return;
     setBusy(true); setErr('');
     try {
-      const r = await api.gitCommit(cwd, msg.trim());
+      const r = await api.gitCommit(cwd, msg.trim(), files);
       useUi.getState().toast({ kind: 'success', title: `Committed ${r.commit}`, body: r.summary || msg.trim().split('\n')[0] });
       setMsg('');
       await refreshGit(sessionId, cwd);
@@ -92,7 +93,7 @@ function CommitBox({ sessionId, cwd, count }: { sessionId: string; cwd: string; 
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); void submit(); } }} />
       {err && <div className="ccommit-err" role="alert">{err}</div>}
       <div className="ccommit-row">
-        <span className="muted small">Stages and commits all {count} file{count === 1 ? '' : 's'}</span>
+        <span className="muted small" title="Only the files listed here are staged and committed. Your repository's git hooks run.">Stages and commits these {count} file{count === 1 ? '' : 's'}</span>
         <button type="button" className="btn primary" disabled={!can} onClick={submit}>{busy ? <Spinner size={12} /> : <Icon name="check" size={13} />} Commit</button>
       </div>
     </div>
@@ -175,7 +176,7 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
             canRevert={f.source === 'git' && git.isRepo && f.status !== 'renamed'} onRevert={() => void revert(f)} />
         ))}
       </div>
-      {git.isRepo && all.length > 0 && <CommitBox sessionId={sessionId} cwd={cwd} count={all.length} />}
+      {git.isRepo && all.some((f) => f.source === 'git') && <CommitBox sessionId={sessionId} cwd={cwd} files={all.filter((f) => f.source === 'git').map((f) => f.path)} />}
     </div>
   );
 }

@@ -144,8 +144,11 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *  GET  /api/files/search?cwd=&q= -> string[]      (@mention fuzzy search)
  *  GET  /api/git/status?cwd=   -> GitStatus
  *  GET  /api/git/diff?cwd=&path= -> { diff: string }
- *  POST /api/git/commit {cwd, message}  -> GitCommitResult   (git add -A && git commit; hooks disabled)
- *  POST /api/git/revert {cwd, path}     -> GitRevertResult   (restore tracked file to HEAD / delete untracked)
+ *  POST /api/git/commit {cwd, message, files[]} -> GitCommitResult (stages and commits exactly `files`, each a current
+ *                                       git status entry; repository hooks run, a hook failure is a 409 with its output)
+ *  POST /api/git/revert {cwd, path}     -> GitRevertResult   (restore tracked file to HEAD / delete untracked; `path` must
+ *                                       equal one status entry literally: no globs, no pathspec magic, inside the repo)
+ *  GET  /api/git/diff?path=             only serves files inside the repository (tracked or untracked-not-ignored)
  *  GET  /api/commands?cwd=     -> SlashCommandInfo[]
  *  WS   /ws
  */
