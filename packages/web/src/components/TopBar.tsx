@@ -2,7 +2,6 @@ import { formatCost } from '../lib/utils';
 import { projectName, sessionStatus, useSessions, type SessionData } from '../store/sessions';
 import { useUi } from '../store/ui';
 import { isMac } from '../lib/utils';
-import { EffortChip, ModeChip, ModelChip } from './Chips';
 import { Icon } from './Icon';
 import { IconButton, Kbd, StatusDot } from './ui';
 
@@ -26,9 +25,6 @@ export function TopBar({ session }: { session?: SessionData }) {
           <div className="topbar-spacer" />
           <div className="topbar-chips">
             <span className={`status-pill st-${status}`}><StatusDot status={status} />{label}</span>
-            <ModeChip session={session} />
-            <ModelChip session={session} />
-            <EffortChip session={session} />
             {cost > 0 && <span className="cost" title={`${session.conv.usage.turns} turn(s)`}>{formatCost(cost)}</span>}
           </div>
         </>
