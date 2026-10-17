@@ -10,7 +10,7 @@ import type { Page } from '@playwright/test';
  *
  * Checks (every check returns {rule, severity, sel, msg}):
  *   overlap          visible in-flow siblings whose boxes intersect (> 4px²)
- *   touching         interactive elements stacked/adjacent with < 1px gap (rows that touch each other)
+ *   touching         interactive elements stacked/adjacent with < 1px gap (rows that touch each other) — ERROR
  *   page-overflow    document scrolls horizontally
  *   h-scroll         element shows a horizontal scrollbar (overflow-x auto/scroll and content wider) — warn
  *   clipped          text cut off by overflow:hidden with no ellipsis
@@ -229,8 +229,8 @@ function lintInPage(opts: { brand: string }) {
     const vOver = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
     const vGap = Math.max(b.r.top - a.r.bottom, a.r.top - b.r.bottom);
     const hGap = Math.max(b.r.left - a.r.right, a.r.left - b.r.right);
-    if (hOver > 0.5 * Math.min(a.r.width, b.r.width) && vGap > -0.5 && vGap < 1) add('touching', 'warn', a.e, `0px vertical gap to ${path(b.e)}`);
-    else if (vOver > 0.5 * Math.min(a.r.height, b.r.height) && hGap > -0.5 && hGap < 1) add('touching', 'warn', a.e, `0px horizontal gap to ${path(b.e)}`);
+    if (hOver > 0.5 * Math.min(a.r.width, b.r.width) && vGap > -0.5 && vGap < 1) add('touching', 'error', a.e, `0px vertical gap to ${path(b.e)}`);
+    else if (vOver > 0.5 * Math.min(a.r.height, b.r.height) && hGap > -0.5 && hGap < 1) add('touching', 'error', a.e, `0px horizontal gap to ${path(b.e)}`);
     else if (hOver > 1 && vOver > 1 && hOver * vOver > 4) add('overlap', 'error', a.e, `overlaps ${path(b.e)} by ${hOver.toFixed(0)}x${vOver.toFixed(0)}`);
   }
 

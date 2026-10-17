@@ -1,14 +1,20 @@
+# docker compose up --build        then: docker compose logs workstation   (prints the sign-in URL with the token)
 services:
   workstation:
     build: .
     ports:
-      - "127.0.0.1:7777:7777"   # keep the 127.0.0.1 prefix unless you know what you are doing
+      - "127.0.0.1:${WORKSTATION_PORT:-7777}:7777"   # keep the 127.0.0.1 prefix unless you know what you are doing
+    # Run as your own uid so files Claude writes into ./ are yours and git does not complain about ownership:
+    #   export WORKSTATION_UID=$(id -u) WORKSTATION_GID=$(id -g)      (defaults: 1000, the image's `node` user)
+    user: "${WORKSTATION_UID:-1000}:${WORKSTATION_GID:-1000}"
     environment:
       # Pass through from your shell / .env (never commit keys)
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-}
+      HOME: /tmp                            # a uid without a passwd entry has no home directory (git, tools)
     volumes:
       - workstation-config:/config          # token + settings survive rebuilds
       - ./:/workspace                       # the project Claude works on
+    restart: unless-stopped
 volumes:
   workstation-config:

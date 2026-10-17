@@ -176,7 +176,7 @@ mkdir -p "\$WORKSTATION_HOME"
 port_open() { (exec 3<>/dev/tcp/127.0.0.1/\$PORT) 2>/dev/null; }
 pid=""
 if ! port_open; then
-  echo "Starting The Workstation on \$HOST:\$PORT (a first start from a source=local checkout builds it first, which takes a few minutes; progress: \$LOG)"
+  echo "Starting The Workstation on \$HOST:\$PORT (a first start from a source=local checkout builds it first, which takes a few minutes; progress: \$LOG)" >&2
   nohup "$PREFIX/bin/workstation" --host "\$HOST" --port "\$PORT" --no-open >"\$LOG" 2>&1 &
   pid=\$!
   echo \$pid > "\$WORKSTATION_HOME/server.pid"

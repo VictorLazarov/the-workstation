@@ -29,7 +29,16 @@ if printf '%s' "$REF" | grep -Eq '^[0-9a-f]{40}$'; then
   [ "$(git -C "$DIR" rev-parse HEAD)" = "$REF" ] || fail "checked-out commit does not match $REF"
 fi
 echo "Building commit $(git -C "$DIR" rev-parse HEAD)"
-( cd "$DIR" && npm ci --no-audit --no-fund && npm run build )
+if ! ( cd "$DIR" && npm ci --no-audit --no-fund && npm run build ); then
+  if [ "$(uname -s)" = Linux ]; then
+    # node-pty has no Linux prebuilds, so npm compiles it with node-gyp; without a toolchain the install is silently
+    # skipped and the TypeScript build then fails on the missing module.
+    echo "hint: on Linux the terminal module (node-pty) is compiled locally. Install python3, make and a C++ compiler, then re-run:" >&2
+    echo "        Debian/Ubuntu: sudo apt-get install -y python3 make g++     Alpine: apk add python3 make g++ linux-headers" >&2
+    echo "        Fedora/RHEL:   sudo dnf install -y python3 make gcc-c++" >&2
+  fi
+  fail "build failed"
+fi
 [ -f "$DIR/packages/server/dist/cli.js" ] || fail "build failed: packages/server/dist/cli.js missing"
 
 mkdir -p "$BIN"

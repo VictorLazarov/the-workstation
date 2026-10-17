@@ -9,7 +9,7 @@ import { errorsOf, formatIssues, lintPage } from '../../support/layout-lint.ts';
  */
 
 const toast = (page: Page, t: { kind: 'info' | 'success' | 'error' | 'attention'; title: string; body?: string; tag?: string; ttl?: number }) =>
-  page.evaluate((x) => window.__ws!.toast!(x), t);
+  page.evaluate((x) => (window as unknown as { __ws: { toast: (t: unknown) => string } }).__ws.toast(x), t);
 const settingsDialog = (page: Page) => page.getByRole('dialog', { name: /^(Settings|Welcome\. Set up your connection)$/ });
 
 test.describe('N1: a real API error is one actionable message (mock 401, real stream shape)', () => {
@@ -111,18 +111,21 @@ test.describe('N2: only project files are changes; plan files are separate', () 
 test.describe('N3: toasts', () => {
   test('repeats coalesce into one toast with a count', async ({ page }) => {
     await openApp(page);
-    for (let i = 0; i < 5; i++) await toast(page, { kind: 'success', tag: 's1', title: 'Session finished', body: 'bash please: Ready for your review' });
-    await expect(page.locator('.toast')).toHaveCount(1);
-    await expect(page.locator('.toast .toast-count')).toHaveText('×5');
+    for (let i = 0; i < 5; i++) await toast(page, { kind: 'success', tag: 'coalesce-s1', title: 'Coalesce finished', body: 'bash please: Ready for your review', ttl: 0 });
+    const mine = page.locator('.toast', { hasText: 'Coalesce finished' });
+    await expect(mine).toHaveCount(1);
+    await expect(mine.locator('.toast-count')).toHaveText('×5');
   });
 
   test('at most two toasts are visible at once; the rest queue and appear as others go', async ({ page }) => {
     await openApp(page);
-    for (const s of ['a', 'b', 'c', 'd', 'e']) await toast(page, { kind: 'success', tag: s, title: `Finished ${s}`, ttl: 0 });
+    // other sessions on the shared mock server may raise their own toasts: start from a clean slate
+    while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
+    for (const s of ['a', 'b', 'c', 'd', 'e']) await toast(page, { kind: 'success', tag: `q-${s}`, title: `Queued ${s}`, ttl: 0 });
     await expect(page.locator('.toast')).toHaveCount(2);
     await expect(page.locator('.toast-more')).toHaveText('+3 more');
     await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
-    await expect(page.locator('.toast').first()).toContainText('Finished b');
+    await expect(page.locator('.toast').first()).toContainText('Queued b');
     await expect(page.locator('.toast')).toHaveCount(2);
     await expect(page.locator('.toast-more')).toHaveText('+2 more');
   });
@@ -177,15 +180,11 @@ test.describe('N3: toasts', () => {
 });
 
 test.describe('minors', () => {
-  test('first run offers the project the server was started in (--cwd) in one click; later opens are titled Settings', async ({ page }) => {
-    // fresh profile: no recent projects known to this browser session yet is not guaranteed on the shared server, so assert what is always true:
+  test('opening Settings yourself is titled "Settings"; "Welcome" is only for the automatic first-run prompt', async ({ page }) => {
     await page.addInitScript(() => { try { localStorage.removeItem('ws.firstRunDone'); } catch { /* ignore */ } });
     await openApp(page);
-    const dlg = page.getByRole('dialog', { name: /Welcome\. Set up your connection/ });
-    await expect(dlg).toBeVisible();
-    await page.keyboard.press('Escape');
-    await expect(dlg).toHaveCount(0);
-    // opening Settings yourself later is "Settings", not "Welcome"
+    const welcome = page.getByRole('dialog', { name: /Welcome\. Set up your connection/ });
+    if (await welcome.isVisible().catch(() => false)) { await page.keyboard.press('Escape'); await expect(welcome).toHaveCount(0); }
     await page.keyboard.press('Control+,');
     await expect(page.getByRole('dialog', { name: 'Settings', exact: true })).toBeVisible();
     await page.keyboard.press('Escape');

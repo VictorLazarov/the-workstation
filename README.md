@@ -28,10 +28,14 @@ Flags: `--host <addr>` (default `127.0.0.1`), `--port <n>` (default `7777`), `--
   "remoteEnv": { "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}" }
 }
 ```
-The server autostarts on `127.0.0.1` (VS Code / Codespaces forwarding works); run `workstation-url` to get the tokenized URL. Full options: [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md).
+The server autostarts on `127.0.0.1` (VS Code / Codespaces forwarding works); run `workstation-url` in the container to get the tokenized URL. The feature installs Node, a C++ toolchain (for the terminal's `node-pty`) and the app if the image lacks them. Plain `docker run -p` needs `"host": "0.0.0.0"`. Options, troubleshooting, release procedure and what is verified: [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md).
 
 ### Docker
-`docker compose up --build` then open the URL printed in the logs.
+```bash
+docker compose up --build        # publishes 127.0.0.1:7777 only; ./ is mounted as /workspace
+docker compose logs workstation  # the sign-in URL with the token
+```
+Runs as a non-root user; on Linux with a host uid other than 1000 first `export WORKSTATION_UID=$(id -u) WORKSTATION_GID=$(id -g)`. See [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md#standalone-image-docker--compose).
 
 ## Configuration
 Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HOME`; the dev container feature persists it in a volume).
@@ -73,7 +77,8 @@ npm test
 WORKSTATION_MOCK=1 npm start   # mock SDK, no API key needed
 ```
 Layout: `packages/protocol` (shared types), `packages/server` (HTTP+WS, Agent SDK), `packages/web` (React SPA),
-`devcontainer/` (Feature). `scripts/test-feature.sh` smoke-tests the feature installer offline. CI: `.github/workflows/`.
+`devcontainer/` (Feature). `scripts/test-feature.sh` smoke-tests the feature installer offline; `scripts/test-devcontainer.sh` builds and
+tests the Feature, the Dockerfile and docker-compose.yml in real containers (needs Docker). CI: `.github/workflows/`.
 
 ## Roadmap
 See the phased scope (P0/P1/P2) in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

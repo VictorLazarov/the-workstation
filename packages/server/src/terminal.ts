@@ -118,7 +118,10 @@ let spawnerPromise: Promise<Spawner | { error: string }> | null = null;
 async function detectNodePty(): Promise<Spawner | null> {
   try {
     fixSpawnHelperMode();
-    const mod = (await import('node-pty')) as typeof import('node-pty');
+    // optional native dependency: a variable specifier keeps `tsc` working when it is not installed
+    const modName = 'node-pty';
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const mod = (await import(modName)) as any;
     // probe: a broken native build throws on first spawn (Windows: ConPTY via cmd.exe)
     const win = process.platform === 'win32';
     const probe = win
@@ -138,7 +141,7 @@ async function detectNodePty(): Promise<Spawner | null> {
             try { p.kill(); } catch { /* gone */ }
           },
           onData: (cb) => { p.onData(cb); },
-          onExit: (cb) => { p.onExit((e) => cb(e.exitCode)); },
+          onExit: (cb) => { p.onExit((e: { exitCode: number }) => cb(e.exitCode)); },
         };
       },
     };

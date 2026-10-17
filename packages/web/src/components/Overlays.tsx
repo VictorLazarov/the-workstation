@@ -9,7 +9,7 @@ import { MODES } from './Chips';
 import { newSessionShortcut } from '../lib/shortcuts';
 
 /* ───────── toasts ───────── */
-function ToastView({ t }: { t: Toast }) {
+function ToastView({ t, more }: { t: Toast; more?: number }) {
   const dismiss = useUi((s) => s.dismissToast);
   // the timer runs only while the toast is on screen (queued ones get their full time once shown) and restarts when a repeat refreshes it
   useEffect(() => {
@@ -20,7 +20,7 @@ function ToastView({ t }: { t: Toast }) {
   return (
     <div className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
       <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : t.kind === 'attention' ? 'shield' : 'info'} size={16} />
-      <div className="toast-text"><b>{t.title}{t.count > 1 && <span className="toast-count" aria-label={`${t.count} times`}>×{t.count}</span>}</b>{t.body && <span>{t.body}</span>}</div>
+      <div className="toast-text"><b>{t.title}{t.count > 1 && <span className="toast-count" aria-label={`${t.count} times`}>×{t.count}</span>}{!!more && <span className="toast-more">+{more} more</span>}</b>{t.body && <span>{t.body}</span>}</div>
       {t.action && <button type="button" className="link-btn" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button>}
       <IconButton icon="x" label="Dismiss" size={13} onClick={() => dismiss(t.id)} />
     </div>
@@ -35,8 +35,7 @@ export function Toasts() {
   const queued = toasts.length - visible.length;
   return (
     <div className="toasts" aria-live="polite" data-queued={queued || undefined}>
-      {visible.map((t) => <ToastView key={t.id} t={t} />)}
-      {queued > 0 && <div className="toast-more" aria-hidden="true">+{queued} more</div>}
+      {visible.map((t, i) => <ToastView key={t.id} t={t} more={i === visible.length - 1 ? queued : 0} />)}
     </div>
   );
 }

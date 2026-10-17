@@ -62,7 +62,7 @@
 .files-root { display: flex; align-items: center; gap: 6px; padding: 4px 10px 2px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .ftree { padding: 2px 6px 10px; }
 .ftree-msg { padding: 6px 10px; color: var(--muted); font-size: var(--fs-sm); display: flex; gap: 6px; align-items: center; } .ftree-msg.err { color: var(--danger); }
-.frow { display: flex; align-items: center; gap: 5px; width: 100%; height: var(--row-h-sm); padding-right: 8px; border-radius: 5px; text-align: left; font-size: var(--fs-base); color: var(--text); }
+.frow { margin-bottom: 2px; display: flex; align-items: center; gap: 5px; width: 100%; height: var(--row-h-sm); padding-right: 8px; border-radius: 5px; text-align: left; font-size: var(--fs-base); color: var(--text); }
 .frow:hover { background: var(--hover); } .frow.sel { background: var(--active); } .frow.dim .frow-name { color: var(--muted); }
 .frow:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .frow-chev { width: 12px; flex: none; color: var(--muted); transition: transform 0.12s; } .frow-chev.open { transform: rotate(90deg); }

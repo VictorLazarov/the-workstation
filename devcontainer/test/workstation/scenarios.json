@@ -1,6 +1,97 @@
 {
-  "local": {
-    "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
-    "features": { "workstation": { "source": "local", "installClaudeCode": false } }
+  "git-ubuntu": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@"
+      }
+    }
+  },
+  "git-node": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/javascript-node:22@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@"
+      }
+    }
+  },
+  "git-debian": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:debian@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@"
+      }
+    }
+  },
+  "git-alpine": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:alpine@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@"
+      }
+    }
+  },
+  "tarball": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "tarball",
+        "sourceUrl": "@TARBALL_URL@"
+      }
+    }
+  },
+  "local-mount": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "local"
+      }
+    },
+    "mounts": [
+      {
+        "type": "bind",
+        "source": "@LOCAL_CHECKOUT@",
+        "target": "/workspaces/the-workstation"
+      }
+    ]
+  },
+  "bind-all-interfaces": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@",
+        "version": "@GIT_SHA@",
+        "host": "0.0.0.0",
+        "port": "7791"
+      }
+    }
+  },
+  "autostart-off": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@",
+        "version": "@GIT_SHA@",
+        "autostart": false
+      }
+    }
+  },
+  "claude-code-cli": {
+    "image": "@IMG:mcr.microsoft.com/devcontainers/base:ubuntu@",
+    "features": {
+      "workstation": {
+        "source": "git",
+        "sourceUrl": "@GIT_URL@",
+        "version": "@GIT_SHA@",
+        "autostart": false,
+        "installClaudeCode": true
+      }
+    }
   }
 }

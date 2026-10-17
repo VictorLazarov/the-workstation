@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Gate - build the feature in real containers before publishing
+        run: scripts/test-devcontainer.sh --stage features git-ubuntu git-node bind-all-interfaces
       - uses: devcontainers/action@v1
         with:
           publish-features: "true"
