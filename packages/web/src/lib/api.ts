@@ -1,7 +1,7 @@
 import type {
   AppConfig, FsEntry, GitStatus, ModelOption, SessionSummary, SlashCommandInfo,
 } from '@workstation/protocol';
-import { getToken, isDemo } from './storage';
+import { getServerBase, getToken, isDemo } from './storage';
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -14,7 +14,7 @@ async function request<T>(method: string, path: string, query?: Q, body?: unknow
     const { demoRest } = await import('./demo/server');
     return demoRest<T>(method, path, query ?? {}, body);
   }
-  const url = new URL(path, location.origin);
+  const url = new URL(path, getServerBase() + '/');
   for (const [k, v] of Object.entries(query ?? {})) if (v !== undefined) url.searchParams.set(k, v);
   const token = getToken();
   const res = await fetch(url, {

@@ -1,23 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EffortLevel, ImageAttachment, PermissionMode } from '@workstation/protocol';
 import { api } from '../lib/api';
-import { contextWindowFor, debounce, fileToBase64, formatTokens, fuzzy, modelLabel } from '../lib/utils';
+import { contextWindowFor, debounce, fileToBase64, formatTokens, fuzzy } from '../lib/utils';
 import { ls } from '../lib/storage';
 import { useSessions, type SessionData } from '../store/sessions';
 import { Icon } from './Icon';
-import { Dropdown, IconButton, Kbd, type MenuEntry } from './ui';
+import { IconButton, Kbd } from './ui';
+import { EffortChip, MODES, ModeChip, ModelChip, currentModel } from './Chips';
 import { basename, dirname } from '../lib/utils';
-
-export const MODES: { id: PermissionMode; label: string; desc: string; icon: 'shield' | 'pencil' | 'list' | 'zap' | 'sparkles' }[] = [
-  { id: 'default', label: 'Ask permissions', desc: 'Approve edits and commands one by one', icon: 'shield' },
-  { id: 'acceptEdits', label: 'Auto-accept edits', desc: 'Edit files freely, still ask for commands', icon: 'pencil' },
-  { id: 'plan', label: 'Plan mode', desc: 'Explore and propose a plan before changing anything', icon: 'list' },
-  { id: 'auto', label: 'Auto', desc: 'A classifier approves safe actions for you', icon: 'sparkles' },
-  { id: 'bypassPermissions', label: 'Bypass permissions', desc: 'Run everything without asking. Use with care', icon: 'zap' },
-];
-export const EFFORTS: { id: EffortLevel; label: string }[] = [
-  { id: 'low', label: 'Low' }, { id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }, { id: 'xhigh', label: 'Extra high' }, { id: 'max', label: 'Max' },
-];
 
 interface Popup { kind: 'mention' | 'slash'; query: string; start: number; end: number }
 interface Option { id: string; label: string; detail?: string; insert: string }
@@ -26,9 +16,8 @@ const draftKey = (id: string) => 'ws.draft.' + id;
 
 export function Composer({ session }: { session: SessionData }) {
   const id = session.id;
-  const { send, interrupt, setModel, setMode, setEffort, cancelQueued } = useSessions.getState();
-  const models = useSessions((s) => s.models);
-  const config = useSessions((s) => s.config);
+  const { send, interrupt, setMode, cancelQueued } = useSessions.getState();
+    const config = useSessions((s) => s.config);
   const commands = useSessions((s) => s.commands);
   const [text, setText] = useState(() => ls.get(draftKey(id)) ?? '');
   const [images, setImages] = useState<(ImageAttachment & { url: string })[]>([]);
@@ -140,27 +129,11 @@ export function Composer({ session }: { session: SessionData }) {
     }
   };
 
-  const modelList = useMemo(() => {
-    const ids = new Set<string>();
-    const out: { id: string; label: string; description?: string }[] = [];
-    for (const m of models) { ids.add(m.id); out.push(m); }
-    for (const c of config?.customModels ?? []) if (!ids.has(c)) { ids.add(c); out.push({ id: c, label: modelLabel(c), description: 'Custom model' }); }
-    const cur = session.runtime.model ?? session.conv.init?.model;
-    if (cur && !ids.has(cur)) out.push({ id: cur, label: modelLabel(cur) });
-    return out;
-  }, [models, config?.customModels, session.runtime.model, session.conv.init?.model]);
-
-  const curModel = session.runtime.model ?? session.conv.init?.model ?? config?.defaultModel;
-  const mode = MODES.find((m) => m.id === session.runtime.permissionMode) ?? MODES[0];
-  const effort = EFFORTS.find((x) => x.id === session.runtime.effort) ?? EFFORTS[1];
+  const curModel = currentModel(session, config?.defaultModel);
   const ctxTokens = session.conv.contextTokens;
   const ctxWin = contextWindowFor(curModel);
-  const ctxPct = ctxTokens ? Math.min(100, Math.round((ctxTokens / ctxWin) * 100)) : 0;
+  const ctxPct = ctxTokens ? Math.min(100, Math.max(1, Math.round((ctxTokens / ctxWin) * 100))) : 0;
   const canSend = (text.trim().length > 0 || images.length > 0);
-
-  const modelItems: MenuEntry[] = [{ heading: 'Model' }, ...modelList.map((m) => ({ id: m.id, label: m.label, description: m.description, checked: m.id === curModel, onSelect: () => setModel(id, m.id) }))];
-  const modeItems: MenuEntry[] = [{ heading: 'Permission mode' }, ...MODES.map((m) => ({ id: m.id, label: m.label, description: m.desc, icon: m.icon, checked: m.id === mode.id, onSelect: () => setMode(id, m.id) }))];
-  const effortItems: MenuEntry[] = [{ heading: 'Thinking effort' }, ...EFFORTS.map((x) => ({ id: x.id, label: x.label, checked: x.id === effort.id, onSelect: () => setEffort(id, x.id) }))];
 
   return (
     <div className="composer-wrap">
@@ -221,9 +194,9 @@ export function Composer({ session }: { session: SessionData }) {
           <div className="composer-chips">
             <IconButton icon="paperclip" label="Attach image" onClick={() => fileInput.current?.click()} />
             <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
-            <Dropdown title="Permission mode (Shift+Tab to cycle)" items={modeItems} trigger={() => <><Icon name={mode.icon} size={13} /><span>{mode.label}</span><Icon name="chevron-down" size={12} /></>} />
-            <Dropdown title="Model" items={modelItems} trigger={() => <><span>{modelLabel(curModel)}</span><Icon name="chevron-down" size={12} /></>} />
-            <Dropdown title="Thinking effort" items={effortItems} trigger={() => <><Icon name="brain" size={13} /><span>{effort.label}</span><Icon name="chevron-down" size={12} /></>} />
+            <ModeChip session={session} />
+            <ModelChip session={session} />
+            <EffortChip session={session} />
           </div>
           <div className="composer-right">
             {ctxTokens ? (

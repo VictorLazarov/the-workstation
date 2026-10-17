@@ -249,9 +249,10 @@ function onUser(c: Conversation, msg: AnyMsg) {
   const lane = laneOf(c, MAIN_LANE);
   const uuid: string | undefined = msg.uuid;
   if (uuid && lane.items.some((i) => i.kind === 'user' && i.uuid === uuid)) return;
+  const cid: string | undefined = msg.clientMsgId;
   for (let i = lane.items.length - 1; i >= 0 && i >= lane.items.length - 6; i--) {
     const it = lane.items[i];
-    if (it.kind === 'user' && it.pending && it.text === text) {
+    if (it.kind === 'user' && it.pending && ((cid && it.id === cid) || it.text === text)) {
       replaceItem(c, MAIN_LANE, i, { ...it, pending: false, uuid });
       return;
     }

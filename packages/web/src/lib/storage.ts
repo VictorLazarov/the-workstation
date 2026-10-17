@@ -8,6 +8,14 @@ export const ls = {
 };
 
 const TOKEN_KEY = 'ws.token';
+const SERVER_KEY = 'ws.serverUrl';
+
+/** Base URL of the Workstation server. Default: same origin. Override with ?server=https://host:port (persisted). */
+export function getServerBase(): string {
+  const v = ls.get(SERVER_KEY);
+  return (v || location.origin).replace(/\/+$/, '');
+}
+export function setServerBase(url: string) { if (url.trim()) ls.set(SERVER_KEY, url.trim()); else ls.del(SERVER_KEY); }
 export const isDemo = (): boolean => new URLSearchParams(location.search).get('demo') === '1' || sessionStorageGet('ws.demo') === '1';
 
 function sessionStorageGet(k: string): string | null { try { return sessionStorage.getItem(k); } catch { return null; } }
@@ -21,8 +29,10 @@ export function bootstrapToken(): string | null {
     sessionStorageSet(TOKEN_KEY, t);
     url.searchParams.delete('token');
   }
+  const server = url.searchParams.get('server');
+  if (server) { setServerBase(server); url.searchParams.delete('server'); }
   if (url.searchParams.get('demo') === '1') sessionStorageSet('ws.demo', '1');
-  if (t) history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+  if (t || server) history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
   return getToken();
 }
 export function getToken(): string | null { return sessionStorageGet(TOKEN_KEY); }

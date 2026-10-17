@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type CSSP
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from './Icon';
 import type { SessionStatus } from '../store/sessions';
+import { platform } from '../platform';
 
 export function StatusDot({ status, size = 8 }: { status: SessionStatus; size?: number }) {
   const label = { running: 'Running', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished (unread)', idle: 'Idle', starting: 'Starting' }[status];
@@ -31,9 +32,7 @@ export function CopyButton({ text, label = 'Copy', className = '' }: { text: str
       type="button" className={`icon-btn ${className}`} aria-label={label} title={done ? 'Copied' : label}
       onClick={async (e) => {
         e.stopPropagation();
-        try { await navigator.clipboard.writeText(text); } catch {
-          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
-        }
+        await platform.copyText(text);
         setDone(true); setTimeout(() => setDone(false), 1400);
       }}
     >

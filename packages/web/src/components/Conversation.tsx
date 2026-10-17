@@ -25,6 +25,7 @@ export function Conversation({ session }: { session: SessionData }) {
   const scroller = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const lastTop = useRef(0);
   const [away, setAway] = useState(false);
   const { conv, id } = session;
   const respond = useSessions((s) => s.respondPermission);
@@ -50,8 +51,10 @@ export function Conversation({ session }: { session: SessionData }) {
     const el = scroller.current;
     if (!el) return;
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 90;
-    stick.current = near;
-    setAway(!near);
+    const up = el.scrollTop < lastTop.current - 2;
+    lastTop.current = el.scrollTop;
+    if (near) stick.current = true; else if (up) stick.current = false;
+    setAway(!stick.current && !near);
   };
 
   const orphanPerms = session.perms.filter((p) => !hasToolUse(conv, p.toolUseID));

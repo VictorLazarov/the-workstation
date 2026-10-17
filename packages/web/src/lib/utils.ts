@@ -68,7 +68,7 @@ export function contextWindowFor(model?: string): number {
 
 /** Friendly model name: claude-sonnet-4-5-20250929 -> Sonnet 4.5 */
 export function modelLabel(id?: string): string {
-  if (!id) return 'Default model';
+  if (!id || id === 'default') return 'Default model';
   const m = /claude-(opus|sonnet|haiku)-(\d+)(?:[-.](\d+))?/i.exec(id);
   if (m) return `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] && m[3].length < 3 ? '.' + m[3] : ''}`;
   const m2 = /claude-(\d+)(?:[-.](\d+))?-(opus|sonnet|haiku)/i.exec(id);

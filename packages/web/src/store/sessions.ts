@@ -12,6 +12,7 @@ import { createTransport, type ConnStatus, type Transport } from '../lib/transpo
 import { basename, truncate, uid } from '../lib/utils';
 import { isDemo, ls } from '../lib/storage';
 import { applyTheme, useUi } from './ui';
+import { platform } from '../platform';
 
 export interface QueuedPrompt { id: string; text: string; images: ImageAttachment[] }
 
@@ -86,8 +87,10 @@ interface Store {
 }
 
 let transport: Transport | null = null;
+let initStarted = false;
 const pendingStarts = new Map<string, string>(); // reqId -> local session id
 const waiters = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+const lastSeq = new Map<string, number>(); // last sdk seq applied per session (for attach replay)
 const histBuffer = new Map<string, unknown[]>(); // sdk events arriving while history loads
 
 const freshRuntime = (cfg: AppConfig | null): SessionRuntimeState => ({
@@ -124,9 +127,7 @@ export const useSessions = create<Store>((set, get) => {
     const isActive = get().activeId === id && !document.hidden;
     if (isActive) return;
     useUi.getState().toast({ kind, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, ttl: kind === 'attention' ? 10_000 : 5000 });
-    if (document.hidden && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try { const n = new Notification(title, { body: s?.title ?? body, tag: id }); n.onclick = () => { window.focus(); get().setActive(id); }; } catch { /* ignore */ }
-    }
+    if (document.hidden) platform.notify({ title, body: s?.title ?? body, tag: id, onClick: () => get().setActive(id) });
   };
 
   const sendNow = (id: string, text: string, images: ImageAttachment[], qid = uid('c')) => {
@@ -239,6 +240,7 @@ export const useSessions = create<Store>((set, get) => {
       case 'sdk': {
         const s = get().sessions[m.sessionId];
         if (!s) return;
+        lastSeq.set(m.sessionId, Math.max(lastSeq.get(m.sessionId) ?? 0, m.seq));
         if (histBuffer.has(m.sessionId)) { histBuffer.get(m.sessionId)!.push(m.message); return; }
         const msg = m.message as { type?: string; subtype?: string; is_error?: boolean; result?: string; errors?: string[] };
         const conv = applySdk(s.conv, m.message);
@@ -305,7 +307,7 @@ export const useSessions = create<Store>((set, get) => {
     if (withHistory) void loadHistory(id, s.cwd, true); else histBuffer.delete(id);
     const reqId = uid('req');
     pendingStarts.set(reqId, id);
-    if (!transport?.send({ type: 'session.attach', reqId, sessionId: id })) pendingStarts.delete(reqId);
+    if (!transport?.send({ type: 'session.attach', reqId, sessionId: id, ...(lastSeq.has(id) ? { fromSeq: lastSeq.get(id) } : {}) })) pendingStarts.delete(reqId);
   }
 
   return {
@@ -313,7 +315,8 @@ export const useSessions = create<Store>((set, get) => {
     activeId: null, projects: [],
 
     async init() {
-      if (transport) return;
+      if (initStarted) return;
+      initStarted = true;
       transport = await createTransport();
       transport.onStatus((conn) => {
         const was = get().conn;

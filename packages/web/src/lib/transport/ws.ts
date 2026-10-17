@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from '@workstation/protocol';
 import type { ConnStatus, Transport } from './types';
+import { getServerBase } from '../storage';
 
 export class WsTransport implements Transport {
   status: ConnStatus = 'closed';
@@ -24,8 +25,9 @@ export class WsTransport implements Transport {
     clearTimeout(this.timer);
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
     this.set('connecting');
-    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const url = `${proto}://${location.host}/ws${this.token ? `?token=${encodeURIComponent(this.token)}` : ''}`;
+    const base = new URL(getServerBase());
+    const proto = base.protocol === 'https:' ? 'wss' : 'ws';
+    const url = `${proto}://${base.host}/ws${this.token ? `?token=${encodeURIComponent(this.token)}` : ''}`;
     let ws: WebSocket;
     try { ws = new WebSocket(url); } catch { this.scheduleReconnect(); return; }
     this.ws = ws;
