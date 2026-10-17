@@ -2,26 +2,41 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fuzzy, isMac, modelLabel, relativeTime } from '../lib/utils';
 import { clearRemoteServer, getRemoteServer } from '../lib/storage';
 import { projectName, useActiveSession, useSessions } from '../store/sessions';
-import { useUi } from '../store/ui';
+import { useSidebarDrawer, useUi, visibleToasts, type Toast } from '../store/ui';
 import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
 import { MODES } from './Chips';
 import { newSessionShortcut } from '../lib/shortcuts';
 
 /* ───────── toasts ───────── */
+function ToastView({ t }: { t: Toast }) {
+  const dismiss = useUi((s) => s.dismissToast);
+  // the timer runs only while the toast is on screen (queued ones get their full time once shown) and restarts when a repeat refreshes it
+  useEffect(() => {
+    if (t.ttl <= 0) return;
+    const h = setTimeout(() => dismiss(t.id), t.ttl);
+    return () => clearTimeout(h);
+  }, [t.id, t.rev, t.ttl, dismiss]);
+  return (
+    <div className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
+      <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : t.kind === 'attention' ? 'shield' : 'info'} size={16} />
+      <div className="toast-text"><b>{t.title}{t.count > 1 && <span className="toast-count" aria-label={`${t.count} times`}>×{t.count}</span>}</b>{t.body && <span>{t.body}</span>}</div>
+      {t.action && <button type="button" className="link-btn" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button>}
+      <IconButton icon="x" label="Dismiss" size={13} onClick={() => dismiss(t.id)} />
+    </div>
+  );
+}
+
+/** At most two toasts at a time (one on narrow screens); the rest wait in the queue and appear as the visible ones go. */
 export function Toasts() {
   const toasts = useUi((s) => s.toasts);
-  const dismiss = useUi((s) => s.dismissToast);
+  const narrow = useSidebarDrawer();
+  const visible = visibleToasts(toasts, narrow);
+  const queued = toasts.length - visible.length;
   return (
-    <div className="toasts" aria-live="polite">
-      {toasts.map((t) => (
-        <div key={t.id} className={`toast toast-${t.kind}`} role={t.kind === 'error' ? 'alert' : 'status'}>
-          <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : t.kind === 'attention' ? 'shield' : 'info'} size={16} />
-          <div className="toast-text"><b>{t.title}</b>{t.body && <span>{t.body}</span>}</div>
-          {t.action && <button type="button" className="link-btn" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button>}
-          <IconButton icon="x" label="Dismiss" size={13} onClick={() => dismiss(t.id)} />
-        </div>
-      ))}
+    <div className="toasts" aria-live="polite" data-queued={queued || undefined}>
+      {visible.map((t) => <ToastView key={t.id} t={t} />)}
+      {queued > 0 && <div className="toast-more" aria-hidden="true">+{queued} more</div>}
     </div>
   );
 }

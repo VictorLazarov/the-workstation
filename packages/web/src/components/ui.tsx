@@ -236,3 +236,19 @@ export function Resizer({ onDrag, onDone, label }: { onDrag: (dx: number) => voi
     />
   );
 }
+
+/** "+3 −1" line counts. Zero sides are not shown (no red "−0"); both zero shows nothing. */
+export function Stats({ added, removed, className = '' }: { added: number; removed: number; className?: string }) {
+  if (!added && !removed) return null;
+  return <span className={`stats ${className}`}>{added > 0 && <span className="add">+{added}</span>}{removed > 0 && <span className="del">−{removed}</span>}</span>;
+}
+
+/**
+ * Text that never overflows its row: when it does not fit, the MIDDLE is cut ("/Users/me/…/plans/plan-x.md"), so the end of a path
+ * (the file name) stays visible. The full text is the tooltip.
+ */
+export function MiddleEllipsis({ text, tail = 14, className = '' }: { text: string; tail?: number; className?: string }) {
+  const n = Math.min(tail, Math.max(0, text.length - 1));
+  const head = text.slice(0, text.length - n), end = text.slice(text.length - n);
+  return <span className={`mid-ell ${className}`} title={text}><span className="mid-head">{head}</span><span className="mid-tail">{end}</span></span>;
+}

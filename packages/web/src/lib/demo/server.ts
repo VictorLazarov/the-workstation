@@ -134,7 +134,7 @@ class DemoBackend implements Transport {
       case 'interrupt': {
         const s = this.sessions.get(msg.sessionId); if (!s) return;
         s.abort = true;
-        s.perms.forEach((r) => r({ behavior: 'deny', message: 'Interrupted' }));
+        s.perms.forEach((r) => r({ behavior: 'deny', message: "The user doesn't want to proceed with this tool use. The tool use was rejected." }));
         return;
       }
       case 'permission.respond': {
@@ -218,7 +218,13 @@ class DemoBackend implements Transport {
   }
 
   private async finish(s: DS, cost = 0.0412, durationMs = 9400) {
-    this.emit(s, { type: 'result', subtype: s.abort ? 'error_during_execution' : 'success', is_error: s.abort, result: '', duration_ms: durationMs, duration_api_ms: durationMs - 800, num_turns: 3, total_cost_usd: cost + s.seq * 0.00001, usage: {}, modelUsage: {}, permission_denials: [], errors: s.abort ? ['Interrupted'] : [], session_id: s.id, uuid: rid('r') });
+    if (s.abort) {
+      // the real SDK's shape after an interrupt (see packages/server/test/fixtures/real-interrupt-stream.json)
+      this.emit(s, { type: 'user', uuid: rid('u'), session_id: s.id, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user]' }] } });
+      this.emit(s, { type: 'result', subtype: 'error_during_execution', is_error: true, duration_ms: durationMs, duration_api_ms: 0, num_turns: 2, stop_reason: null, terminal_reason: 'aborted_streaming', total_cost_usd: cost + s.seq * 0.00001, usage: {}, modelUsage: {}, permission_denials: [], errors: ['[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null'], session_id: s.id, uuid: rid('r') });
+    } else {
+      this.emit(s, { type: 'result', subtype: 'success', is_error: false, result: '', duration_ms: durationMs, duration_api_ms: durationMs - 800, num_turns: 3, total_cost_usd: cost + s.seq * 0.00001, usage: {}, modelUsage: {}, permission_denials: [], errors: [], session_id: s.id, uuid: rid('r') });
+    }
     s.abort = false;
     this.state(s, { status: 'idle' });
   }

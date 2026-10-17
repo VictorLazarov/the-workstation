@@ -14,10 +14,12 @@
  *   "plan"   -> ExitPlanMode plan review
  *   "slow"   -> ~6s of streamed text, interruptible
  *   "error"  -> result with is_error
+ *   "401"    -> fatal provider error (api_retry authentication_failed; the host interrupts the turn)
  *   anything else -> short streamed markdown reply (with a thinking block)
  * Set WORKSTATION_MOCK_SPEED=0 for no delays (tests), 2 for double speed, default 1.
  */
 import { randomUUID } from 'node:crypto';
+import os from 'node:os';
 import type { CanUseTool, ModelInfo, Options, PermissionUpdate, SDKSessionInfo, SDKUserMessage, SessionMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
 
@@ -45,6 +47,8 @@ const speed = () => {
 };
 const sleep = (ms: number) => (speed() <= 0 ? Promise.resolve() : new Promise<void>((r) => setTimeout(r, ms / speed())));
 
+const REJECTED_BY_INTERRUPT = "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.";
+
 class AsyncSignal {
   private waiters: Array<() => void> = [];
   fire() { const w = this.waiters; this.waiters = []; w.forEach((f) => f()); }
@@ -56,6 +60,7 @@ class MockQuery implements QueryHandle {
   private permissionMode: string;
   private model: string;
   private aborted = false;
+  private abortedInTool = false;
   private abortCtl = new AbortController();
   private closed = false;
   private mcp = new Map<string, boolean>([['mock-mcp', true], ['docs', true]]);
@@ -234,7 +239,9 @@ class MockQuery implements QueryHandle {
     const res = await cb(tool, input, { signal: this.abortCtl.signal, toolUseID, requestId: randomUUID(), ...extra });
     if (res && res.behavior === 'allow') return { ok: true as const, input: (res.updatedInput ?? input) as Json };
     const d = res as { message?: string; interrupt?: boolean } | null;
-    return { ok: false as const, message: d?.message ?? 'denied', interrupt: !!d?.interrupt };
+    // Real SDK shape: a Stop while a prompt is open rejects the tool with this fixed text (not our "Interrupted by user" message).
+    if (this.aborted || d?.interrupt) { this.abortedInTool = true; return { ok: false as const, message: REJECTED_BY_INTERRUPT, interrupt: true }; }
+    return { ok: false as const, message: d?.message ?? 'denied', interrupt: false };
   }
 
   // ───── scenarios ─────
@@ -254,6 +261,7 @@ class MockQuery implements QueryHandle {
     else if (has('ask')) final = yield* this.askScenario();
     else if (has('plan')) final = yield* this.planScenario();
     else if (has('slow')) final = yield* this.slowScenario();
+    else if (has('401', 'unauthorized')) { yield* this.authFailureScenario(); return ''; }
     else if (has('error')) return '__error__';
     else {
       final = `Here is a **mock** reply to: "${text.slice(0, 200)}"${hasImages ? `\n\nI can see ${hasImages} attached image${hasImages > 1 ? 's' : ''}.` : ''}\n\n- deterministic output\n- streamed in small chunks\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`\n`;
@@ -363,6 +371,11 @@ class MockQuery implements QueryHandle {
   }
 
   private async *planScenario(): AsyncGenerator<unknown, string> {
+    // Like the real agent in plan mode: the plan is first written to a file under ~/.claude/plans (outside the project, no prompt).
+    const planFile = `${os.homedir()}/.claude/plans/plan-mock-fixture-quill.md`;
+    const wid = this.toolId();
+    yield* this.step([{ type: 'text', text: 'Writing the plan file.' }, { type: 'tool_use', id: wid, name: 'Write', input: { file_path: planFile, content: '# Plan\n\n1. Add farewell\n2. Test it\n3. Run npm test\n' } }]);
+    yield this.toolResult(wid, `File created successfully at: ${planFile}`, false, { type: 'create', filePath: planFile, content: '# Plan\n\n1. Add farewell\n2. Test it\n3. Run npm test\n', structuredPatch: [], originalFile: null });
     const id = this.toolId();
     const plan = '## Plan\n\n1. Add `farewell` export to `src/example.ts`\n2. Cover it with a unit test\n3. Run `npm test`\n\n**Risk:** low.';
     yield* this.step([{ type: 'thinking', thinking: 'I should present a plan for approval before editing anything.' }, { type: 'tool_use', id, name: 'ExitPlanMode', input: { plan } }]);
@@ -378,7 +391,14 @@ class MockQuery implements QueryHandle {
     return text;
   }
 
+  /** A fatal provider error as the real CLI reports it: an api_retry (401 authentication_failed); the host then interrupts the turn. */
+  private async *authFailureScenario(): AsyncGenerator<unknown, void> {
+    yield this.m({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 577, error_status: 401, error: 'authentication_failed' });
+    await Promise.race([this.wake.wait(), sleep(5000)]);
+  }
+
   private async *finish(text: string): AsyncGenerator<unknown, string> {
+    if (this.aborted) return text; // the real agent says nothing more after a Stop
     yield* this.step([{ type: 'text', text }]);
     return text;
   }
@@ -425,6 +445,16 @@ class MockQuery implements QueryHandle {
     });
   }
 
+  /** The result the real SDK sends after an interrupt (captured from a real run: test/fixtures/real-interrupt-*.json). */
+  private interruptedResult(start: number, inTool: boolean) {
+    return this.m({
+      type: 'result', subtype: 'error_during_execution', is_error: true, duration_ms: Date.now() - start, duration_api_ms: 0,
+      num_turns: this.num_turns, stop_reason: inTool ? 'tool_use' : null, total_cost_usd: 0.0123, terminal_reason: inTool ? 'aborted_tools' : 'aborted_streaming',
+      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }, modelUsage: {},
+      permission_denials: [], errors: [`[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=${inTool ? 'tool_use' : 'null'}`],
+    });
+  }
+
   private async *run(): AsyncGenerator<unknown, void> {
     let inited = false;
     for await (const um of this.params.prompt) {
@@ -451,8 +481,13 @@ class MockQuery implements QueryHandle {
       }
       if (this.closed) return;
       if (this.aborted) {
-        yield this.resultMsg('error_during_execution', 'Interrupted by user', start, true);
-        this.aborted = false;
+        const inTool = this.abortedInTool;
+        const note = { role: 'user', content: [{ type: 'text', text: inTool ? '[Request interrupted by user for tool use]' : '[Request interrupted by user]' }] };
+        const nuuid = randomUUID();
+        this.record('user', note, nuuid);
+        yield { type: 'user', message: note, parent_tool_use_id: null, session_id: this.sessionId, uuid: nuuid, timestamp: new Date().toISOString() };
+        yield this.interruptedResult(start, inTool);
+        this.aborted = false; this.abortedInTool = false;
       } else if (errored) yield this.resultMsg('error_during_execution', out, start, true);
       else yield this.resultMsg('success', out, start);
     }

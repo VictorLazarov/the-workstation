@@ -31,14 +31,25 @@ export interface UserItem {
   failed?: boolean;
   ts: number;
 }
-export interface NoticeItem { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; ts: number }
+export type NoticeAction = 'settings' | 'retry';
+export interface NoticeItem { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; ts: number; code?: string; action?: NoticeAction }
+/**
+ * How a turn ended, from structural signals only (never from error text):
+ * ok; stopped (the user interrupted: our own interrupt request, or the SDK's aborted_* terminal reason with no error reported);
+ * reported (an error event already told the user why: shown once as a notice, not again as a banner); error (anything else).
+ */
+export type ResultOutcome = 'ok' | 'stopped' | 'reported' | 'error';
 export interface ResultItem {
   kind: 'result';
   id: string;
   ok: boolean;
+  outcome: ResultOutcome;
   subtype: string;
   text?: string;
   errors?: string[];
+  /** the human-readable failure for outcome 'error' (SDK diagnostics removed; those go to the console) */
+  message?: string;
+  action?: NoticeAction;
   costUsd: number;
   turnCostUsd: number;
   durationMs: number;
@@ -57,6 +68,8 @@ export interface ToolResult {
   content: string;
   isError: boolean;
   images: ImageRef[];
+  /** the step was cut short by the user's Stop (its error result is not a failure) */
+  stopped?: boolean;
   /** SDK `tool_use_result` (structured patch etc.), when provided */
   raw?: unknown;
 }
@@ -109,6 +122,10 @@ export interface Conversation {
   todos: Todo[] | null;
   plan: string | null;
   seq: number;
+  /** the user pressed Stop (or the server reported our interrupt) during the running turn; cleared when the turn's result arrives */
+  interruptRequested: boolean;
+  /** an `error` event already reported why the running turn failed; cleared when the result arrives */
+  turnError: string | null;
 }
 
 export interface PermissionRequest {

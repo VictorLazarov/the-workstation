@@ -75,11 +75,22 @@ function Img({ im }: { im: ImageRef }) {
   return src ? <img className="msg-img" src={src} alt={im.name ?? 'attached image'} /> : null;
 }
 
-function ResultFooter({ item }: { item: ResultItem }) {
-  if (!item.ok) {
-    const interrupted = (item.errors ?? []).some((e) => /interrupt|abort/i.test(e));
-    if (interrupted) return <div className="result-line"><Icon name="stop" size={11} fill /> Stopped</div>;
-    return <div className="banner error"><Icon name="alert" size={15} /><div><b>{item.subtype === 'error_max_turns' ? 'Reached the turn limit' : 'Something went wrong'}</b>{(item.text || item.errors?.length) && <div className="banner-sub">{truncate(item.text || item.errors!.join('; '), 300)}</div>}</div></div>;
+function ErrorAction({ action, sessionId }: { action?: 'settings' | 'retry'; sessionId: string }) {
+  if (action === 'settings') return <button type="button" className="link-btn banner-action" onClick={() => useUi.getState().set({ settingsOpen: true })}>Open Settings</button>;
+  if (action === 'retry') return <button type="button" className="link-btn banner-action" onClick={() => useSessions.getState().retryLast(sessionId)}>Retry</button>;
+  return null;
+}
+
+function ResultFooter({ item, sessionId }: { item: ResultItem; sessionId: string }) {
+  if (item.outcome === 'stopped') return <div className="result-line stopped"><Icon name="stop" size={11} fill /> Stopped</div>;
+  if (item.outcome === 'reported') return null; // an error notice above already told the user why, with its action
+  if (item.outcome === 'error') {
+    return (
+      <div className="banner error"><Icon name="alert" size={15} />
+        <div><b>{item.subtype === 'error_max_turns' ? 'Reached the turn limit' : 'Something went wrong'}</b>{item.message && item.message !== 'Reached the turn limit' && <div className="banner-sub">{truncate(item.message, 300)}</div>}</div>
+        <ErrorAction action={item.action} sessionId={sessionId} />
+      </div>
+    );
   }
   if (item.text && item.turns === 0 && !item.durationMs) return null;
   return (
@@ -136,8 +147,10 @@ export const RowList = memo(function RowList({ conv, laneKey, sessionId, cwd, se
           {!r.streaming && !nested && r.block.text.length > 80 && <div className="msg-actions assistant"><CopyButton text={r.block.text} label="Copy response" /></div>}
         </div>,
       ); break;
-      case 'notice': flush(); out.push(<div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>); break;
-      case 'result': flush(); if (!nested) out.push(<ResultFooter key={r.key} item={r.item} />); break;
+      case 'notice': flush(); out.push(r.item.level === 'error'
+        ? <div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.item.text}</div><ErrorAction action={r.item.action} sessionId={sessionId} /></div>
+        : <div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>); break;
+      case 'result': flush(); if (!nested) out.push(<ResultFooter key={r.key} item={r.item} sessionId={sessionId} />); break;
       case 'error': flush(); out.push(<div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.text}</div></div>); break;
     }
   }

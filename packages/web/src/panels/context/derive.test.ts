@@ -8,8 +8,8 @@ function conv(used?: number) {
   c.lanes[''] = { live: null, items: [
     { kind: 'user', id: 'u', text: 'x'.repeat(3600), images: [], ts: 1 },
     { kind: 'assistant', id: 'a', msgId: 'm', ts: 1, blocks: [{ type: 'text', text: 'y'.repeat(7200) }, { type: 'tool_use', id: 't', name: 'Read', input: { file_path: '/a' }, final: true }] },
-    { kind: 'result', id: 'r1', ok: true, subtype: 'success', costUsd: 0.1, turnCostUsd: 0.1, durationMs: 1, turns: 1, ts: 1 },
-    { kind: 'result', id: 'r2', ok: true, subtype: 'success', costUsd: 0.3, turnCostUsd: 0.2, durationMs: 1, turns: 2, ts: 1 },
+    { kind: 'result', id: 'r1', ok: true, outcome: 'ok', subtype: 'success', costUsd: 0.1, turnCostUsd: 0.1, durationMs: 1, turns: 1, ts: 1 },
+    { kind: 'result', id: 'r2', ok: true, outcome: 'ok', subtype: 'success', costUsd: 0.3, turnCostUsd: 0.2, durationMs: 1, turns: 2, ts: 1 },
   ] };
   c.toolResults = { t: { content: 'z'.repeat(18000), isError: false, images: [] } };
   return c;

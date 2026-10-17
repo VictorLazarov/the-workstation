@@ -1,8 +1,8 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import { create } from 'zustand';
 import { api } from '../../lib/api';
 import { useSessions } from '../../store/sessions';
-import { absPath, resolveBranch, type GitSnapshot } from './derive';
+import { absPath, projectChanges, resolveBranch, type GitSnapshot, type ProjectChanges } from './derive';
 import { parseGitDiff } from './gitdiff';
 
 export interface GitState extends GitSnapshot { loading: boolean; loaded: boolean; error?: string; branch?: string; at: number }
@@ -91,4 +91,13 @@ export function useBranch(id: string): string | undefined {
   const recorded = useSessions((s) => s.sessions[id]?.branch);
   const git = useGit(selectGit(id));
   return resolveBranch({ worktree, recorded, git });
+}
+
+/** The shared, memoised project-changes view of a session (see projectChanges). */
+export function useProjectChanges(id: string, cwd: string): ProjectChanges & { git: GitState } {
+  const conv = useSessions((s) => s.sessions[id]?.conv);
+  const worktree = useSessions((s) => s.sessions[id]?.conv.init?.worktree?.path);
+  const git = useGit(selectGit(id));
+  const view = useMemo(() => (conv ? projectChanges(conv, cwd, git.loaded ? git : null, worktree) : { files: [], count: 0, added: 0, removed: 0, commitFiles: [], outputs: [], planFiles: [] }), [conv, cwd, git, worktree]);
+  return { ...view, git };
 }

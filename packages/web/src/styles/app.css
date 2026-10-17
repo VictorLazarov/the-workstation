@@ -231,10 +231,12 @@ input, textarea, select { font: inherit; color: inherit; }
 /* Toasts never sit over the composer, the inspector tabs or the commit box. Sidebar docked: bottom-left inside the sidebar column,
    above its footer. Otherwise (sidebar hidden or a drawer): top-right of the conversation column, under the topbar.
    --sidebar-dock / --inspector-dock are set on .app, which is where Toasts renders. */
-.toasts { position: fixed; top: calc(var(--topbar-h) + 8px); right: calc(var(--inspector-dock, 0px) + 12px); display: grid; gap: 6px; z-index: 200; width: min(340px, calc(100vw - var(--sidebar-dock, 0px) - var(--inspector-dock, 0px) - 24px)); pointer-events: none; } .toasts > * { pointer-events: auto; }
+.toasts { position: fixed; top: calc(var(--topbar-h) + 8px); right: calc(var(--inspector-dock, 0px) + 12px); display: grid; gap: 6px; z-index: 110; width: min(340px, calc(100vw - var(--sidebar-dock, 0px) - var(--inspector-dock, 0px) - 24px)); pointer-events: none; } .toasts > * { pointer-events: auto; }
 .app[data-sidebar='docked'] .toasts { top: auto; right: auto; left: 8px; bottom: calc(var(--ctl-h) + 18px); width: calc(var(--sidebar-w) - 16px); }
 .toast { display: flex; align-items: flex-start; gap: 8px; padding: 7px 4px 7px 10px; background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); box-shadow: var(--shadow-md); animation: slide 0.2s ease-out; }
 @keyframes slide { from { opacity: 0; transform: translateY(-6px); } }
+.toast-count { margin-left: 6px; font-weight: 600; font-size: var(--fs-xs); color: var(--muted); font-variant-numeric: tabular-nums; }
+.toast-more { justify-self: start; font-size: var(--fs-xs); color: var(--muted); background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
 .toast > .icon { margin-top: 2px; } .toast-text { flex: 1; min-width: 0; display: grid; gap: 1px; font-size: var(--fs-base); } .toast-text span { color: var(--muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .toast-error > .icon { color: var(--danger); } .toast-success > .icon { color: var(--ok); } .toast-attention > .icon { color: var(--accent); } .toast-attention { border-left: 3px solid var(--accent-solid); }
 .conn-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 3px 12px; background: var(--warn-soft); color: var(--text); font-size: var(--fs-sm); border-bottom: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border)); }
@@ -268,6 +270,10 @@ input, textarea, select { font: inherit; color: inherit; }
   .composer-wrap { padding-left: 10px; padding-right: 10px; }
   .conv-inner { padding-left: 12px; padding-right: 12px; }
   .msg-user { max-width: 94%; }
+}
+@media (max-width: 800px) {
+  /* narrow: one toast, top-centre under the topbar: never over Allow/Deny, the composer or its suggestions (all at the bottom) */
+  .toasts, .app[data-sidebar='docked'] .toasts { top: calc(var(--topbar-h) + 6px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); }
 }
 @media (max-width: 700px) { .palette-btn .kbd { display: none; } .palette-btn { padding: 0 8px; } }
 

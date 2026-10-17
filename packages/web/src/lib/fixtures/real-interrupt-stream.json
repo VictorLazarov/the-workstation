@@ -1,0 +1,624 @@
+[
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 3,
+  "message": {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": "Write a very long essay about lighthouses, at least 2000 words."
+   },
+   "parent_tool_use_id": null,
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "clientMsgId": "c1",
+   "origin": "workstation"
+  }
+ },
+ {
+  "type": "state",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "state": {
+   "status": "running",
+   "model": "claude-haiku-5-5",
+   "permissionMode": "default"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 4,
+  "message": {
+   "type": "command_lifecycle",
+   "command_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "state": "queued",
+   "uuid": "39324ae0-a09c-4834-8ee3-f813af4ff292",
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 5,
+  "message": {
+   "type": "command_lifecycle",
+   "command_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "state": "started",
+   "uuid": "f5abf2a2-811a-4e2a-9800-6acb1997c5f0",
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 6,
+  "message": {
+   "type": "system",
+   "subtype": "init",
+   "cwd": "/tmp/ws-real-RCXJ62/proj",
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "tools": [
+    "Task",
+    "Artifact",
+    "ArtifactComments",
+    "ArtifactData"
+   ],
+   "mcp_servers": [],
+   "model": "claude-haiku-5-5",
+   "permissionMode": "default",
+   "slash_commands": [
+    "session-start-hook",
+    "deep-research",
+    "cowork-plugin-management:cowork-plugin-customizer",
+    "cowork-plugin-management:create-cowork-plugin"
+   ],
+   "terminal_slash_commands": [
+    "doctor",
+    "color",
+    "focus",
+    "reload-plugins"
+   ],
+   "apiKeySource": "none",
+   "claude_code_version": "2.1.302",
+   "output_style": "default",
+   "agents": [
+    "claude",
+    "claude-code-guide",
+    "Explore",
+    "general-purpose"
+   ],
+   "skills": [
+    "session-start-hook",
+    "deep-research",
+    "cowork-plugin-management:cowork-plugin-customizer",
+    "cowork-plugin-management:create-cowork-plugin"
+   ],
+   "plugins": [
+    {
+     "name": "cowork-plugin-management",
+     "path": "/root/.claude/plugins/synced/b561c088-ec63-48e0-83fc-a14d707218ea_004e4185-9377-49b6-9984-a4a0f4708844/cowork-plugin-management",
+     "source": "cowork-plugin-management@synced",
+     "version": "0.2.2"
+    },
+    {
+     "name": "cc-plugin-agents-md",
+     "path": "builtin",
+     "source": "cc-plugin-agents-md@builtin"
+    },
+    {
+     "name": "cc-plugin-telemetry",
+     "path": "builtin",
+     "source": "cc-plugin-telemetry@builtin"
+    },
+    {
+     "name": "cc-plugin-plugin-authoring",
+     "path": "builtin",
+     "source": "cc-plugin-plugin-authoring@builtin"
+    }
+   ],
+   "capabilities": [
+    "interrupt_receipt_v1",
+    "interrupt_cancel_queued_v1",
+    "interrupt_send_now_v1",
+    "msg_lifecycle_v1",
+    "request_marker_lists_v1",
+    "queued_notifications",
+    "third_party_notification_caution",
+    "sdk_mcp_tools_list_changed",
+    "sdk_mcp_manifests",
+    "mcp_read_resource_v1",
+    "mcp_tool_ui_meta_v1",
+    "ui_surface_v1",
+    "mcp_call_result_not_for_model_v1"
+   ],
+   "analytics_disabled": false,
+   "product_feedback_disabled": false,
+   "uuid": "02956b54-bbc5-4827-8b58-ea27ebe0c3d6",
+   "scratchpad_path": "/tmp/claude-0/-tmp-ws-real-RCXJ62-proj/f843ff7f-3d6c-4ade-98b3-1ff06319d1f5/scratchpad",
+   "original_cwd": "/tmp/ws-real-RCXJ62/proj",
+   "additional_directories": [],
+   "messaging_socket_path": "/tmp/cc-socks/31307.sock",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "per_turn_effort_active": true,
+   "view_mode": "default",
+   "startup_timing": {
+    "entrypoint": "remote_desktop",
+    "warm_spare_claimed": false,
+    "plugin_full_loads": 1,
+    "user_context_builds": 1,
+    "sdk_mcp_dial_runs": 0,
+    "sdk_mcp_servers_dialed": 0,
+    "flag_fetch_kick": "not_asked_warm",
+    "flag_fetch_kick_judged_at_ms": 254,
+    "warm_wake_early_fetch": false,
+    "kick_on_warm_cache": false,
+    "hooks_init_source": "startup",
+    "plugins_sync_round": "ok",
+    "phases": {
+     "node_boot_ms": 141,
+     "spawn_to_exec_ms": 3080595,
+     "settings_load_ms": 0,
+     "pre_action_mdm_keychain_ms": 1,
+     "agent_proxy_inputs_ms": 18,
+     "agent_proxy_ca_fetch_ms": 42,
+     "agent_proxy_trust_write_ms": 2,
+     "agent_proxy_relay_up_ms": 0,
+     "agent_proxy_init_ms": 77,
+     "pre_action_init_ms": 104,
+     "pre_action_client_data_url_ms": 0,
+     "pre_action_migrations_ms": 0,
+     "pre_action_managed_settings_ms": 4,
+     "pre_action_ms": 117,
+     "permission_context_ms": 8,
+     "setup_import_ms": 2,
+     "setup_uds_dir_ms": 26,
+     "setup_uds_listen_ms": 1,
+     "setup_uds_publish_ms": 23,
+     "setup_uds_messaging_ms": 52,
+     "setup_hooks_snapshot_ms": 0,
+     "setup_file_watcher_ms": 0,
+     "setup_release_notes_ms": 4,
+     "setup_ms": 58,
+     "skills_load_ms": 107,
+     "growthbook_init_ms": 92,
+     "tools_commands_load_ms": 18,
+     "model_catalog_decision_ms": 0,
+     "mcp_connect_ms": 1,
+     "print_import_ms": 7,
+     "headless_prologue_ms": 8,
+     "hooks_init_ms": 35,
+     "initial_messages_load_ms": 14,
+     "headless_post_load_ms": 3,
+     "input_ready_ms": 524,
+     "input_ready_from_spawn_ms": 3081120,
+     "first_message_read_ms": 593,
+     "first_message_read_from_spawn_ms": 3081188,
+     "sdk_mcp_update_ms": 1,
+     "skills_sync_wait_ms": 278,
+     "skills_sync_commands_refresh_ms": 26,
+     "plugins_sync_install_ms": 7,
+     "plugins_sync_mcp_ms": 2,
+     "plugin_state_refresh_inline_ms": 47,
+     "first_message_handle_ms": 360,
+     "first_message_handle_cpu_ms": 137,
+     "first_message_handle_loop_lag_ms": 5,
+     "mcp_prewait_ms": 3,
+     "qe_system_prompt_ms": 6,
+     "prompt_submit_hooks_ms": 3,
+     "qe_plugin_skills_load_ms": 2,
+     "init_emit_ms": 2
+    },
+    "time_origin_ms": 1792269180914.8555,
+    "phase_start_ms": {
+     "node_boot_ms": 0,
+     "spawn_to_exec_ms": -3080596,
+     "settings_load_ms": 142,
+     "pre_action_mdm_keychain_ms": 148,
+     "agent_proxy_inputs_ms": 175,
+     "agent_proxy_ca_fetch_ms": 193,
+     "agent_proxy_trust_write_ms": 235,
+     "agent_proxy_relay_up_ms": 237,
+     "agent_proxy_init_ms": 174,
+     "pre_action_init_ms": 149,
+     "pre_action_client_data_url_ms": 253,
+     "pre_action_migrations_ms": 255,
+     "pre_action_managed_settings_ms": 255,
+     "pre_action_ms": 148,
+     "permission_context_ms": 269,
+     "setup_import_ms": 279,
+     "setup_uds_dir_ms": 286,
+     "setup_uds_listen_ms": 312,
+     "setup_uds_publish_ms": 313,
+     "setup_uds_messaging_ms": 284,
+     "setup_hooks_snapshot_ms": 338,
+     "setup_file_watcher_ms": 338,
+     "setup_release_notes_ms": 339,
+     "setup_ms": 285,
+     "skills_load_ms": 284,
+     "growthbook_init_ms": 344,
+     "tools_commands_load_ms": 442,
+     "model_catalog_decision_ms": 461,
+     "mcp_connect_ms": 477,
+     "print_import_ms": 478,
+     "headless_prologue_ms": 486,
+     "hooks_init_ms": 473,
+     "initial_messages_load_ms": 494,
+     "headless_post_load_ms": 508,
+     "input_ready_ms": 0,
+     "input_ready_from_spawn_ms": -3080596,
+     "first_message_read_ms": 0,
+     "first_message_read_from_spawn_ms": -3080596,
+     "sdk_mcp_update_ms": 593,
+     "skills_sync_wait_ms": 594,
+     "skills_sync_commands_refresh_ms": 872,
+     "plugin_state_refresh_inline_ms": 905,
+     "first_message_handle_ms": 593,
+     "mcp_prewait_ms": 954,
+     "qe_system_prompt_ms": 964,
+     "prompt_submit_hooks_ms": 990,
+     "qe_plugin_skills_load_ms": 998,
+     "init_emit_ms": 1000
+    }
+   },
+   "user_message_uuids": [
+    "207fe5d9-dfda-4068-bd65-401020459e1f"
+   ]
+  }
+ },
+ {
+  "type": "state",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "state": {
+   "status": "running",
+   "model": "claude-haiku-5-5",
+   "permissionMode": "default"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 7,
+  "message": {
+   "type": "system",
+   "subtype": "status",
+   "status": "requesting",
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "uuid": "bc1b43bd-8501-4be4-8644-5de5b4e30bec",
+   "user_message_uuids": [
+    "207fe5d9-dfda-4068-bd65-401020459e1f"
+   ]
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 8,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "message_start",
+    "message": {
+     "model": "claude-haiku-5-5",
+     "id": "msg_011Cg8SrKHjahpvFumAyohPP",
+     "type": "message",
+     "role": "assistant",
+     "content": [],
+     "container": null,
+     "stop_reason": null,
+     "stop_sequence": null,
+     "stop_details": null,
+     "usage": {
+      "input_tokens": 2,
+      "cache_creation_input_tokens": 9338,
+      "cache_read_input_tokens": 29106,
+      "cache_creation": {
+       "ephemeral_5m_input_tokens": 0,
+       "ephemeral_1h_input_tokens": 9338
+      },
+      "output_tokens": 6,
+      "service_tier": "standard",
+      "inference_geo": "global",
+      "speed": "standard"
+     },
+     "input_transformations": [],
+     "diagnostics": null,
+     "context_management": null
+    }
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "968fe87f-81ad-489c-af2b-09b65a62aba7",
+   "ttft_ms": 1398,
+   "thinking_display": "updates",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP",
+   "user_message_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "user_message_uuids": [
+    "207fe5d9-dfda-4068-bd65-401020459e1f"
+   ]
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 9,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "content_block_start",
+    "index": 0,
+    "content_block": {
+     "type": "thinking",
+     "thinking": "",
+     "signature": ""
+    }
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "07355b7d-fc19-4bd8-ac7c-a3e6d9e39c3d",
+   "thinking_display": "updates",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 10,
+  "message": {
+   "type": "system",
+   "subtype": "thinking_tokens",
+   "estimated_tokens": 50,
+   "estimated_tokens_delta": 50,
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "uuid": "7e8c5353-2b34-43a1-b6b7-4c085ecccb6a",
+   "user_message_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 11,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "content_block_delta",
+    "index": 0,
+    "delta": {
+     "type": "thinking_delta",
+     "thinking": "",
+     "estimated_tokens": 50
+    }
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "1bf6946b-27d0-4d6d-8eff-bd297ff67f7d",
+   "thinking_display": "updates",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 12,
+  "message": {
+   "type": "system",
+   "subtype": "thinking_tokens",
+   "estimated_tokens": 200,
+   "estimated_tokens_delta": 150,
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "uuid": "5a5c9036-c12f-461d-8306-bb3591e6b121",
+   "user_message_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 13,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "content_block_delta",
+    "index": 0,
+    "delta": {
+     "type": "thinking_delta",
+     "thinking": "",
+     "estimated_tokens": 150
+    }
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "5bcd225f-8e9b-473e-bda0-c7d4621c8e46",
+   "thinking_display": "updates",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 14,
+  "message": {
+   "type": "user",
+   "message": {
+    "role": "user",
+    "content": [
+     {
+      "type": "text",
+      "text": "[Request interrupted by user]"
+     }
+    ]
+   },
+   "parent_tool_use_id": null,
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "uuid": "cab75db6-7c7a-487a-9509-8d5c9891ae87",
+   "timestamp": "2026-10-17T20:33:05.077Z"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 15,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "content_block_stop",
+    "index": 0
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "792d6a7f-2d2f-451e-825f-9ed3f292887d",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 16,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "message_delta",
+    "context_management": null,
+    "delta": {
+     "container": null,
+     "stop_details": null,
+     "stop_reason": null,
+     "stop_sequence": null
+    },
+    "usage": {
+     "output_tokens_details": {
+      "thinking_tokens": 0
+     },
+     "cache_creation_input_tokens": 9338,
+     "cache_read_input_tokens": 29106,
+     "input_tokens": 2,
+     "iterations": [],
+     "output_tokens": 6,
+     "server_tool_use": {
+      "web_search_requests": 0,
+      "web_fetch_requests": 0
+     },
+     "fallback_credit": null
+    }
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "f7032a9d-371b-4997-b028-4eb2732fa303",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 17,
+  "message": {
+   "type": "stream_event",
+   "event": {
+    "type": "message_stop"
+   },
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "parent_tool_use_id": null,
+   "uuid": "f1a24cc2-cf21-472e-aba4-a85f82a3caee",
+   "api_message_id": "msg_011Cg8SrKHjahpvFumAyohPP"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 18,
+  "message": {
+   "duration_api_ms": 0,
+   "stop_reason": null,
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+   "total_cost_usd": 0,
+   "usage": {
+    "output_tokens_details": {
+     "thinking_tokens": 0
+    },
+    "input_tokens": 0,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0,
+    "output_tokens": 0,
+    "server_tool_use": {
+     "web_search_requests": 0,
+     "web_fetch_requests": 0
+    },
+    "service_tier": "standard",
+    "cache_creation": {
+     "ephemeral_1h_input_tokens": 0,
+     "ephemeral_5m_input_tokens": 0
+    },
+    "inference_geo": "",
+    "iterations": [],
+    "speed": "standard",
+    "fallback_credit": null
+   },
+   "modelUsage": {},
+   "permission_denials": [],
+   "terminal_reason": "aborted_streaming",
+   "fast_mode_state": "off",
+   "fast_mode_disabled_reason": "sdk_opt_in_required",
+   "subagent_stats": {
+    "spawned": 0,
+    "requested": {
+     "background": 0,
+     "foreground": 0,
+     "unset": 0
+    },
+    "started_in_background": 0,
+    "max_depth": 0,
+    "spawned_by_subagents": 0,
+    "completed": 0,
+    "failed": 0,
+    "killed": {
+     "parent": 0,
+     "user": 0,
+     "system": 0
+    },
+    "refused": {
+     "depth_limit": 0,
+     "concurrency_limit": 0,
+     "budget": 0
+    },
+    "by_type": {}
+   },
+   "safety_stops": 0,
+   "is_error": true,
+   "num_turns": 2,
+   "subtype": "error_during_execution",
+   "errors": [
+    "[ede_diagnostic] result_type=user last_content_type=n/a stop_reason=null"
+   ],
+   "user_message_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "type": "result",
+   "duration_ms": 3205,
+   "uuid": "5cd5754d-6b72-485a-b812-fe2fb87bc48f",
+   "user_message_uuids": [
+    "207fe5d9-dfda-4068-bd65-401020459e1f"
+   ],
+   "queued_turn_count": 0,
+   "result_index": 0
+  }
+ },
+ {
+  "type": "state",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "state": {
+   "status": "idle",
+   "model": "claude-haiku-5-5",
+   "permissionMode": "default"
+  }
+ },
+ {
+  "type": "sdk",
+  "sessionId": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5",
+  "seq": 19,
+  "message": {
+   "type": "command_lifecycle",
+   "command_uuid": "207fe5d9-dfda-4068-bd65-401020459e1f",
+   "state": "cancelled",
+   "uuid": "2e9136a0-3543-43ed-a779-ca1e159ce6d1",
+   "session_id": "f843ff7f-3d6c-4ade-98b3-1ff06319d1f5"
+  }
+ }
+]

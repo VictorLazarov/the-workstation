@@ -134,7 +134,8 @@
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 8px 0 0; font-size: var(--fs-sm); } .kv dt { color: var(--muted); } .kv dd { margin: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ── Overview: stacked collapsible cards ── */
-.ov { padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.ov { padding: 8px; display: flex; flex-direction: column; gap: 6px; overflow-x: hidden; min-width: 0; }
+.ov > *, .ovc-body, .ov-list > li { min-width: 0; }
 .ovc { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .ovc-head { width: 100%; display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px 0 8px; text-align: left; border-radius: var(--radius); color: var(--text); }
 .ovc.open > .ovc-head { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
@@ -152,8 +153,10 @@
 .ov-item { width: 100%; display: flex; align-items: center; gap: 8px; min-height: 26px; padding: 0 6px; margin: 0 -6px; width: calc(100% + 12px); border-radius: 6px; text-align: left; color: var(--text-2); font-size: var(--fs-base); }
 .ov-item.link:hover:not(:disabled) { background: var(--hover); color: var(--text); } .ov-item:disabled { cursor: default; opacity: 1; }
 .ov-item > .icon { color: var(--muted); }
-.ov-item-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
-.ov-dir { margin-left: 6px; color: var(--muted); font-size: var(--fs-xs); }
+.ov-item-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); display: flex; align-items: baseline; gap: 6px; }
+/* middle-ellipsis: the head shrinks and gets the "…", the tail (the end of the path) always stays */
+.mid-ell { display: inline-flex; min-width: 0; max-width: 100%; white-space: pre; } .mid-head { min-width: 0; overflow: hidden; text-overflow: ellipsis; } .mid-tail { flex: none; }
+.ov-item-main > .ov-name { flex: 0 1 auto; } .ov-item-main > .ov-dir { flex: 1 1 0; color: var(--muted); font-size: var(--fs-xs); }
 .ov-item-meta { flex: none; font-size: var(--fs-sm); color: var(--muted); display: inline-flex; align-items: center; gap: 4px; } .tnum { font-variant-numeric: tabular-nums; }
 .ov-item .spinner { border-top-color: var(--ai-fill); }
 .ov-changes .ov-go { margin-left: -2px; }

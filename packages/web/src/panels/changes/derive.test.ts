@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyConversation } from '../../lib/reducer';
 import type { Conversation } from '../../lib/types';
-import { absPath, matchesFocus, relFromCwd, mergeChanges, porcelainStatus, sessionFiles } from './derive';
+import { absPath, insideProject, isPlanFile, matchesFocus, projectChanges, projectRoots, relFromCwd, mergeChanges, porcelainStatus, sessionFiles } from './derive';
 import { hunkLabel, parseGitDiff, toSplitRows } from './gitdiff';
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
@@ -117,5 +117,57 @@ describe('mergeChanges', () => {
     expect(relFromCwd('/r/web/src/a.ts', '/r/web')).toBe('src/a.ts');
     expect(relFromCwd('/r/e2e/x.ts', '/r/web')).toBe('../e2e/x.ts');
     expect(matchesFocus({ path: '/p/a.ts' } as never, 'a.ts', '/p')).toBe(true);
+  });
+});
+
+/** N2 regression: the plan file the real agent writes under ~/.claude/plans (captured path from the real SDK walkthrough) */
+describe('projectChanges: only files inside the project are project changes', () => {
+  const PLAN = '/root/.claude/plans/plan-do-not-edit-lexical-quill.md';
+  const MEMORY = '/root/.claude/projects/-tmp-realrepo/memory/MEMORY.md';
+  function realConv(): Conversation {
+    const c = emptyConversation();
+    c.lanes[''] = { live: null, items: [{ kind: 'assistant', id: 'a1', msgId: 'm', ts: 1, blocks: [
+      { type: 'tool_use', id: 'p1', name: 'Write', input: { file_path: PLAN, content: '# Plan\n\n1. edit greet.ts\n2. add test\n3. done\n' }, final: true },
+      { type: 'tool_use', id: 'p2', name: 'Write', input: { file_path: MEMORY, content: 'remember\n' }, final: true },
+      { type: 'tool_use', id: 'p3', name: 'Edit', input: { file_path: '/tmp/realrepo/greet.ts', old_string: 'hello', new_string: 'hi' }, final: true },
+      { type: 'tool_use', id: 'p4', name: 'Write', input: { file_path: '/tmp/realrepo/greet.test.ts', content: 'a\nb\nc\n' }, final: true },
+    ] }] };
+    const ok = { content: 'ok', isError: false, images: [] };
+    c.toolResults = { p1: ok, p2: ok, p3: ok, p4: ok };
+    return c;
+  }
+  const git = {
+    isRepo: true, root: '/tmp/realrepo',
+    files: [{ path: 'greet.ts', index: ' ', worktree: 'M' }, { path: 'greet.test.ts', index: '?', worktree: '?' }],
+    diffs: { '/tmp/realrepo/greet.ts': { path: 'greet.ts', status: 'modified' as const, binary: false, lines: [], added: 1, removed: 1 } },
+  };
+
+  it('plan and memory files never appear in Changes; count, totals and the Commit list come from the same selector', () => {
+    const v = projectChanges(realConv(), '/tmp/realrepo', git);
+    expect(v.files.map((f) => f.rel)).toEqual(['greet.test.ts', 'greet.ts']);
+    expect(v.count).toBe(2);
+    expect(v.commitFiles).toEqual(['/tmp/realrepo/greet.test.ts', '/tmp/realrepo/greet.ts']);
+    expect(v.count).toBe(v.commitFiles.length); // Changes card count == what Commit stages
+    expect(v.files.some((f) => f.path.includes('/.claude/'))).toBe(false);
+  });
+
+  it('outputs exclude files outside the project; the plan file is reported separately', () => {
+    const v = projectChanges(realConv(), '/tmp/realrepo', git);
+    expect(v.outputs.map((f) => f.path)).toEqual(['/tmp/realrepo/greet.ts', '/tmp/realrepo/greet.test.ts']);
+    expect(v.planFiles.map((f) => f.path)).toEqual([PLAN]);
+  });
+
+  it('without git (not a repo) outside files still do not count', () => {
+    const v = projectChanges(realConv(), '/tmp/realrepo', null);
+    expect(v.files.map((f) => f.rel)).toEqual(['greet.test.ts', 'greet.ts']);
+  });
+
+  it('roots: cwd, git root and worktree; no roots known keeps everything', () => {
+    expect(insideProject('/tmp/realrepo/a.ts', ['/tmp/realrepo'])).toBe(true);
+    expect(insideProject('/tmp/realrepo-other/a.ts', ['/tmp/realrepo'])).toBe(false);
+    expect(insideProject('/root/.claude/plans/x.md', projectRoots({ cwd: '/tmp/realrepo', gitRoot: '/tmp', worktree: undefined }))).toBe(false);
+    expect(insideProject('/anything', [])).toBe(true);
+    expect(isPlanFile(PLAN)).toBe(true);
+    expect(isPlanFile('/tmp/realrepo/plans/x.md')).toBe(false);
   });
 });

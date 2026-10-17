@@ -4,7 +4,7 @@
  * subagent lanes (parent_tool_use_id), thinking, result/cost, API retries, tasks.
  */
 import type {
-  AssistantItem, Block, Conversation, ImageRef, Item, Lane, NoticeItem, ToolResult, ToolUseBlock, Todo, UserItem,
+  AssistantItem, Block, Conversation, ImageRef, Item, Lane, NoticeAction, NoticeItem, ResultOutcome, ToolResult, ToolUseBlock, Todo, UserItem,
 } from './types';
 import { MAIN_LANE } from './types';
 
@@ -14,7 +14,7 @@ export function emptyConversation(): Conversation {
   return {
     lanes: { [MAIN_LANE]: emptyLane() },
     toolResults: {}, toolProgress: {}, tasks: {}, retry: null, statusText: null,
-    usage: { costUsd: 0, turns: 0, durationMs: 0 }, todos: null, plan: null, seq: 0,
+    usage: { costUsd: 0, turns: 0, durationMs: 0 }, todos: null, plan: null, seq: 0, interruptRequested: false, turnError: null,
   };
 }
 
@@ -221,7 +221,7 @@ function onUser(c: Conversation, msg: AnyMsg) {
     const next = { ...c.toolResults };
     for (const tr of toolResults) {
       const { text, images } = resultText(tr.content);
-      const r: ToolResult = { content: text, isError: !!tr.is_error, images, raw: toolResults.length === 1 ? msg.tool_use_result : undefined };
+      const r: ToolResult = { content: text, isError: !!tr.is_error, images, raw: toolResults.length === 1 ? msg.tool_use_result : undefined, ...(tr.is_error && c.interruptRequested ? { stopped: true } : {}) };
       next[String(tr.tool_use_id)] = r;
     }
     c.toolResults = next;
@@ -242,10 +242,9 @@ function onUser(c: Conversation, msg: AnyMsg) {
     const args = /<command-args>([\s\S]*?)<\/command-args>/.exec(text)?.[1]?.trim() ?? '';
     text = `${cmd[1].trim()} ${args}`.trim();
   }
-  if (/^\[Request interrupted by user/.test(text)) {
-    pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level: 'info', text: 'Interrupted by user', ts: Date.now() });
-    return;
-  }
+  // "[Request interrupted by user…]" is also written when the SERVER stops a turn after a fatal API error (401, model_not_found), so it
+  // proves nothing about the user. How the turn ended is decided by its result message (see resultOutcome); this line is just dropped.
+  if (/^\[Request interrupted by user/.test(text)) return;
   const lane = laneOf(c, MAIN_LANE);
   const uuid: string | undefined = msg.uuid;
   if (uuid && lane.items.some((i) => i.kind === 'user' && i.uuid === uuid)) return;
@@ -260,23 +259,53 @@ function onUser(c: Conversation, msg: AnyMsg) {
   pushItem(c, MAIN_LANE, { kind: 'user', id: nid(c, 'u'), text, images, uuid, ts: Date.now() });
 }
 
+/** Diagnostic strings the SDK puts in `errors` ("[ede_diagnostic] result_type=user ..."): for logs, never for the UI. */
+const isDiagnostic = (e: string) => /^\[ede_diagnostic\]/.test(e);
+/** The SDK says why a turn ended early in `terminal_reason`: aborted_streaming / aborted_tools = cancelled by an interrupt. */
+const abortedTerminal = (msg: AnyMsg) => typeof msg.terminal_reason === 'string' && msg.terminal_reason.startsWith('aborted');
+
+/** How a result message ended the turn, from structural signals (subtype, our own interrupt request, error events, terminal_reason). */
+export function resultOutcome(c: Pick<Conversation, 'interruptRequested' | 'turnError'>, msg: AnyMsg): ResultOutcome {
+  if (msg.subtype === 'success' && !msg.is_error) return 'ok';
+  if (c.turnError) return 'reported';
+  if (msg.subtype === 'error_during_execution' && (c.interruptRequested || abortedTerminal(msg))) return 'stopped';
+  return 'error';
+}
+
+const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error']);
+/** The action that fits an error event: provider/model problems go to Settings, anything else can be retried. */
+export function errorAction(code?: string): NoticeAction { return code && SETTINGS_CODES.has(code) ? 'settings' : 'retry'; }
+
+const SUBTYPE_TEXT: Record<string, string> = {
+  error_max_turns: 'Reached the turn limit',
+  error_max_budget_usd: 'Reached the budget limit',
+  error_max_structured_output_retries: 'Could not produce the requested output format',
+  error_during_execution: 'The turn ended with an error',
+};
+
 function onResult(c: Conversation, msg: AnyMsg) {
-  const lane = laneOf(c, MAIN_LANE);
   const total = Number(msg.total_cost_usd ?? 0);
   const turnCost = Math.max(0, total - c.usage.costUsd);
-  const ok = msg.subtype === 'success' && !msg.is_error;
+  const outcome = resultOutcome(c, msg);
+  const errors: string[] | undefined = Array.isArray(msg.errors) ? msg.errors.map(String) : undefined;
+  const diag = (errors ?? []).filter(isDiagnostic);
+  if (diag.length) console.debug('[workstation] SDK result diagnostics:', diag.join('; '), { subtype: msg.subtype, terminal_reason: msg.terminal_reason, stop_reason: msg.stop_reason });
+  const text = typeof msg.result === 'string' ? msg.result : undefined;
+  const real = [...(errors ?? []).filter((e) => !isDiagnostic(e)), ...(text && outcome === 'error' ? [text] : [])].map((e) => e.trim()).filter(Boolean);
+  const message = outcome === 'error' ? (SUBTYPE_TEXT[String(msg.subtype)] && !real.length ? SUBTYPE_TEXT[String(msg.subtype)] : real.join('; ') || SUBTYPE_TEXT[String(msg.subtype)] || 'The turn ended with an error') : undefined;
   const item = {
-    kind: 'result' as const, id: nid(c, 'r'), ok, subtype: String(msg.subtype ?? ''),
-    text: typeof msg.result === 'string' ? msg.result : undefined,
-    errors: Array.isArray(msg.errors) ? msg.errors.map(String) : undefined,
+    kind: 'result' as const, id: nid(c, 'r'), ok: outcome === 'ok', outcome, subtype: String(msg.subtype ?? ''),
+    text, errors: errors?.filter((e) => !isDiagnostic(e)), message,
+    action: outcome === 'error' ? (/\b(401|403|authentication|api key|credential|model[ _]not[ _]found)\b/i.test(message ?? '') ? 'settings' as const : 'retry' as const) : undefined,
     costUsd: total, turnCostUsd: turnCost, durationMs: Number(msg.duration_ms ?? 0), turns: Number(msg.num_turns ?? 0), ts: Date.now(),
   };
   c.usage = { costUsd: total || c.usage.costUsd, turns: c.usage.turns + 1, durationMs: c.usage.durationMs + item.durationMs };
   c.retry = null;
   c.statusText = null;
+  c.interruptRequested = false;
+  c.turnError = null;
   for (const k of Object.keys(c.lanes)) if (c.lanes[k].live) setLane(c, k, { ...c.lanes[k], live: null });
   pushItem(c, MAIN_LANE, item, null);
-  void lane;
 }
 
 function onSystem(c: Conversation, msg: AnyMsg) {
@@ -354,18 +383,46 @@ export function foldMessages(msgs: unknown[], from: Conversation = emptyConversa
   return msgs.reduce<Conversation>((c, m) => applySdk(c, m), from);
 }
 
+/**
+ * The conversation-relevant part of a server message (the store's `sdk` / `error` / `permission.cancelled` cases), as one pure
+ * function so a captured real-SDK stream can be replayed through exactly the logic the app runs.
+ */
+export function applyServer(c: Conversation, m: { type: string; message?: unknown; sessionId?: string; code?: string }): Conversation {
+  switch (m.type) {
+    case 'sdk': return applySdk(c, m.message);
+    // a turn failure the server already explained (401, model_not_found, ...): one actionable notice
+    case 'error': return m.sessionId ? addTurnError(c, String((m as { message?: unknown }).message ?? 'Error'), m.code) : c;
+    // the server cancels open prompts when a turn is interrupted (from this tab or another): the error result that follows is a stop
+    case 'permission.cancelled': return c.turnError ? c : { ...c, interruptRequested: true };
+    default: return c;
+  }
+}
+
 /** Optimistic local user message (confirmed when the SDK echoes it back). */
 export function addLocalUser(prev: Conversation, id: string, text: string, images: ImageRef[] = []): Conversation {
   const c = { ...prev };
   const item: UserItem = { kind: 'user', id, text, images, pending: true, ts: Date.now() };
+  c.interruptRequested = false; c.turnError = null;
   pushItem(c, MAIN_LANE, item);
   return c;
 }
 
-export function addNotice(prev: Conversation, level: NoticeItem['level'], text: string): Conversation {
+export function addNotice(prev: Conversation, level: NoticeItem['level'], text: string, extra: { code?: string; action?: NoticeAction } = {}): Conversation {
   const c = { ...prev };
-  pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level, text, ts: Date.now() });
+  pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level, text, ts: Date.now(), ...extra });
   return c;
+}
+
+/** The server reported why the running turn failed (an `error` event): one actionable notice, remembered so the result does not repeat it. */
+export function addTurnError(prev: Conversation, text: string, code?: string): Conversation {
+  const c = addNotice(finishStreaming(prev), 'error', text, { code, action: errorAction(code) });
+  c.turnError = text;
+  return c;
+}
+
+/** The user pressed Stop (the client sent `interrupt`): the next error result is a stop, not a failure. */
+export function markInterruptRequested(prev: Conversation): Conversation {
+  return { ...finishStreaming(prev), interruptRequested: true };
 }
 
 /** Stop any in-flight streaming state (interrupt / session end / disconnect). */

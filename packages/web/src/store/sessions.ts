@@ -5,7 +5,7 @@ import type {
 } from '@workstation/protocol';
 import { api } from '../lib/api';
 import {
-  addLocalUser, addNotice, applySdk, emptyConversation, finishStreaming, foldMessages, markUserFailed,
+  addLocalUser, addNotice, applySdk, applyServer, emptyConversation, finishStreaming, foldMessages, lastItem, markInterruptRequested,
 } from '../lib/reducer';
 import type { Conversation, ImageRef, PermissionRequest } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
@@ -82,6 +82,8 @@ interface Store {
   /** Re-send queued messages that failed to reach the server (offline / session ended). */
   retryQueued: (id: string) => void;
   interrupt: (id: string) => void;
+  /** Re-send the last prompt (the Retry action of an error banner). */
+  retryLast: (id: string) => void;
   respondPermission: (id: string, requestId: string, decision: PermissionDecision) => void;
   setModel: (id: string, model?: string) => void;
   setMode: (id: string, mode: PermissionMode) => void;
@@ -141,7 +143,7 @@ export const useSessions = create<Store>((set, get) => {
     const s = get().sessions[id];
     const isActive = get().activeId === id && !document.hidden;
     if (isActive) return;
-    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, ttl: kind === 'attention' ? 10_000 : 5000 });
+    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, });
     if (document.hidden) platform.notify({ title, body: s?.title ?? body, tag: id, onClick: () => get().setActive(id) });
   };
 
@@ -238,9 +240,11 @@ export const useSessions = create<Store>((set, get) => {
           pendingStarts.delete(m.reqId);
           patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', m.message) }));
         } else if (m.sessionId && get().sessions[m.sessionId]) {
-          patch(m.sessionId, (s) => ({ conv: addNotice(finishStreaming(s.conv), 'error', m.message), failed: true, runtime: { ...s.runtime, status: s.runtime.status === 'closed' ? 'closed' : 'idle' } }));
+          // a turn failure: one actionable notice (Settings for provider/model problems, Retry otherwise); the result that follows is not shown again
+          patch(m.sessionId, (s) => ({ conv: applyServer(s.conv, m), failed: true, runtime: { ...s.runtime, status: s.runtime.status === 'closed' ? 'closed' : 'idle' } }));
         }
-        if (!w) toast({ kind: 'error', title: 'Server error', body: m.message });
+        // a session error is already in the conversation (with its action); only errors with no session context need a toast
+        if (!w && !(m.sessionId && get().sessions[m.sessionId])) toast({ kind: 'error', title: 'Server error', body: m.message });
         return;
       }
       case 'session.started': {
@@ -280,11 +284,17 @@ export const useSessions = create<Store>((set, get) => {
         const msg = m.message as { type?: string; subtype?: string; is_error?: boolean; result?: string; errors?: string[] };
         const conv = applySdk(s.conv, m.message);
         if (msg?.type === 'result') {
-          const isErr = msg.subtype !== 'success' || !!msg.is_error;
-          const interrupted = isErr && (msg.errors ?? []).some((e) => /interrupt|abort/i.test(String(e)));
+          // The outcome comes from structural signals decided in the reducer (see resultOutcome), never from error text.
+          const done = lastItem(conv);
+          const outcome = done?.kind === 'result' ? done.outcome : 'error';
+          const stopped = outcome === 'stopped';
+          const isErr = outcome === 'error' || outcome === 'reported';
           const unread = get().activeId !== m.sessionId || document.hidden;
-          patch(m.sessionId, () => ({ conv, failed: isErr && !interrupted, unread: unread && !interrupted, lastActivity: Date.now() }));
-          if (!interrupted) notifyUser(m.sessionId, isErr ? 'Session hit an error' : 'Session finished', isErr ? truncate(msg.result || msg.errors?.[0] || 'Error', 80) : 'Ready for your review', isErr ? 'attention' : 'success');
+          patch(m.sessionId, () => ({ conv, failed: isErr, unread: unread && !stopped, lastActivity: Date.now() }));
+          if (!stopped) {
+            const why = done?.kind === 'result' ? (done.message ?? s.conv.turnError ?? 'Error') : 'Error';
+            notifyUser(m.sessionId, isErr ? 'Session hit an error' : 'Session finished', isErr ? truncate(s.conv.turnError ?? why, 80) : 'Ready for your review', isErr ? 'attention' : 'success');
+          }
           void get().refreshSummaries();
         } else if (conv !== s.conv) {
           patch(m.sessionId, () => ({ conv, lastActivity: Date.now() }));
@@ -303,7 +313,8 @@ export const useSessions = create<Store>((set, get) => {
         return;
       }
       case 'permission.cancelled':
-        patch(m.sessionId, (s) => ({ perms: s.perms.filter((p) => p.requestId !== m.requestId) }));
+        // The server cancels pending prompts when the turn is interrupted (from this tab or another): the error result that follows is a stop.
+        patch(m.sessionId, (s) => ({ perms: s.perms.filter((p) => p.requestId !== m.requestId), conv: applyServer(s.conv, m) }));
         return;
       case 'state': {
         const s = get().sessions[m.sessionId];
@@ -494,7 +505,15 @@ export const useSessions = create<Store>((set, get) => {
 
     interrupt(id) {
       transport?.send({ type: 'interrupt', sessionId: id });
-      patch(id, (s) => ({ queue: [], conv: finishStreaming(s.conv) }));
+      // remember that WE asked: the error result that follows is a stop (neutral marker, idle session), not a failure
+      patch(id, (s) => ({ queue: [], conv: s.runtime.status === 'idle' ? finishStreaming(s.conv) : markInterruptRequested(s.conv) }));
+    },
+
+    retryLast(id) {
+      const s = get().sessions[id];
+      if (!s) return;
+      const items = s.conv.lanes[''].items;
+      for (let i = items.length - 1; i >= 0; i--) { const it = items[i]; if (it.kind === 'user' && it.text) { get().send(id, it.text); return; } }
     },
 
     respondPermission(id, requestId, decision) {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { formatDuration, formatTokens, relPath } from '../lib/utils';
 import { ls } from '../lib/storage';
 import { Icon, type IconName } from '../components/Icon';
-import { IconButton, Spinner } from '../components/ui';
+import { IconButton, MiddleEllipsis, Spinner, Stats } from '../components/ui';
 import { contextWindowFor } from '../lib/utils';
 import { projectName, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
@@ -10,8 +10,7 @@ import { useContextUsage } from '../store/context';
 import { registerPanel, type PanelProps } from './registry';
 import { mcpEnabled, mcpTone } from './context/derive';
 import { pctLabel, tone, usageView } from './context/usage';
-import { mergeChanges, sessionFiles, totals } from './changes/derive';
-import { selectGit, useBranch, useGit, useGitSync } from './changes/store';
+import { useBranch, useGitSync, useProjectChanges } from './changes/store';
 import { deriveTasks, isActive, sortTasks, type TaskRow } from './tasks/derive';
 import { scrollToToolCall } from './TasksPanel';
 import './panels.css';
@@ -180,27 +179,39 @@ function ConnectorsCard({ sessionId }: { sessionId: string }) {
 
 /* ───────── Outputs ───────── */
 function OutputsCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
-  const conv = useSessions((s) => s.sessions[sessionId]?.conv);
-  const files = useMemo(() => (conv ? sessionFiles(conv, cwd).reverse() : []), [conv, cwd]);
+  const { outputs, planFiles } = useProjectChanges(sessionId, cwd);
+  const files = useMemo(() => outputs.slice().reverse(), [outputs]);
   const [all, setAll] = useState(false);
   const shown = all ? files : files.slice(0, 5);
+  const count = files.length + planFiles.length;
   return (
-    <OvCard id="outputs" title="Outputs" icon="file-plus" aside={files.length || undefined}>
-      {files.length === 0 ? <p className="ov-note">Files Claude creates or edits appear here.</p> : (
+    <OvCard id="outputs" title="Outputs" icon="file-plus" aside={count || undefined}>
+      {count === 0 ? <p className="ov-note">Files Claude creates or edits appear here.</p> : (
         <>
           <ul className="ov-list">
             {shown.map((f) => {
               const rel = relPath(f.path, cwd);
+              const name = rel.split('/').pop() ?? rel;
+              const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
               return (
                 <li key={f.path}>
                   <button type="button" className="ov-item link" title={rel} onClick={() => openTab('files', f.path)}>
                     <Icon name={f.isNew ? 'file-plus' : 'file-edit'} size={14} />
-                    <span className="ov-item-main">{rel.split('/').pop()}<span className="ov-dir">{rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : ''}</span></span>
+                    <span className="ov-item-main"><MiddleEllipsis text={name} tail={10} className="ov-name" />{dir && <MiddleEllipsis text={dir} tail={12} className="ov-dir" />}</span>
                     {f.isNew ? <span className="pill pill-ok">new</span> : null}
                   </button>
                 </li>
               );
             })}
+            {planFiles.map((f) => (
+              <li key={f.path}>
+                <div className="ov-item" title={`Plan file (outside the project, not a change): ${f.path}`}>
+                  <Icon name="list" size={14} />
+                  <span className="ov-item-main"><MiddleEllipsis text={f.path.split('/').pop() ?? f.path} tail={10} className="ov-name" /></span>
+                  <span className="pill">Plan file</span>
+                </div>
+              </li>
+            ))}
           </ul>
           {files.length > 5 && <button type="button" className="ov-more" onClick={() => setAll(!all)}>{all ? 'Show less' : `Show ${files.length - 5} more`}</button>}
         </>
@@ -211,10 +222,8 @@ function OutputsCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
 
 /* ───────── Changes ───────── */
 function ChangesCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
-  const conv = useSessions((s) => s.sessions[sessionId]?.conv);
-  const git = useGit(selectGit(sessionId));
-  const files = useMemo(() => (conv ? mergeChanges(cwd, git.loaded ? git : null, sessionFiles(conv, cwd)) : []), [conv, cwd, git]);
-  const tot = totals(files);
+  // the same selector as the Changes tab, the tab badge and the Commit box: the count here is what Commit will stage
+  const { files, added, removed, git } = useProjectChanges(sessionId, cwd);
   return (
     <OvCard id="changes" title="Changes" icon="file-edit" aside={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : undefined}>
       {files.length === 0 ? <p className="ov-note">{git.loaded && git.isRepo ? 'Working tree is clean.' : 'No changes yet.'}</p> : (
@@ -222,7 +231,7 @@ function ChangesCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
           <button type="button" className="ov-item link ov-changes" onClick={() => openTab('changes')} title="Open the diff review">
             <Icon name="file-edit" size={14} />
             <span className="ov-item-main">Review changes</span>
-            <span className="stats"><span className="add">+{tot.added}</span><span className="del">−{tot.removed}</span></span>
+            <Stats added={added} removed={removed} />
             <Icon name="chevron-right" size={13} className="ov-go" />
           </button>
           {git.isRepo && (

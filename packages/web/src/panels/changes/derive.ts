@@ -133,6 +133,48 @@ export function mergeChanges(cwd: string, git: GitSnapshot | null, session: Sess
   return out.sort((a, b) => a.rel.localeCompare(b.rel));
 }
 
+/* ───────── what counts as a PROJECT change ───────── */
+const trimSlash = (p: string) => p.replace(/\/+$/, '');
+/** The directories that make up "the project" of a session: its cwd, the git checkout root, and its worktree. */
+export function projectRoots(i: { cwd: string; gitRoot?: string; worktree?: string; initCwd?: string }): string[] {
+  return [...new Set([i.cwd, i.gitRoot, i.worktree, i.initCwd].filter((x): x is string => !!x).map(trimSlash))];
+}
+/** Is `abs` inside one of the roots? (No roots known: everything counts, so nothing silently disappears.) */
+export function insideProject(abs: string, roots: string[]): boolean {
+  if (!roots.length) return true;
+  return roots.some((r) => abs === r || abs.startsWith(r + '/'));
+}
+/** The agent's plan file (`~/.claude/plans/<name>.md`): lives outside the project, shown separately and never counted as a change. */
+export const isPlanFile = (abs: string) => /(^|\/)\.claude\/plans\/[^/]+$/.test(abs);
+
+export interface ProjectChanges {
+  /** the changes of the project only; what the Changes tab lists */
+  files: ChangeFile[];
+  count: number;
+  added: number;
+  removed: number;
+  /** exactly what the Commit button stages (git-tracked changes) */
+  commitFiles: string[];
+  /** files this session created/edited inside the project (Outputs) */
+  outputs: SessionFile[];
+  /** the plan file(s) of this session, outside the project */
+  planFiles: SessionFile[];
+}
+
+/**
+ * THE one selector behind the Changes card count, the Overview summary, the Changes tab and the Commit button, so they cannot
+ * disagree. Files outside the session's project (plans, ~/.claude memory/settings, /tmp scratch) are never project changes.
+ */
+export function projectChanges(conv: Conversation, cwd: string, git: GitSnapshot | null, worktree?: string): ProjectChanges {
+  const all = sessionFiles(conv, cwd);
+  const roots = projectRoots({ cwd, gitRoot: git?.isRepo ? git.root : undefined, worktree, initCwd: conv.init?.cwd });
+  const outputs = all.filter((f) => insideProject(f.path, roots));
+  const planFiles = all.filter((f) => !insideProject(f.path, roots) && isPlanFile(f.path));
+  const files = mergeChanges(cwd, git, outputs);
+  const tot = totals(files);
+  return { files, count: files.length, added: tot.added, removed: tot.removed, commitFiles: files.filter((f) => f.source === 'git').map((f) => f.path), outputs, planFiles };
+}
+
 export function totals(files: ChangeFile[]): { added: number; removed: number } {
   let added = 0, removed = 0;
   for (const f of files) { added += f.added ?? 0; removed += f.removed ?? 0; }
