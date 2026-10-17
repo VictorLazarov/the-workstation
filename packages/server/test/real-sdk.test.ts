@@ -280,9 +280,10 @@ describe.skipIf(!process.env.REAL_SDK)('real SDK', () => {
     const sid = await r.start();
     await ask(r, sid, 'Write a 400 word story about a cat.');
     await r.sub.waitFor((m) => m.type === 'sdk' && (m.message as any).type === 'stream_event', 60_000);
-    const pid = (r.mgr.get(sid)!.query as any).transport?.process?.pid ?? (r.mgr.get(sid)!.query as any).process?.pid;
-    if (pid) process.kill(pid, 'SIGKILL');
-    else execSync(`pkill -KILL -f "${r.cwd.replace(/[^\w/.-]/g, '')}" || true`);
+    // kill the CLI child process(es) of this test process
+    const kids = execSync(`pgrep -P ${process.pid} || true`, { encoding: 'utf8' }).split('\n').filter(Boolean);
+    expect(kids.length).toBeGreaterThan(0);
+    for (const k of kids) { try { process.kill(Number(k), 'SIGKILL'); } catch { /* gone */ } }
     await r.sub.waitFor((m) => m.type === 'session.ended', 30_000);
     expect(errors(r).some((e) => e.code === 'process_exited')).toBe(true);
     expect(r.mgr.isLive(sid)).toBe(false);

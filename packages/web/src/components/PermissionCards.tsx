@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { PermissionDecision } from '@workstation/protocol';
 import type { PermissionRequest, ToolResult, ToolUseBlock } from '../lib/types';
 import { str, toolTitle } from '../lib/tools';
-import { useSessions } from '../store/sessions';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import type { ToolStatus } from './ToolCards';
@@ -151,8 +150,8 @@ export function PlanCard({ block, perm, result, status, sessionId, onRespond }: 
   const [rejecting, setRejecting] = useState(false);
   const [feedback, setFeedback] = useState('');
   const approve = (mode?: 'acceptEdits') => {
-    onRespond({ behavior: 'allow', updatedInput: editing ? { ...block.input, plan: draft } : undefined });
-    if (mode) useSessions.getState().setMode(sessionId, mode);
+    // `setMode` rides on the approval itself so it is applied atomically with leaving plan mode (a separate set.permissionMode races it)
+    onRespond({ behavior: 'allow', updatedInput: editing ? { ...block.input, plan: draft } : undefined, ...(mode ? { setMode: mode } : {}) });
   };
   return (
     <Shell kind="plan" status={perm ? 'waiting' : status} defaultOpen forceOpen={!!perm} title="Plan" subtitle={perm ? 'awaiting your review' : result?.isError || status === 'denied' ? 'not approved' : status === 'done' ? 'approved' : undefined}>

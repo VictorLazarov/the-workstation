@@ -528,6 +528,7 @@ export class SessionManager {
     const p = s.pending.get(requestId);
     if (!p) throw new Error(`no pending permission request ${requestId}`);
     if (!d || (d.behavior !== 'allow' && d.behavior !== 'deny')) throw new Error('invalid decision');
+    if (d.behavior === 'allow' && d.setMode !== undefined && !MODES.has(d.setMode)) throw new Error('invalid permission mode');
     s.pending.delete(requestId);
     if (d.behavior === 'allow') {
       const updatedInput = d.updatedInput && typeof d.updatedInput === 'object' ? d.updatedInput : p.input;
@@ -542,7 +543,6 @@ export class SessionManager {
         }
       }
       if (d.setMode) {
-        if (!MODES.has(d.setMode)) throw new Error('invalid permission mode');
         updates.push({ type: 'setMode', mode: d.setMode, destination: 'session' });
       }
       p.resolve({ behavior: 'allow', updatedInput, toolUseID: p.toolUseID, ...(updates.length ? { updatedPermissions: updates } : {}) });
@@ -579,7 +579,7 @@ function rememberable(suggestions: PermissionUpdate[] | undefined): PermissionUp
 }
 
 /** Cut gigantic tool_result text before it is buffered/forwarded (the model has already seen the full output). */
-function capHugeToolResults(message: unknown): unknown {
+export function capHugeToolResults(message: unknown): unknown {
   const m = message as { type?: string; message?: { content?: unknown } };
   if (m?.type !== 'user' || !Array.isArray(m.message?.content)) return message;
   let changed = false;

@@ -81,7 +81,7 @@ export class ConfigStore {
     if ('permissionTimeoutSec' in p) {
       const v = p.permissionTimeoutSec;
       if (v == null || v === 0) delete next.permissionTimeoutSec;
-      else if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 7 * 86400) next.permissionTimeoutSec = Math.round(v);
+      else if (typeof v === 'number' && Number.isFinite(v) && v > 0 && v <= 7 * 86400) next.permissionTimeoutSec = v;
       else throw new Error('permissionTimeoutSec must be a positive number of seconds');
     }
     if ('theme' in p) {
