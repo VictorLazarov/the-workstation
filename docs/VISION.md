@@ -14,3 +14,15 @@ speaking the Anthropic API; no custom agent runtime.
 4. **Extensibility at the UI layer**: panels, tool-card renderers and commands are registries so the owner can add
    personal workflows quickly.
 5. Local-first, single-user, token-gated.
+
+## Portability rule (why it's a web app)
+The browser UI exists so the same app ports to Electron/Tauri/PWA with minimal effort. Therefore:
+- The web app talks to the server only via `/api` + `/ws`, with a configurable server base URL (default: same
+  origin) and token — no cookies, no server-side rendering, no reliance on same-site tricks.
+- Any native-ish capability (open folder dialog, notifications, open-in-editor, reveal-in-finder, clipboard,
+  deep links) goes through a small `platform` adapter in the web app with a browser implementation now and an
+  Electron implementation later. Never call Electron/Node APIs from UI components.
+- The server must be launchable programmatically (`startServer()` exists) so an Electron main process can embed
+  it on a random free port with a generated token, bind 127.0.0.1 only.
+- An `apps/desktop` Electron shell (main process: start server, open window, native menus, dialog adapter) is a
+  planned wave-3 deliverable; it should be a thin wrapper of well under a few hundred lines.
