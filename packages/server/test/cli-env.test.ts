@@ -1,4 +1,5 @@
 // M2 unit tests: env allowlist and the isolated CLAUDE_CONFIG_DIR (no real CLI needed).
+import { samePath } from '../src/platform.js';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -63,8 +64,8 @@ describe('isolated CLAUDE_CONFIG_DIR', () => {
     prepareCliHome(dir, src, path.join(home, '.claude.json'));
     const names = fs.readdirSync(dir).sort();
     expect(names).toEqual(['.claude.json', 'CLAUDE.md', 'agents', 'file-history', 'projects', 'settings.json', 'skills'].sort());
-    expect(fs.readlinkSync(path.join(dir, 'skills'))).toBe(fs.realpathSync(path.join(src, 'skills')));
-    expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
+    expect(samePath(fs.readlinkSync(path.join(dir, 'skills')).replace(/^\\\\\?\\/, ''), fs.realpathSync(path.join(src, 'skills')))).toBe(true); // junction on Windows
+    if (process.platform !== 'win32') expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
     const settings = JSON.parse(fs.readFileSync(path.join(dir, 'settings.json'), 'utf8'));
     expect(settings).toEqual({ model: 'opus', hooks: { Stop: [] }, env: { BAR: 'ok' } });
     const g = JSON.parse(fs.readFileSync(path.join(dir, '.claude.json'), 'utf8'));

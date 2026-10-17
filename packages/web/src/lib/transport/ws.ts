@@ -17,7 +17,21 @@ export class WsTransport implements Transport {
   private stopped = false;
 
   constructor(private token: string | null) {
-    if (typeof window !== 'undefined') window.addEventListener('online', () => { if (this.status === 'offline') this.connect(); });
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => { if (this.status === 'offline') this.connect(); });
+      // Safari/Firefox close sockets when a page enters the back/forward cache (and Safari suspends background tabs):
+      // on return, reconnect right away instead of waiting out a backoff timer that may never have fired.
+      window.addEventListener('pageshow', (e) => { if ((e as PageTransitionEvent).persisted) this.revive(); });
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') this.revive(); });
+    }
+  }
+
+  /** Reconnect now if the socket died while the page was hidden / cached (no-op when open, connecting or closed on purpose). */
+  private revive() {
+    if (this.stopped) return;
+    const rs = this.ws?.readyState;
+    if (this.ws && (rs === WebSocket.OPEN || rs === WebSocket.CONNECTING)) return;
+    this.connect();
   }
 
   private set(s: ConnStatus) {

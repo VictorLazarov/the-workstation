@@ -16,6 +16,7 @@ import { HttpError, listDir, readFile, requireDir, resolveUserPath, searchFiles 
 import { GitError, gitCommit, gitDiff, gitRevert, gitStatus } from './git.js';
 import { createAdapter, type SdkAdapter } from './sdk.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, securityOptionsFromEnv, tokenMatches, type SecurityOptions } from './security.js';
+import { isInside, moduleDir, samePath } from './platform.js';
 import { createTerminalService } from './terminal.js';
 import { SessionManager, type Subscriber } from './session-manager.js';
 
@@ -51,7 +52,7 @@ const MIME: Record<string, string> = {
 };
 
 export function defaultWebDist(): string | null {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  const here = moduleDir(import.meta.url); // fileURLToPath: `new URL().pathname` is `/C:/…` on Windows
   for (const c of [process.env.WORKSTATION_WEB_DIST, path.resolve(here, '../../web/dist'), path.resolve(here, '../web')]) {
     if (c && fs.existsSync(path.join(c, 'index.html'))) return c;
   }
@@ -145,7 +146,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       });
     }
     for (const l of sessions.list()) {
-      if (out.has(l.id) || (dir && l.cwd !== dir)) continue;
+      if (out.has(l.id) || (dir && !samePath(l.cwd, dir))) continue;
       out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true });
     }
     return c.json([...out.values()].sort((a, b) => b.lastModified - a.lastModified));
@@ -233,7 +234,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       try { rel = decodeURIComponent(url.pathname); } catch { return c.text('bad request', 400); }
       if (rel.includes('\0')) return c.text('bad request', 400);
       let file = path.join(root, rel);
-      if (file !== root && !file.startsWith(root + path.sep)) return c.text('forbidden', 403);
+      if (!isInside(root, file)) return c.text('forbidden', 403);
       let st = await fsp.stat(file).catch(() => null);
       if (st?.isDirectory()) { file = path.join(file, 'index.html'); st = await fsp.stat(file).catch(() => null); }
       const isAsset = path.extname(rel) !== '';

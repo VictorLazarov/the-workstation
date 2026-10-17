@@ -1,6 +1,8 @@
+import fs from 'node:fs';
 import WebSocket from 'ws';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { makeServer, type TestServer } from './helpers.js';
+import { isWindows, makeServer, type TestServer } from './helpers.js';
+import { samePath } from '../src/platform.js';
 import { sanitizeEnv, type TerminalServerMsg } from '../src/terminal.js';
 
 let s: TestServer;
@@ -36,9 +38,18 @@ describe('/ws/terminal', () => {
     await a.opened;
     a.send({ type: 'resize', cols: 100, rows: 30 });
     await a.until(/\$|#|%|>/ , 8000).catch(() => {});
-    a.send({ type: 'input', data: 'echo hello-$((20+22)); pwd; stty size\n' });
-    const out = await a.until(/hello-42[\s\S]*\d+ \d+/);
-    expect(out).toContain(s.cwd);
+    if (isWindows) {
+      // ConPTY with PowerShell / cmd: no `stty`, no `$((..))`; the typed line is echoed once and printed once
+      a.send({ type: 'input', data: 'echo hello-42\r' });
+      await a.until(/hello-42[\s\S]*hello-42/);
+      const ready = a.msgs[0] as Extract<TerminalServerMsg, { type: 'ready' }>;
+      expect(samePath(ready.cwd, s.cwd)).toBe(true);
+    } else {
+      a.send({ type: 'input', data: 'echo hello-$((20+22)); pwd; stty size\n' });
+      const out = await a.until(/hello-42[\s\S]*\d+ \d+/);
+      // macOS: the tmp dir is a symlink (/var -> /private/var) and the shell may print the physical path
+      expect(out.includes(s.cwd) || out.includes(fs.realpathSync(s.cwd))).toBe(true);
+    }
     expect(a.msgs[0]).toMatchObject({ type: 'ready', id: 't1' });
     a.ws.close();
     await new Promise((r) => setTimeout(r, 100));
@@ -50,7 +61,8 @@ describe('/ws/terminal', () => {
     await new Promise<void>((r) => b.ws.once('close', () => r()));
   });
 
-  it('does not leak the server\'s own env/token into the shell, keeps the user\'s own credentials', async () => {
+  // POSIX shell syntax (`env | grep`, `$VAR`): the same rules are unit-tested through sanitizeEnv for every platform
+  it.skipIf(isWindows)('does not leak the server\'s own env/token into the shell, keeps the user\'s own credentials', async () => {
     process.env.WORKSTATION_FOO = 'leak-a';
     process.env.ANTHROPIC_API_KEY_X = 'leak-c';
     process.env.MY_SECRET_THING = 'users-own';
@@ -62,7 +74,7 @@ describe('/ws/terminal', () => {
     delete process.env.WORKSTATION_FOO; delete process.env.MY_SECRET_THING; delete process.env.ANTHROPIC_API_KEY_X;
   });
 
-  it('works with the python fallback backend', async () => {
+  it.skipIf(isWindows)('works with the python fallback backend', async () => { // POSIX-only helper (pty.fork); Windows uses ConPTY
     // spawner is cached per process, so run this check through a fresh module instance
     process.env.WORKSTATION_TERMINAL_BACKEND = 'python';
     const mod = await import('../src/terminal.js?py' as string);

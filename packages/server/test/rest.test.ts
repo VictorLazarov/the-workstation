@@ -1,3 +1,4 @@
+import { toPosix } from '../src/platform.js';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -52,7 +53,7 @@ describe('fs + search + git', () => {
     // relative traversal is normalised, not interpreted
     const t = await j(`/api/fs/read?path=${encodeURIComponent(path.join(s.cwd, 'src/../src/example.ts'))}`);
     expect(t.status).toBe(200);
-    expect(t.body.path).toBe(fs.realpathSync(path.join(s.cwd, 'src/example.ts')));
+    expect(t.body.path).toBe(toPosix(fs.realpathSync(path.join(s.cwd, 'src/example.ts'))));
   });
   it('binary files come back base64', async () => {
     fs.writeFileSync(path.join(s.cwd, 'b.bin'), Buffer.from([0, 1, 2, 255]));

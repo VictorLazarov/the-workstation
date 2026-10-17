@@ -372,7 +372,7 @@ class MockQuery implements QueryHandle {
 
   private async *planScenario(): AsyncGenerator<unknown, string> {
     // Like the real agent in plan mode: the plan is first written to a file under ~/.claude/plans (outside the project, no prompt).
-    const planFile = `${os.homedir()}/.claude/plans/plan-mock-fixture-quill.md`;
+    const planFile = `${os.homedir()}/.claude/plans/plan-do-not-edit-lexical-quill.md`;
     const wid = this.toolId();
     yield* this.step([{ type: 'text', text: 'Writing the plan file.' }, { type: 'tool_use', id: wid, name: 'Write', input: { file_path: planFile, content: '# Plan\n\n1. Add farewell\n2. Test it\n3. Run npm test\n' } }]);
     yield this.toolResult(wid, `File created successfully at: ${planFile}`, false, { type: 'create', filePath: planFile, content: '# Plan\n\n1. Add farewell\n2. Test it\n3. Run npm test\n', structuredPatch: [], originalFile: null });

@@ -34,7 +34,7 @@ test.describe('permission decisions', () => {
     await sendPrompt(page, 'bash via shortcut');
     await expect(permission(page)).toBeVisible();
     await page.locator('textarea[aria-label="Message Claude"]').blur();
-    await page.keyboard.press('Control+Enter');
+    await page.keyboard.press('ControlOrMeta+Enter');
     await expect(permission(page)).toHaveCount(0);
     await expect(page.locator('.msg-assistant').last()).toContainText('All 20 tests pass.');
     await expectIdle(page);

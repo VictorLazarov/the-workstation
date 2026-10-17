@@ -24,6 +24,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { samePath, writeFileAtomic } from './platform.js';
 
 export const NO_CREDENTIAL_SENTINEL = 'workstation-no-credential';
 
@@ -31,6 +32,12 @@ const BASE_ALLOW = new Set([
   'PATH', 'HOME', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'COLORTERM', 'TERM_PROGRAM', 'LANG', 'LANGUAGE', 'TZ', 'TMPDIR', 'TMP', 'TEMP',
   'XDG_RUNTIME_DIR', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_CACHE_HOME', 'XDG_STATE_HOME',
   'NODE_EXTRA_CA_CERTS', 'SSL_CERT_FILE', 'SSL_CERT_DIR', 'EDITOR', 'VISUAL', 'SYSTEMROOT', 'COMSPEC', 'PATHEXT', 'WINDIR', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE',
+]);
+/** Windows-only essentials (env names are upper-cased for the lookup there). Without them tools like git/ssh/node-gyp break in strict mode. */
+const WIN_ALLOW = new Set([
+  'HOMEDRIVE', 'HOMEPATH', 'USERNAME', 'USERDOMAIN', 'USERDOMAIN_ROAMINGPROFILE', 'SYSTEMDRIVE', 'PROGRAMFILES', 'PROGRAMFILES(X86)', 'PROGRAMW6432',
+  'COMMONPROGRAMFILES', 'COMMONPROGRAMFILES(X86)', 'COMMONPROGRAMW6432', 'PROGRAMDATA', 'ALLUSERSPROFILE', 'PUBLIC', 'COMPUTERNAME', 'OS',
+  'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'PROCESSOR_IDENTIFIER', 'PROCESSOR_LEVEL', 'PROCESSOR_REVISION', 'PSMODULEPATH', 'DRIVERDATA', 'LOGONSERVER',
 ]);
 const PROXY_VARS = new Set(['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'all_proxy', 'no_proxy']);
 /** Namespaces the CLI (or its auth/telemetry plugins) interprets: never inherited. */
@@ -44,12 +51,16 @@ export function hasCustomEndpoint(providerEnv: Record<string, string>): boolean 
 }
 
 /** Inherited variables allowed through to the CLI in isolated mode. */
-export function isolatedBaseEnv(base: NodeJS.ProcessEnv = process.env, strict = base.WORKSTATION_CLI_ENV === 'strict'): Record<string, string> {
+export function isolatedBaseEnv(base: NodeJS.ProcessEnv = process.env, strict = base.WORKSTATION_CLI_ENV === 'strict', platform: NodeJS.Platform = process.platform): Record<string, string> {
   const out: Record<string, string> = {};
+  const win = platform === 'win32'; // Windows env names are case-insensitive: `Path`, `SystemRoot`, `ComSpec`…
+  const seen = new Set<string>();
   for (const [k, v] of Object.entries(base)) {
     if (v === undefined) continue;
-    if (PROXY_VARS.has(k)) { if (!hasUserinfo(v)) out[k] = v; continue; }
-    if (BASE_ALLOW.has(k) || /^LC_[A-Z_]+$/.test(k)) { out[k] = v; continue; }
+    const K = win ? k.toUpperCase() : k;
+    if (win) { if (seen.has(K)) continue; seen.add(K); }
+    if (PROXY_VARS.has(K)) { if (!hasUserinfo(v)) out[k] = v; continue; }
+    if (BASE_ALLOW.has(K) || (win && WIN_ALLOW.has(K)) || /^LC_[A-Z_]+$/.test(K)) { out[k] = v; continue; }
     if (strict) continue;
     if (DENY_PREFIX.test(k) || CREDENTIAL_NAME.test(k) || /proxy/i.test(k) || hasUserinfo(v)) continue;
     out[k] = v;
@@ -75,11 +86,7 @@ function userGlobalConfig(env: NodeJS.ProcessEnv = process.env): string {
 const readJson = (f: string): Record<string, unknown> | null => {
   try { const v = JSON.parse(fs.readFileSync(f, 'utf8')); return v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null; } catch { return null; }
 };
-const writePrivate = (f: string, data: unknown) => {
-  const tmp = `${f}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), { mode: 0o600 });
-  fs.renameSync(tmp, f);
-};
+const writePrivate = (f: string, data: unknown) => writeFileAtomic(f, JSON.stringify(data, null, 2));
 const isCredentialEnvName = (k: string) => DENY_PREFIX.test(k) || CREDENTIAL_NAME.test(k) || /proxy/i.test(k);
 
 /** settings.json without credential helpers or credential env. */
@@ -96,7 +103,40 @@ export function filterSettings(s: Record<string, unknown>): Record<string, unkno
  * Creates/refreshes the isolated CLAUDE_CONFIG_DIR at `dir` from the user's config (`src`, `globalSrc`). Idempotent;
  * called before every CLI launch so changes to the user's settings show up. Returns `dir`.
  */
-export function prepareCliHome(dir: string, src = userClaudeDir(), globalSrc = userGlobalConfig()): string {
+export interface LinkOptions {
+  platform?: NodeJS.Platform;
+  /** fs.symlinkSync stand-in (tests simulate Windows without symlink rights). */
+  symlink?: (target: string, p: string, type?: 'dir' | 'file' | 'junction') => void;
+}
+/** Names of entries that are COPIES (symlinks were refused), so they are refreshed on the next launch. */
+const COPIES_FILE = '.workstation-copies.json';
+
+/** `\\?\C:\x\` / trailing separators -> comparable path. */
+const cleanLink = (l: string) => l.replace(/^\\\\\?\\/, '').replace(/[\\/]+$/, '');
+
+/**
+ * Link `from` at `to`. POSIX: symlink. Windows: directories get a junction (no privilege needed), files a symlink and,
+ * when the account lacks the symlink privilege (no Developer Mode / not elevated), a plain copy. Directories that cannot
+ * be linked are skipped (they hold live data, a copy would diverge). Returns what happened.
+ */
+export function linkEntry(from: string, to: string, opts: LinkOptions = {}): 'symlink' | 'junction' | 'copy' | 'skipped' {
+  const platform = opts.platform ?? process.platform;
+  const symlink = opts.symlink ?? ((t, p, type) => fs.symlinkSync(t, p, type));
+  const isDir = fs.statSync(from).isDirectory();
+  const win = platform === 'win32';
+  try {
+    symlink(from, to, win ? (isDir ? 'junction' : 'file') : undefined);
+    return win && isDir ? 'junction' : 'symlink';
+  } catch {
+    if (isDir) return 'skipped';
+    try { fs.copyFileSync(from, to); return 'copy'; } catch { return 'skipped'; }
+  }
+}
+
+/** Remove a symlink / junction / file without ever following into its target. */
+const removeLink = (p: string) => { try { fs.unlinkSync(p); } catch { fs.rmSync(p, { force: true }); } };
+
+export function prepareCliHome(dir: string, src = userClaudeDir(), globalSrc = userGlobalConfig(), linkOpts: LinkOptions = {}): string {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
   try { fs.chmodSync(dir, 0o700); } catch { /* best effort */ }
   const realDir = fs.realpathSync(dir);
@@ -109,15 +149,28 @@ export function prepareCliHome(dir: string, src = userClaudeDir(), globalSrc = u
   }
   if (realSrc) {
     for (const name of ENSURE_DIRS) { try { fs.mkdirSync(path.join(realSrc, name), { recursive: true }); } catch { /* read-only home */ } }
+    const platform = linkOpts.platform ?? process.platform;
+    const copiesFile = path.join(dir, COPIES_FILE);
+    let copies: string[] = [];
+    try { const c = JSON.parse(fs.readFileSync(copiesFile, 'utf8')); if (Array.isArray(c)) copies = c.filter((x): x is string => typeof x === 'string'); } catch { /* none */ }
+    const copied = new Set<string>();
     for (const name of LINKED) {
       const from = path.join(realSrc, name);
       const to = path.join(dir, name);
       if (!fs.existsSync(from)) continue;
       const cur = fs.lstatSync(to, { throwIfNoEntry: false });
-      if (cur?.isSymbolicLink()) { if (fs.readlinkSync(to) === from) continue; fs.rmSync(to, { force: true }); }
-      else if (cur) continue; // a real file/dir the CLI created before the user's existed: leave it
-      try { fs.symlinkSync(from, to); } catch { /* e.g. Windows without symlink rights: feature degrades, no leak */ }
+      if (cur?.isSymbolicLink()) {
+        let linked = '';
+        try { linked = cleanLink(fs.readlinkSync(to)); } catch { /* unreadable: relink */ }
+        if (linked && samePath(linked, from, platform)) continue;
+        removeLink(to);
+      } else if (cur && copies.includes(name) && cur.isFile()) {
+        removeLink(to); // our own stale copy: re-link (or re-copy) below
+      } else if (cur) continue; // a real file/dir the CLI created before the user's existed: leave it
+      // Failure degrades the feature (no shared CLAUDE.md/skills), it never leaks anything.
+      try { if (linkEntry(from, to, linkOpts) === 'copy') copied.add(name); } catch { /* ignore */ }
     }
+    try { if (copied.size || copies.length) writePrivate(copiesFile, [...copied]); } catch { /* best effort */ }
   }
   const settings = realSrc ? readJson(path.join(realSrc, 'settings.json')) : null;
   writePrivate(path.join(dir, 'settings.json'), filterSettings(settings ?? {}));

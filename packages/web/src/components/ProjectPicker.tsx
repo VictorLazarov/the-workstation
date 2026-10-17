@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FsEntry } from '@workstation/protocol';
 import { api } from '../lib/api';
-import { dirname } from '../lib/utils';
+import { dirname, isRootPath, normPath } from '../lib/utils';
 import { platform } from '../platform';
 import { projectName, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
 import { Icon } from './Icon';
-import { Dialog, Spinner } from './ui';
+import { Dialog, MiddleEllipsis, Spinner } from './ui';
 
 export function ProjectPicker() {
   const open = useUi((s) => s.pickerOpen);
@@ -33,11 +33,12 @@ export function ProjectPicker() {
 
   const choose = (cwd: string) => { close(); useSessions.getState().newSession(cwd); };
   const dirs = entries.filter((e) => e.kind === 'dir' && (hidden || !e.name.startsWith('.')));
-  const crumbs = path.split('/').filter(Boolean);
+  const crumbs = normPath(path).split('/').filter(Boolean);
+  const winDrive = /^[A-Za-z]:$/.test(crumbs[0] ?? ''); // Windows server: `C:` is the first crumb, there is no `/` root
 
   return (
     <Dialog open={open} onClose={close} title="Open a project" width={600} className="picker"
-      footer={<><span className="picker-path" title={path}>{path}</span><button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={!path} onClick={() => choose(path)}>Open “{projectName(path) || '/'}”</button></>}>
+      footer={<>{path ? <MiddleEllipsis text={path} tail={24} className="picker-path" /> : <span className="picker-path" />}<button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={!path} onClick={() => choose(path)}>Open “{projectName(path) || '/'}”</button></>}>
       {(projects.length > 0 || serverCwd) && (
         <div className="picker-recent">
           <div className="picker-label">{projects.length ? 'Recent' : 'This server\'s project'}</div>
@@ -46,14 +47,14 @@ export function ProjectPicker() {
       )}
       <div className="picker-label">Browse{platform.pickFolder && <button type="button" className="link-btn" onClick={async () => { const p = await platform.pickFolder!(); if (p) choose(p); }}>System dialog…</button>}</div>
       <form className="picker-bar" onSubmit={(e) => { e.preventDefault(); void load(input); }}>
-        <button type="button" className="icon-btn" aria-label="Parent folder" disabled={!path || path === '/'} onClick={() => void load(dirname(path) || '/')}><Icon name="chevron-up" size={15} /></button>
+        <button type="button" className="icon-btn" aria-label="Parent folder" disabled={!path || isRootPath(path)} onClick={() => void load(dirname(path) || '/')}><Icon name="chevron-up" size={15} /></button>
         <input className="field" value={input} onChange={(e) => setInput(e.target.value)} aria-label="Folder path" spellCheck={false} />
         <label className="check"><input type="checkbox" checked={hidden} onChange={(e) => setHidden(e.target.checked)} /> Hidden</label>
       </form>
       {crumbs.length > 0 && (
         <div className="crumbs">
-          <button type="button" onClick={() => void load('/')}>/</button>
-          {crumbs.map((c, i) => <button type="button" key={i} onClick={() => void load('/' + crumbs.slice(0, i + 1).join('/'))}>{c}</button>)}
+          {!winDrive && <button type="button" onClick={() => void load('/')}>/</button>}
+          {crumbs.map((c, i) => <button type="button" key={i} onClick={() => void load((winDrive ? '' : '/') + crumbs.slice(0, i + 1).join('/') + (winDrive && i === 0 ? '/' : ''))}>{c}</button>)}
         </div>
       )}
       <div className="dir-list" role="listbox" aria-label="Folders">

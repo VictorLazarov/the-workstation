@@ -75,7 +75,8 @@ export const TermView = forwardRef<TermHandle, { id: string; cwd: string; visibl
       api.current.reconnect = () => { dead = false; ws?.close(); connect(); };
       term.onData((d) => send({ type: 'input', data: d }));
       term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
-      const ro = new ResizeObserver(doFit);
+      // rAF: fitting inside the callback resizes the host and triggers 'ResizeObserver loop' errors (Safari/Firefox/Chrome)
+      const ro = new ResizeObserver(() => requestAnimationFrame(doFit));
       ro.observe(host.current);
       connect();
       cleanup = () => { clearTimeout(retry); ro.disconnect(); offTheme(); const s = ws; ws = null; s?.close(); term.dispose(); };

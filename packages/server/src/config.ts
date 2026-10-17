@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AppConfig } from '@workstation/protocol';
 import { buildCliEnv, hasCustomEndpoint, prepareCliHome } from './cli-env.js';
+import { configDirFor, writeFileAtomic } from './platform.js';
 
 export const MASK = '********';
 const SECRET_KEY_RE = /key|token|secret|password|passwd|credential|auth/i;
@@ -15,7 +16,7 @@ export interface StoredConfig {
 }
 
 export function configDir(): string {
-  return process.env.WORKSTATION_HOME || path.join(os.homedir(), '.config', 'workstation');
+  return configDirFor(process.env, process.platform, os.homedir());
 }
 
 /** Persisted config (0600) holding the auth token and the user's AppConfig. */
@@ -49,10 +50,7 @@ export class ConfigStore {
   }
 
   private save(): void {
-    const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this.data, null, 2), { mode: 0o600 });
-    fs.renameSync(tmp, this.file);
-    try { fs.chmodSync(this.file, 0o600); } catch { /* best effort */ }
+    writeFileAtomic(this.file, JSON.stringify(this.data, null, 2)); // retries Windows EPERM/EBUSY; chmod is a no-op there
   }
 
   get token(): string { return this.data.token; }

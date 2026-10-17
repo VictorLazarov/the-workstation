@@ -2,11 +2,13 @@ import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { GitStatus, GitFileStatus, GitCommitResult, GitRevertResult } from '@workstation/protocol';
+import { fromGitPath, isGitDirName, realpathSyncNative, relativeInside, toPosix } from './platform.js';
 
 // GIT_LITERAL_PATHSPECS=1: every path we pass is a literal file name, never a glob (`*`, `[x]`) or magic (`:(top)`).
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat', LC_ALL: 'C', GIT_LITERAL_PATHSPECS: '1' };
 // Defuse repo-controlled code execution paths when merely reading status/diff or restoring a file.
-const NO_EXEC_ARGS = ['-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat'];
+// core.longpaths: Windows paths over 260 chars (deep node_modules, worktrees under .claude/worktrees) otherwise fail.
+const NO_EXEC_ARGS = ['-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat', ...(process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : [])];
 const SAFE_ARGS = [...NO_EXEC_ARGS, '-c', 'core.hooksPath=/dev/null'];
 
 export interface GitResult { code: number; stdout: string; stderr: string }
@@ -39,7 +41,8 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 export async function gitRoot(cwd: string): Promise<string | null> {
   try {
     const r = await git(cwd, ['rev-parse', '--show-toplevel']);
-    return r.code === 0 ? r.stdout.trim() : null;
+    // git prints `C:/Users/x/repo` on Windows: native separators from here on
+    return r.code === 0 && r.stdout.trim() ? fromGitPath(r.stdout.trim()) : null;
   } catch {
     return null;
   }
@@ -72,7 +75,7 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
     if (x === 'R' || x === 'C') i++; // next entry is the original path
     files.push({ path: file, index: x, worktree: y });
   }
-  return { isRepo: true, branch, ahead, behind, files, root };
+  return { isRepo: true, branch, ahead, behind, files, root: root === undefined ? undefined : toPosix(root) };
 }
 
 export async function gitDiff(cwd: string, relPath?: string): Promise<string> {
@@ -124,7 +127,7 @@ function realpathLoose(p: string): string {
   const rest: string[] = [];
   let cur = p;
   for (;;) {
-    try { return path.join(fs.realpathSync(cur), ...rest.reverse()); } catch { /* walk up */ }
+    try { return path.join(realpathSyncNative(cur), ...rest.reverse()); } catch { /* walk up */ }
     const up = path.dirname(cur);
     if (up === cur) return p;
     rest.push(path.basename(cur));
@@ -141,13 +144,14 @@ export async function resolveInRepo(cwd: string, input: unknown): Promise<{ root
   if (typeof input !== 'string' || !input || input.length > 4096 || input.includes('\0')) throw new GitError(400, 'invalid path');
   const top = await gitRoot(cwd);
   if (!top) throw new GitError(400, 'not a git repository');
-  const root = fs.realpathSync(top);
+  const root = realpathSyncNative(top);
   const abs = path.resolve(cwd, input);
   const real = path.join(realpathLoose(path.dirname(abs)), path.basename(abs));
-  const rel = path.relative(root, real);
-  if (!rel || rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) throw new GitError(400, 'path is outside the repository');
-  if (rel.split(path.sep).includes('.git')) throw new GitError(400, 'refusing to touch .git');
-  return { root, rel: rel.split(path.sep).join('/') };
+  // containment is case-insensitive on Windows/macOS, drive letters and UNC roots go through path.win32 there
+  const rel = relativeInside(root, real);
+  if (!rel) throw new GitError(400, 'path is outside the repository');
+  if (rel.split(path.sep).some((seg) => isGitDirName(seg))) throw new GitError(400, 'refusing to touch .git');
+  return { root, rel: toPosix(rel) };
 }
 
 /** Create a git worktree on a fresh branch for an isolated session. */
@@ -161,9 +165,9 @@ export async function createWorktree(cwd: string, name: string): Promise<{ path:
   const list = await git(root, ['worktree', 'list', '--porcelain', '-z']);
   const existing = list.stdout.split('\0\0').map((b) => b.split('\0')).find((l) => l.includes(`branch refs/heads/${branch}`));
   const wtPath = existing?.find((l) => l.startsWith('worktree '))?.slice('worktree '.length);
-  if (wtPath && fs.existsSync(wtPath)) {
-    const sub = path.relative(root, cwd);
-    return { path: sub && !sub.startsWith('..') ? path.join(wtPath, sub) : wtPath, branch };
+  if (wtPath && fs.existsSync(fromGitPath(wtPath))) {
+    const sub = relativeInside(root, cwd);
+    return { path: sub ? path.join(fromGitPath(wtPath), sub) : fromGitPath(wtPath), branch };
   }
   if (wtPath) await git(root, ['worktree', 'prune']);
   const branchExists = (await git(root, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`])).code === 0;
@@ -177,8 +181,8 @@ export async function createWorktree(cwd: string, name: string): Promise<{ path:
     if (!cur.includes('.claude/worktrees/')) fs.appendFileSync(abs, `${cur.endsWith('\n') || !cur ? '' : '\n'}.claude/worktrees/\n`);
   } catch { /* best effort */ }
   // preserve the sub-directory the user started in
-  const sub = path.relative(root, cwd);
-  return { path: sub && !sub.startsWith('..') ? path.join(dir, sub) : dir, branch };
+  const sub = relativeInside(root, cwd);
+  return { path: sub ? path.join(dir, sub) : dir, branch };
 }
 
 /** Error carrying an HTTP status (mapped by the app's error handler via HttpError in files.ts). */

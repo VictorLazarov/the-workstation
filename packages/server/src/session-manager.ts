@@ -8,6 +8,7 @@ import type {
 import type { ConfigStore } from './config.js';
 import { HttpError, requireDir } from './files.js';
 import { createWorktree, gitRoot } from './git.js';
+import { claudeExecutableOption } from './platform.js';
 import { headSha, removeWorktree, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
 import { normalizeContextUsage } from './context-usage.js';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
@@ -305,6 +306,7 @@ export class SessionManager {
       allowDangerouslySkipPermissions: true,
       canUseTool: (toolName, input, o) => this.canUseTool(s, toolName, input, o),
       env: this.config.cliEnv(), // credential isolation for custom endpoints (cli-env.ts)
+      ...claudeExecutableOption(),
       stderr: (d) => { if (process.env.WORKSTATION_DEBUG) process.stderr.write(`[claude ${id.slice(0, 8)}] ${d}`); },
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),

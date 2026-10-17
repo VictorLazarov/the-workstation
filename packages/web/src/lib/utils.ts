@@ -19,21 +19,35 @@ export function relativeTime(ts: number, now = Date.now()): string {
   return `${Math.round(d / 365)}y`;
 }
 
+/** True for `C:\x`, `C:/x` and UNC `\\host\share` paths (a Windows server). */
+export const isWinPath = (p: string): boolean => /^[A-Za-z]:([\\/]|$)/.test(p) || p.startsWith('\\\\');
+/** Windows paths use `/` internally in the UI (the server accepts both); POSIX paths are untouched (`\` is a legal file-name char there). */
+export const normPath = (p: string): string => (isWinPath(p) ? p.replace(/\\/g, '/') : p);
+/** Drive root (`C:/`) or `/`. */
+export const isRootPath = (p: string): boolean => p === '/' || /^[A-Za-z]:\/?$/.test(p);
+
 export function basename(p: string): string {
-  const t = p.replace(/\/+$/, '');
+  const t = normPath(p).replace(/\/+$/, '');
   const i = t.lastIndexOf('/');
   return i >= 0 ? t.slice(i + 1) || t : t;
 }
 export function dirname(p: string): string {
-  const t = p.replace(/\/+$/, '');
+  const t = normPath(p).replace(/\/+$/, '');
+  if (/^[A-Za-z]:$/.test(t)) return `${t}/`; // a drive root is its own parent
   const i = t.lastIndexOf('/');
+  if (i === 2 && /^[A-Za-z]:\//.test(t)) return t.slice(0, 3); // C:/x -> C:/
   return i > 0 ? t.slice(0, i) : i === 0 ? '/' : '';
 }
 
 /** Path relative to cwd when inside it, else with ~ shortening of home-like prefixes. */
 export function relPath(p: string, cwd?: string): string {
-  if (cwd && p.startsWith(cwd.replace(/\/+$/, '') + '/')) return p.slice(cwd.replace(/\/+$/, '').length + 1);
-  return p.replace(/^\/(?:home|Users)\/[^/]+/, '~');
+  const np = normPath(p);
+  const base = cwd ? normPath(cwd).replace(/\/+$/, '') : '';
+  // drive letters are case-insensitive on Windows
+  const win = isWinPath(np);
+  const lower = (x: string) => (win ? x.toLowerCase() : x);
+  if (base && lower(np).startsWith(lower(base) + '/')) return np.slice(base.length + 1);
+  return np.replace(/^\/(?:home|Users)\/[^/]+/, '~').replace(/^[A-Za-z]:\/Users\/[^/]+/, '~');
 }
 
 export function truncate(s: string, n: number): string {

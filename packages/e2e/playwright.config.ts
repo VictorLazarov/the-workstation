@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import { repoRoot, TOKEN, type E2EState } from './support/env.ts';
 
 /** Asks the OS for a free TCP port (synchronously, so the config object can be built up front). */
 function freePort(): number {
-  const out = execFileSync(process.execPath, ['-e', 'const s=require("net").createServer().listen(0,"127.0.0.1",()=>{console.log(s.address().port);s.close()})'], { encoding: 'utf8' });
+  const out = execFileSync(process.execPath, ['-e', "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})"], { encoding: 'utf8' });
   return Number(out.trim());
 }
 
@@ -31,9 +31,10 @@ function setup(): E2EState {
   const cli = path.join(repoRoot, 'packages/server/dist/cli.js');
   const webIndex = path.join(repoRoot, 'packages/web/dist/index.html');
   if (!fs.existsSync(cli) || !fs.existsSync(webIndex)) {
-    execFileSync('npm', ['run', 'build'], { cwd: repoRoot, stdio: 'inherit' });
+    execSync('npm run build', { cwd: repoRoot, stdio: 'inherit' }); // shell: `npm` is npm.cmd on Windows
   }
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'workstation-e2e-'));
+  // realpath.native: macOS /var -> /private/var and Windows 8.3 names (RUNNER~1) must match what git/the server report
+  const home = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'workstation-e2e-')));
   const project = path.join(home, 'project');
   // Fixture project: the mock agent reads src/example.ts, so the @-mention and Read paths are real files.
   fs.mkdirSync(path.join(project, 'src'), { recursive: true });
@@ -74,9 +75,21 @@ function setup(): E2EState {
 const state: E2EState = process.env.E2E_STATE ? JSON.parse(process.env.E2E_STATE) : setup();
 process.env.E2E_STATE = JSON.stringify(state);
 
-const launchOptions = { executablePath: chromePath() };
+/**
+ * Browsers: chromium always (project names `app` / `live`, as before); firefox and webkit are opt-in because their
+ * binaries come from `npx playwright install` (CI only): E2E_BROWSERS=chromium,firefox,webkit.
+ * Smoke subset (macOS webkit, Windows chromium): pass the spec files on the command line, see .github/workflows/ci.yml.
+ */
+const wanted = (process.env.E2E_BROWSERS ?? 'chromium').split(',').map((x) => x.trim()).filter(Boolean);
+const viewport = { width: 1280, height: 860 };
+const flavours = {
+  chromium: { suffix: '', device: devices['Desktop Chrome'], launchOptions: { executablePath: chromePath() } },
+  firefox: { suffix: '-firefox', device: devices['Desktop Firefox'], launchOptions: {} },
+  webkit: { suffix: '-webkit', device: devices['Desktop Safari'], launchOptions: {} },
+} as const;
 const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_MAX_SESSIONS: '500', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
-const serverCmd = (url: string) => `node ${path.join(repoRoot, 'packages/server/dist/cli.js')} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${state.project}`;
+const q = (p: string) => JSON.stringify(p); // paths with spaces (Windows profiles, macOS volumes)
+const serverCmd = (url: string) => `node ${q(path.join(repoRoot, 'packages/server/dist/cli.js'))} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${q(state.project)}`;
 
 export default defineConfig({
   testDir: './tests',
@@ -84,23 +97,26 @@ export default defineConfig({
   // One worker: the app project's tests share ONE mock server, and every page auto-attaches to all live sessions on it,
   // so parallel tests saw each other's sessions, toasts and 'needs input' rows (the source of run-to-run flakiness).
   workers: 1,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0, // CI: one retry, reported as "flaky" (never silently green)
   timeout: 45_000,
   expect: { timeout: 10_000 },
-  reporter: [['list'], ['html', { open: 'never', outputFolder: path.join(state.home, 'report') }]],
-  outputDir: path.join(state.home, 'test-results'),
+  // E2E_REPORT_DIR / E2E_RESULTS_DIR let CI upload them as artifacts
+  reporter: [['list'], ...(process.env.CI ? [['github'] as ['github']] : []), ['html', { open: 'never', outputFolder: process.env.E2E_REPORT_DIR ?? path.join(state.home, 'report') }]],
+  outputDir: process.env.E2E_RESULTS_DIR ?? path.join(state.home, 'test-results'),
   use: {
     viewport: { width: 1280, height: 860 },
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    launchOptions,
   },
-  projects: [
-    // Full-speed mock (WORKSTATION_MOCK_SPEED=0): everything that does not depend on timing.
-    { name: 'app', testDir: './tests/app', use: { ...devices['Desktop Chrome'], baseURL: state.mainUrl, viewport: { width: 1280, height: 860 }, launchOptions } },
-    // Slowed mock (speed 0.25): streaming, interrupt, reattach and queueing need a live "running" window.
-    { name: 'live', testDir: './tests/live', use: { ...devices['Desktop Chrome'], baseURL: state.slowUrl, viewport: { width: 1280, height: 860 }, launchOptions } },
-  ],
+  projects: (Object.keys(flavours) as Array<keyof typeof flavours>).filter((b) => wanted.includes(b)).flatMap((b) => {
+    const fl = flavours[b];
+    return [
+      // Full-speed mock (WORKSTATION_MOCK_SPEED=0): everything that does not depend on timing.
+      { name: `app${fl.suffix}`, testDir: './tests/app', use: { ...fl.device, baseURL: state.mainUrl, viewport, launchOptions: fl.launchOptions } },
+      // Slowed mock (speed 0.25): streaming, interrupt, reattach and queueing need a live "running" window.
+      { name: `live${fl.suffix}`, testDir: './tests/live', use: { ...fl.device, baseURL: state.slowUrl, viewport, launchOptions: fl.launchOptions } },
+    ];
+  }),
   webServer: [
     { command: serverCmd(state.mainUrl), url: state.mainUrl, reuseExistingServer: false, env: mockEnv(state.mainHome, '0'), stdout: 'ignore', stderr: 'pipe', timeout: 60_000 },
     { command: serverCmd(state.slowUrl), url: state.slowUrl, reuseExistingServer: false, env: mockEnv(state.slowHome, '0.25'), stdout: 'ignore', stderr: 'pipe', timeout: 60_000 },

@@ -1,3 +1,4 @@
+import { toPosix } from '../src/platform.js';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +18,7 @@ afterAll(async () => { await s.close(); });
 describe('git commit / revert', () => {
   it('status reports the repo root', async () => {
     const r = await api(s, `/api/git/status?cwd=${encodeURIComponent(s.cwd)}`);
-    expect((await r.json() as any).root).toBe(fs.realpathSync(s.cwd));
+    expect((await r.json() as any).root).toBe(toPosix(fs.realpathSync(s.cwd))); // wire format: / on Windows too
   });
   it('requires a non-empty message and something to commit', async () => {
     expect((await post('/api/git/commit', { cwd: s.cwd, message: '   ' })).status).toBe(400);

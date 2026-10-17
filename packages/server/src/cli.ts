@@ -4,6 +4,7 @@ import path from 'node:path';
 import { DEFAULT_PORT } from '@workstation/protocol';
 import { startServer, VERSION } from './app.js';
 import { ConfigStore } from './config.js';
+import { openBrowserCommand } from './platform.js';
 
 function usage(): never {
   console.log(`workstation ${VERSION}
@@ -42,10 +43,9 @@ function parseArgs(argv: string[]) {
 }
 
 function openBrowser(url: string) {
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open';
-  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  const { cmd, args } = openBrowserCommand(url);
   try {
-    const p = spawn(cmd, args, { stdio: 'ignore', detached: true });
+    const p = spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true });
     p.on('error', () => {});
     p.unref();
   } catch { /* ignore */ }
@@ -65,3 +65,5 @@ if (args.open && !process.env.CI && process.env.WORKSTATION_NO_OPEN !== '1') ope
 const stop = async () => { await running.close(); process.exit(0); };
 process.on('SIGINT', stop);
 process.on('SIGTERM', stop);
+// Windows has no SIGTERM: Ctrl+Break and closing the console window arrive as SIGBREAK / SIGHUP
+if (process.platform === 'win32') { process.on('SIGBREAK', stop); process.on('SIGHUP', stop); }

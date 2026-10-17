@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { connect, makeServer, sdkMsgs, startSession, type TestServer } from './helpers.js';
 
@@ -91,6 +93,44 @@ describe('session lifecycle with mock', () => {
       expect(r.message.subtype).toBe('error_during_execution');
       c.close();
     } finally { process.env.WORKSTATION_MOCK_SPEED = '0'; }
+  });
+
+  it('the mock emits the REAL SDK shapes for a Stop (they hid N1): diagnostic-only errors, aborted terminal_reason, interrupt note, fixed rejection text', async () => {
+    const c = await connect(s);
+    const sid = await startSession(c, s.cwd);
+    const from = c.msgs.length;
+    c.send({ type: 'prompt', sessionId: sid, text: 'bash please', clientMsgId: 'x' });
+    const req: any = await c.waitFor((m) => m.type === 'permission.request', 8000, from);
+    c.send({ type: 'interrupt', sessionId: sid });
+    const r: any = await c.waitFor((m) => isResult(m) && c.msgs.indexOf(m) > from, 8000, from);
+    // compare with test/fixtures/real-interrupt-permission.json
+    expect(r.message).toMatchObject({ subtype: 'error_during_execution', is_error: true, terminal_reason: 'aborted_tools', stop_reason: 'tool_use' });
+    expect(r.message.errors).toHaveLength(1);
+    expect(r.message.errors[0]).toMatch(/^\[ede_diagnostic\] result_type=user/);
+    expect(r.message.result).toBeUndefined();
+    const sdk = sdkMsgs(c, sid).slice(-6);
+    expect(JSON.stringify(sdk)).toContain('[Request interrupted by user for tool use]');
+    expect(JSON.stringify(sdk)).toContain("The user doesn't want to proceed with this tool use");
+    expect(req.requestId).toBeTruthy();
+    // structural parity with the captured real result: the mock may not invent keys the SDK does not send
+    const real: any = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/real-interrupt-permission.json'), 'utf8')).find((m: any) => m.type === 'sdk' && m.message.type === 'result').message;
+    for (const k of Object.keys(r.message)) expect(Object.keys(real), `mock result key "${k}" is not in the real SDK result`).toContain(k);
+    for (const k of ['subtype', 'is_error', 'terminal_reason', 'stop_reason']) expect(r.message[k]).toEqual(real[k]);
+    c.close();
+  });
+
+  it('the 401 scenario matches the real stream: error event with code, then the server-triggered interrupt result', async () => {
+    const c = await connect(s);
+    const sid = await startSession(c, s.cwd);
+    const from = c.msgs.length;
+    c.send({ type: 'prompt', sessionId: sid, text: 'say 401', clientMsgId: 'z' });
+    const e: any = await c.waitFor((m) => m.type === 'error' && m.sessionId === sid, 8000, from);
+    expect(e.code).toBe('authentication_failed');
+    expect(e.message).toMatch(/^API error 401: authentication_failed/);
+    const r: any = await c.waitFor((m) => isResult(m) && c.msgs.indexOf(m) > from, 8000, from);
+    expect(r.message).toMatchObject({ subtype: 'error_during_execution', terminal_reason: 'aborted_streaming' });
+    expect(c.msgs.indexOf(e)).toBeLessThan(c.msgs.indexOf(r)); // the error is reported BEFORE the result
+    c.close();
   });
 
   it('survives disconnect; attach replays from seq; pending permission re-sent', async () => {

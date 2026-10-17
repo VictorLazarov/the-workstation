@@ -101,9 +101,9 @@ test.describe('session features', () => {
     await expectIdle(page);
     // The overview pane is open by default; the shortcut hides it and shows it again.
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
-    await page.keyboard.press('Control+Alt+b');
+    await page.keyboard.press('ControlOrMeta+Alt+b');
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toHaveCount(0);
-    await page.keyboard.press('Control+Alt+b');
+    await page.keyboard.press('ControlOrMeta+Alt+b');
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
   });
 

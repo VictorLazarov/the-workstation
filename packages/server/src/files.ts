@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { FsEntry } from '@workstation/protocol';
 import { git, isGitRepo } from './git.js';
+import { expandHome, isWindowsDevicePath, toPosix } from './platform.js';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
@@ -13,8 +14,9 @@ export class HttpError extends Error {
 export function resolveUserPath(input: unknown, base = process.cwd()): string {
   if (typeof input !== 'string' || input.length === 0) throw new HttpError(400, 'path is required');
   if (input.length > 4096 || input.includes('\0')) throw new HttpError(400, 'invalid path');
+  if (process.platform === 'win32' && isWindowsDevicePath(input)) throw new HttpError(400, 'invalid path');
   let p = input;
-  if (p === '~' || p.startsWith('~/')) p = path.join(os.homedir(), p.slice(1));
+  p = expandHome(p, os.homedir());
   return path.resolve(base, p);
 }
 
@@ -52,12 +54,13 @@ export async function listDir(input: unknown): Promise<FsEntry[]> {
         size = t.isFile() ? t.size : undefined;
       } else if (d.isFile()) size = (await fsp.stat(full)).size;
     } catch { /* broken link keeps 'symlink' */ }
-    out.push({ name: d.name, path: full, kind, ...(size !== undefined ? { size } : {}) });
+    out.push({ name: d.name, path: toPosix(full), kind, ...(size !== undefined ? { size } : {}) });
   }
   out.sort((a, b) => (a.kind === 'dir' ? 0 : 1) - (b.kind === 'dir' ? 0 : 1) || a.name.localeCompare(b.name));
   return out;
 }
 
+/* Wire format: paths sent to the browser use `/` on Windows too (`C:/Users/x`); the server accepts both separators back. */
 const TEXT_CAP = 2 * 1024 * 1024;
 const BIN_CAP = 10 * 1024 * 1024;
 
@@ -71,11 +74,11 @@ export async function readFile(input: unknown): Promise<{ content: string; encod
     await fh.read(head, 0, head.length, 0);
     const binary = head.includes(0);
     const cap = binary ? BIN_CAP : TEXT_CAP;
-    if (binary && st.size > cap) return { content: '', encoding: 'base64', truncated: true, size: st.size, path: file };
+    if (binary && st.size > cap) return { content: '', encoding: 'base64', truncated: true, size: st.size, path: toPosix(file) };
     const len = Math.min(st.size, cap);
     const buf = Buffer.alloc(len);
     await fh.read(buf, 0, len, 0);
-    return { content: buf.toString(binary ? 'base64' : 'utf8'), encoding: binary ? 'base64' : 'utf8', truncated: st.size > cap, size: st.size, path: file };
+    return { content: buf.toString(binary ? 'base64' : 'utf8'), encoding: binary ? 'base64' : 'utf8', truncated: st.size > cap, size: st.size, path: toPosix(file) };
   } finally {
     await fh.close();
   }
@@ -97,7 +100,7 @@ async function walk(root: string): Promise<string[]> {
       if (e.isDirectory()) {
         if (!SKIP_DIRS.has(e.name) && depth < 10) stack.push([path.join(dir, e.name), depth + 1]);
       } else if (e.isFile() || e.isSymbolicLink()) {
-        out.push(path.relative(root, path.join(dir, e.name)));
+        out.push(toPosix(path.relative(root, path.join(dir, e.name))));
         if (out.length >= MAX_FILES) break;
       }
     }

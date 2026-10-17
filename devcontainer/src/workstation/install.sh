@@ -78,11 +78,29 @@ if ! node_ok; then
 fi
 log "Using node $(node -v), npm $(npm -v)"
 
+# ---- Native build toolchain (node-pty) ---------------------------------
+# node-pty has no Linux prebuilds: npm compiles it with node-gyp (python3 + make + a C++ compiler). npm silently skips a
+# failed optional dependency and the TypeScript build then fails on the missing module, so install the toolchain first.
+# (The server falls back to a python3 pty helper when node-pty is unavailable, python3 is useful either way.)
+if [ -z "${WORKSTATION_SKIP_PKGS:-}" ]; then
+  tc=()
+  command -v python3 >/dev/null || tc+=(python3)
+  command -v make >/dev/null || tc+=(make)
+  if ! command -v g++ >/dev/null && ! command -v c++ >/dev/null; then
+    if command -v apk >/dev/null; then tc+=(g++); elif command -v dnf >/dev/null || command -v yum >/dev/null; then tc+=(gcc-c++); else tc+=(g++); fi
+  fi
+  if command -v apk >/dev/null && [ ! -e /usr/include/stdio.h ]; then tc+=(musl-dev linux-headers); fi
+  if command -v apk >/dev/null && ! command -v gcc >/dev/null; then tc+=(gcc); fi
+  if [ "${#tc[@]}" -gt 0 ]; then log "Installing native build tools for node-pty: ${tc[*]}"; pkg_install "${tc[@]}"; fi
+fi
+
 # ---- Install The Workstation ------------------------------------------
 mkdir -p "$PREFIX/bin" "$INSTALL_DIR"
 build_checkout() { # $1 = dir containing the monorepo
   ( cd "$1" && npm ci --no-audit --no-fund && npm run build )
   [ -f "$1/packages/server/dist/cli.js" ] || die "build did not produce packages/server/dist/cli.js"
+  if ( cd "$1/packages/server" && node -e 'require("node-pty")' ) >/dev/null 2>&1; then log "node-pty OK (native terminal backend)"
+  else log "WARNING: node-pty did not load; the terminal will use the python3 fallback (needs python3 at runtime)"; fi
 }
 ENTRY=""
 case "$SOURCE" in
@@ -151,13 +169,21 @@ PORT="\${WORKSTATION_PORT:-\$(cat "$INSTALL_DIR/port")}"
 HOST="\${WORKSTATION_HOST:-\$(cat "$INSTALL_DIR/host")}"
 LOG="\$WORKSTATION_HOME/server.log"
 mkdir -p "\$WORKSTATION_HOME"
-if ! (exec 3<>/dev/tcp/127.0.0.1/\$PORT) 2>/dev/null; then
+port_open() { (exec 3<>/dev/tcp/127.0.0.1/\$PORT) 2>/dev/null; }
+pid=""
+if ! port_open; then
+  echo "Starting The Workstation on \$HOST:\$PORT (a first start from a source=local checkout builds it first, which takes a few minutes; progress: \$LOG)"
   nohup "$PREFIX/bin/workstation" --host "\$HOST" --port "\$PORT" --no-open >"\$LOG" 2>&1 &
-  echo \$! > "\$WORKSTATION_HOME/server.pid"
+  pid=\$!
+  echo \$pid > "\$WORKSTATION_HOME/server.pid"
   disown 2>/dev/null || true
 fi
-for _ in \$(seq 1 120); do
-  (exec 3<>/dev/tcp/127.0.0.1/\$PORT) 2>/dev/null && break
+deadline=\$((SECONDS + \${WORKSTATION_START_TIMEOUT:-900}))
+until port_open; do
+  if [ -n "\$pid" ] && ! kill -0 "\$pid" 2>/dev/null; then
+    echo "The Workstation exited during start-up. Last lines of \$LOG:" >&2; tail -n 25 "\$LOG" >&2; exit 1
+  fi
+  if [ "\$SECONDS" -ge "\$deadline" ]; then echo "Timed out waiting for The Workstation on port \$PORT (see \$LOG)" >&2; exit 1; fi
   sleep 0.5
 done
 if [ "\${WORKSTATION_PRINT_URL:-\$(cat "$INSTALL_DIR/printurl" 2>/dev/null || echo false)}" = true ] || [ "\${WORKSTATION_PRINT_URL:-}" = 1 ]; then

@@ -80,7 +80,7 @@ describe('http/ws guards', () => {
   });
   it('config file is 0600 and has a token', () => {
     const st = fs.statSync(s.config.file);
-    expect(st.mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(st.mode & 0o777).toBe(0o600); // Windows has no POSIX mode bits (ACLs of the user profile apply)
     expect(s.token.length).toBeGreaterThanOrEqual(24);
   });
   it('a pre-existing world-readable config dir/file is tightened on load', () => {
@@ -88,7 +88,8 @@ describe('http/ws guards', () => {
     fs.chmodSync(dir, 0o755);
     fs.writeFileSync(path.join(dir, 'config.json'), JSON.stringify({ token: 'x'.repeat(32), app: {} }), { mode: 0o644 });
     fs.chmodSync(path.join(dir, 'config.json'), 0o644);
-    new ConfigStore(dir);
+    expect(() => new ConfigStore(dir)).not.toThrow(); // chmod is a no-op on Windows: must not crash
+    if (process.platform === 'win32') return;
     expect(fs.statSync(dir).mode & 0o777).toBe(0o700);
     expect(fs.statSync(path.join(dir, 'config.json')).mode & 0o777).toBe(0o600);
   });

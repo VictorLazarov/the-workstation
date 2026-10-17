@@ -22,7 +22,7 @@ import { Collector, makeRig, type Rig } from '../scripts/real-harness.js';
 const require = createRequire(import.meta.url);
 function cliInstalled(): boolean {
   if (process.env.CLI_ISOLATION === '0') return false;
-  for (const p of ['@anthropic-ai/claude-agent-sdk-linux-x64/claude', '@anthropic-ai/claude-agent-sdk-linux-arm64/claude', '@anthropic-ai/claude-agent-sdk-darwin-arm64/claude', '@anthropic-ai/claude-agent-sdk-darwin-x64/claude']) {
+  for (const p of ['@anthropic-ai/claude-agent-sdk-linux-x64/claude', '@anthropic-ai/claude-agent-sdk-linux-arm64/claude', '@anthropic-ai/claude-agent-sdk-darwin-arm64/claude', '@anthropic-ai/claude-agent-sdk-darwin-x64/claude', '@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe', '@anthropic-ai/claude-agent-sdk-win32-arm64/claude.exe']) {
     try { require.resolve(p); return true; } catch { /* next */ }
   }
   return false;
@@ -80,7 +80,7 @@ beforeAll(async () => {
 
   for (const k of Object.keys(process.env)) if (/^(CLAUDE|ANTHROPIC_|CCR_)/.test(k)) delete process.env[k];
   Object.assign(process.env, {
-    HOME: fakeHome,
+    HOME: fakeHome, USERPROFILE: fakeHome, // os.homedir() reads USERPROFILE on Windows
     ANTHROPIC_API_KEY: SECRETS.envApiKey, ANTHROPIC_AUTH_TOKEN: SECRETS.envAuthToken, CLAUDE_CODE_OAUTH_TOKEN: SECRETS.envOauth,
     ANTHROPIC_CUSTOM_HEADERS: `X-Corp-Sso: ${SECRETS.customHeader}`,
     CLAUDE_CODE_REMOTE: 'true', CLAUDE_CODE_REMOTE_SESSION_ID: SECRETS.remoteSession, CLAUDE_CODE_CONTAINER_ID: SECRETS.container,

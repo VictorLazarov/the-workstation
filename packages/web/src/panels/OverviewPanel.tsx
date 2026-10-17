@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { formatDuration, formatTokens, relPath } from '../lib/utils';
+import { basename, formatDuration, formatTokens, relPath } from '../lib/utils';
 import { ls } from '../lib/storage';
 import { Icon, type IconName } from '../components/Icon';
 import { IconButton, MiddleEllipsis, Spinner, Stats } from '../components/ui';
@@ -207,7 +207,7 @@ function OutputsCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
               <li key={f.path}>
                 <div className="ov-item" title={`Plan file (outside the project, not a change): ${f.path}`}>
                   <Icon name="list" size={14} />
-                  <span className="ov-item-main"><MiddleEllipsis text={f.path.split('/').pop() ?? f.path} tail={10} className="ov-name" /></span>
+                  <span className="ov-item-main"><MiddleEllipsis text={basename(f.path)} tail={10} className="ov-name" /></span>
                   <span className="pill">Plan file</span>
                 </div>
               </li>

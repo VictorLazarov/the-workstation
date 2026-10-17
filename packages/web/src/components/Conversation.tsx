@@ -43,7 +43,7 @@ export function Conversation({ session }: { session: SessionData }) {
   useEffect(() => {
     const el = inner.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => { if (stick.current) toBottom(); });
+    const ro = new ResizeObserver(() => { if (stick.current) requestAnimationFrame(() => { if (stick.current) toBottom(); }); }); // rAF: avoids 'ResizeObserver loop' errors
     ro.observe(el);
     return () => ro.disconnect();
   }, [toBottom, id]);

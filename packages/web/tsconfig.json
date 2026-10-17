@@ -5,5 +5,5 @@
     "noEmit": true, "isolatedModules": true, "resolveJsonModule": true, "types": ["vite/client"],
     "noUnusedLocals": false, "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "browser-targets.ts"]
 }

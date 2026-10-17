@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { git, gitRoot } from './git.js';
+import { relativeInside } from './platform.js';
 
 /** A worktree this server created for a session (persisted so cleanup works after a restart). */
 export interface WorktreeRecord {
@@ -45,8 +46,9 @@ export async function headSha(cwd: string): Promise<string | undefined> {
  * changes; the branch is only deleted when it has no commits of its own (or on force).
  */
 export async function removeWorktree(rec: WorktreeRecord, force: boolean): Promise<WorktreeRemoval> {
-  const expected = path.join(rec.root, '.claude', 'worktrees') + path.sep;
-  if (!rec.dir.startsWith(expected) || rec.dir.slice(expected.length).includes(path.sep)) return { removed: false, branchDeleted: false, reason: 'not a workstation-managed worktree path' };
+  // exactly one level below <root>/.claude/worktrees (case-insensitive on Windows/macOS)
+  const within = relativeInside(path.join(rec.root, '.claude', 'worktrees'), rec.dir);
+  if (!within || within.includes(path.sep)) return { removed: false, branchDeleted: false, reason: 'not a workstation-managed worktree path' };
   if (!fs.existsSync(rec.dir)) {
     await git(rec.root, ['worktree', 'prune']);
     return { removed: true, branchDeleted: await deleteBranch(rec, force) };

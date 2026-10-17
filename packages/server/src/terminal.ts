@@ -10,9 +10,12 @@
  */
 import { spawn as cpSpawn, type ChildProcess } from 'node:child_process';
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
+import { defaultShell, killProcessTree, shellArgs } from './platform.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, tokenMatches, type SecurityOptions } from './security.js';
 
 export type TerminalBackend = 'node-pty' | 'python-pty';
@@ -98,22 +101,42 @@ export interface Spawner {
   spawn(shell: string, cwd: string, env: Record<string, string>, cols: number, rows: number): PtyLike;
 }
 
+/** macOS: node-pty's prebuilt `spawn-helper` can lose its exec bit through npm/tar (`posix_spawnp failed`): restore it. */
+function fixSpawnHelperMode(): void {
+  if (process.platform !== 'darwin') return;
+  try {
+    const root = path.dirname(createRequire(import.meta.url).resolve('node-pty/package.json'));
+    for (const dir of [path.join(root, 'build', 'Release'), ...fs.readdirSync(path.join(root, 'prebuilds')).map((d) => path.join(root, 'prebuilds', d))]) {
+      const f = path.join(dir, 'spawn-helper');
+      if (fs.existsSync(f)) fs.chmodSync(f, 0o755);
+    }
+  } catch { /* not installed / read-only: the probe below reports it */ }
+}
+
 let spawnerPromise: Promise<Spawner | { error: string }> | null = null;
 
 async function detectNodePty(): Promise<Spawner | null> {
   try {
+    fixSpawnHelperMode();
     const mod = (await import('node-pty')) as typeof import('node-pty');
-    // probe: a broken native build throws on first spawn
-    const probe = mod.spawn('/bin/sh', ['-c', 'exit 0'], { name: 'xterm-256color', cols: 80, rows: 24, cwd: '/' });
+    // probe: a broken native build throws on first spawn (Windows: ConPTY via cmd.exe)
+    const win = process.platform === 'win32';
+    const probe = win
+      ? mod.spawn(process.env.COMSPEC || 'cmd.exe', ['/d', '/c', 'exit 0'], { name: 'xterm-256color', cols: 80, rows: 24, cwd: process.cwd() })
+      : mod.spawn('/bin/sh', ['-c', 'exit 0'], { name: 'xterm-256color', cols: 80, rows: 24, cwd: '/' });
     probe.onExit(() => {});
     return {
       backend: 'node-pty',
       spawn(shell, cwd, env, cols, rows) {
-        const p = mod.spawn(shell, ['-i'], { name: 'xterm-256color', cols, rows, cwd, env });
+        const p = mod.spawn(shell, shellArgs(shell), { name: 'xterm-256color', cols, rows, cwd, env });
         return {
           write: (d) => p.write(d),
           resize: (c, r) => { try { p.resize(c, r); } catch { /* exited */ } },
-          kill: () => { try { p.kill(); } catch { /* gone */ } },
+          kill: () => {
+            // Windows has no signals: end the whole tree (ConPTY close alone can leave grandchildren such as dev servers)
+            if (process.platform === 'win32') killProcessTree(p.pid);
+            try { p.kill(); } catch { /* gone */ }
+          },
           onData: (cb) => { p.onData(cb); },
           onExit: (cb) => { p.onExit((e) => cb(e.exitCode)); },
         };
@@ -125,6 +148,8 @@ async function detectNodePty(): Promise<Spawner | null> {
 }
 
 function detectPython(): Promise<Spawner | null> {
+  // the helper uses pty.fork/fcntl/termios: POSIX only (Windows uses ConPTY through node-pty)
+  if (process.platform === 'win32') return Promise.resolve(null);
   return new Promise((resolve) => {
     const c = cpSpawn('python3', ['-c', 'import pty, termios, fcntl'], { stdio: 'ignore' });
     c.on('error', () => resolve(null));
@@ -157,7 +182,7 @@ export function getSpawner(): Promise<Spawner | { error: string }> {
     }
     const p = await detectPython();
     if (p) return p;
-    return { error: 'No pseudo-terminal backend is available on the server: the node-pty native module failed to load and python3 is not installed. Install build tools and reinstall (npm rebuild node-pty) or install python3.' };
+    return { error: `No pseudo-terminal backend is available on the server: the node-pty native module failed to load${process.platform === 'win32' ? ' (Windows needs the ConPTY-enabled node-pty prebuild: npm rebuild node-pty)' : ' and python3 is not installed. Install build tools and reinstall (npm rebuild node-pty) or install python3'}.` };
   })();
   return spawnerPromise;
 }
@@ -173,7 +198,8 @@ export function sanitizeEnv(env: NodeJS.ProcessEnv, token?: string): Record<stri
   const out: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (v === undefined) continue;
-    if (k.startsWith('WORKSTATION_') || k.startsWith('ANTHROPIC_') || k.startsWith('CLAUDE_CODE_') || k === 'CLAUDECODE') continue;
+    const K = k.toUpperCase(); // Windows env names are case-insensitive
+    if (K.startsWith('WORKSTATION_') || K.startsWith('ANTHROPIC_') || K.startsWith('CLAUDE_CODE_') || K === 'CLAUDECODE') continue;
     if (token && v.includes(token)) continue;
     out[k] = v;
   }
@@ -234,7 +260,7 @@ export function createTerminalService(opts: { security: SecurityOptions; token: 
   }
 
   async function create(id: string, cwd: string, cols: number, rows: number, sp: Spawner): Promise<Term> {
-    const shell = process.env.SHELL && fs.existsSync(process.env.SHELL) ? process.env.SHELL : fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+    const shell = defaultShell(process.env);
     const pty = sp.spawn(shell, cwd, sanitizeEnv(process.env, opts.token()), cols, rows);
     const t: Term = { id, pty, backend: sp.backend, shell, cwd, cols, rows, scrollback: '', alive: true, exitCode: null, clients: new Set() };
     pty.onData((d) => {

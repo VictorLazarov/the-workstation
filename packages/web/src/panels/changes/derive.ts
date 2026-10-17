@@ -5,22 +5,28 @@ import { editLines } from '../../components/ToolCards';
 import { toolKind, toolPath } from '../../lib/tools';
 import type { GitFileStatus } from '@workstation/protocol';
 import type { GitFileDiff } from './gitdiff';
+import { isWinPath, normPath } from '../../lib/utils';
 
-const isAbs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p);
+const isAbs = (p: string) => p.startsWith('/') || /^[A-Za-z]:[\\/]/.test(p) || p.startsWith('\\\\');
 export function absPath(p: string, base: string): string {
   if (!p) return p;
-  if (isAbs(p)) return p;
-  const parts = (base.replace(/\/+$/, '') + '/' + p).split('/');
+  if (isAbs(p)) return normPath(p);
+  const b = normPath(base);
+  // `C:/proj` keeps its drive prefix; POSIX paths get the leading slash back
+  const drive = /^[A-Za-z]:(?=\/|$)/.exec(b)?.[0] ?? '';
+  const parts = (b.slice(drive.length).replace(/\/+$/, '') + '/' + p).split('/');
   const out: string[] = [];
   for (const s of parts) { if (s === '..') out.pop(); else if (s && s !== '.') out.push(s); }
-  return '/' + out.join('/');
+  return drive + '/' + out.join('/');
 }
 
 /** Path relative to `cwd`, with `../` segments when the file lives outside it (e.g. repo root above cwd). */
 export function relFromCwd(abs: string, cwd: string): string {
-  const a = abs.split('/').filter(Boolean), c = cwd.split('/').filter(Boolean);
+  const win = isWinPath(abs) || isWinPath(cwd);
+  const same = (x: string, y: string) => (win ? x.toLowerCase() === y.toLowerCase() : x === y);
+  const a = normPath(abs).split('/').filter(Boolean), c = normPath(cwd).split('/').filter(Boolean);
   let i = 0;
-  while (i < a.length && i < c.length && a[i] === c[i]) i++;
+  while (i < a.length && i < c.length && same(a[i]!, c[i]!)) i++;
   if (i === 0 && (a.length || c.length)) return abs; // nothing in common (different drive / root)
   const up = c.length - i;
   return [...Array(up).fill('..'), ...a.slice(i)].join('/') || '.';
@@ -134,7 +140,7 @@ export function mergeChanges(cwd: string, git: GitSnapshot | null, session: Sess
 }
 
 /* ───────── what counts as a PROJECT change ───────── */
-const trimSlash = (p: string) => p.replace(/\/+$/, '');
+const trimSlash = (p: string) => normPath(p).replace(/\/+$/, '');
 /** The directories that make up "the project" of a session: its cwd, the git checkout root, and its worktree. */
 export function projectRoots(i: { cwd: string; gitRoot?: string; worktree?: string; initCwd?: string }): string[] {
   return [...new Set([i.cwd, i.gitRoot, i.worktree, i.initCwd].filter((x): x is string => !!x).map(trimSlash))];
@@ -142,10 +148,15 @@ export function projectRoots(i: { cwd: string; gitRoot?: string; worktree?: stri
 /** Is `abs` inside one of the roots? (No roots known: everything counts, so nothing silently disappears.) */
 export function insideProject(abs: string, roots: string[]): boolean {
   if (!roots.length) return true;
-  return roots.some((r) => abs === r || abs.startsWith(r + '/'));
+  const a = normPath(abs);
+  return roots.some((r) => {
+    const win = isWinPath(r) || isWinPath(a); // Windows paths compare case-insensitively
+    const x = win ? a.toLowerCase() : a, y = win ? r.toLowerCase() : r;
+    return x === y || x.startsWith(y + '/');
+  });
 }
 /** The agent's plan file (`~/.claude/plans/<name>.md`): lives outside the project, shown separately and never counted as a change. */
-export const isPlanFile = (abs: string) => /(^|\/)\.claude\/plans\/[^/]+$/.test(abs);
+export const isPlanFile = (abs: string) => /(^|\/)\.claude\/plans\/[^/]+$/.test(normPath(abs));
 
 export interface ProjectChanges {
   /** the changes of the project only; what the Changes tab lists */

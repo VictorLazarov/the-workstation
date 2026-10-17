@@ -69,11 +69,11 @@ test.describe('B2: toasts never cover the composer, inspector tabs or commit box
         await start(page, width);
         await openInspector(page, 'changes');
         if (width > 1100) await expect(page.locator('.ccommit')).toBeVisible();
-        if (sidebar === 'hidden') { await closeDrawers(page); if (await page.getByRole('complementary', { name: 'Sessions' }).isVisible()) await page.keyboard.press('Control+b'); }
+        if (sidebar === 'hidden') { await closeDrawers(page); if (await page.getByRole('complementary', { name: 'Sessions' }).isVisible()) await page.keyboard.press('ControlOrMeta+b'); }
         if (width > 1100) await expect(page.getByRole('complementary', { name: 'Sessions' })).toHaveCount(sidebar === 'shown' ? 1 : 0);
         while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
         for (let i = 0; i < 3; i++) {
-          await page.keyboard.press('Control+,');
+          await page.keyboard.press('ControlOrMeta+,');
           await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();
           await expect(page.getByRole('dialog')).toHaveCount(0);
         }

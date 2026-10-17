@@ -150,3 +150,6 @@ if (typeof matchMedia !== 'undefined') {
   matchMedia(mq(BP_SIDEBAR_DRAWER)).addEventListener('change', (e) => useUi.setState({ sidebarOpen: e.matches ? false : ls.get('ws.sidebarOpen') !== '0' }));
   matchMedia(mq(BP_INSPECTOR_DRAWER)).addEventListener('change', (e) => useUi.setState({ inspectorOpen: e.matches ? false : ls.get('ws.inspectorOpen') !== '0' }));
 }
+
+// Test hook (like the demo's simulateDrop): the e2e suite raises toasts without having to stage background sessions.
+if (typeof window !== 'undefined') (window as unknown as { __ws?: Record<string, unknown> }).__ws = Object.assign((window as unknown as { __ws?: object }).__ws ?? {}, { toast: (t: Parameters<UiState['toast']>[0]) => useUi.getState().toast(t) });

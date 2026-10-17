@@ -80,3 +80,10 @@ export async function startSession(c: Client, cwd: string, extra: Record<string,
 }
 
 export const sdkMsgs = (c: Client, sid: string) => c.msgs.filter((m) => m.type === 'sdk' && m.sessionId === sid).map((m) => (m as Extract<ServerMessage, { type: 'sdk' }>).message as Record<string, any>);
+
+/** Symlink creation needs a privilege on Windows (Developer Mode / elevation): tests that need links skip when it is missing. */
+export function canSymlink(): boolean {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-sl-'));
+  try { fs.symlinkSync(d, path.join(d, 'l')); return true; } catch { return false; } finally { fs.rmSync(d, { recursive: true, force: true }); }
+}
+export const isWindows = process.platform === 'win32';

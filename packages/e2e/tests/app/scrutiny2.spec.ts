@@ -175,7 +175,7 @@ test.describe('minors', () => {
     await expectIdle(page);
     await page.keyboard.press('Alt+n');
     await expect(page.getByRole('heading', { name: 'What should we work on?' })).toBeVisible();
-    await page.keyboard.press('Control+/');
+    await page.keyboard.press('ControlOrMeta+/');
     const dlg = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
     await expect(dlg.locator('div', { hasText: /^AltNNew session$/ })).toBeVisible();
     await expect(dlg).not.toContainText('Ctrl N');
@@ -201,7 +201,7 @@ test.describe('minors', () => {
 
   test('Settings traps focus and Escape closes it; the palette dialog has an accessible name', async ({ page }) => {
     await openApp(page);
-    await page.keyboard.press('Control+,');
+    await page.keyboard.press('ControlOrMeta+,');
     const dlg = page.getByRole('dialog', { name: /Settings|Welcome/ });
     await expect(dlg).toBeVisible();
     for (let i = 0; i < 45; i++) {
@@ -214,7 +214,7 @@ test.describe('minors', () => {
     }
     await page.keyboard.press('Escape');
     await expect(dlg).toHaveCount(0);
-    await page.keyboard.press('Control+k');
+    await page.keyboard.press('ControlOrMeta+k');
     await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
     await page.keyboard.press('Escape');
   });
@@ -236,7 +236,7 @@ test.describe('minors', () => {
     await openApp(page);
     await expect(page.getByText(/Run Claude Code/)).toHaveCount(0);
     await expect(page.getByText(/Run coding agents side by side/)).toBeVisible();
-    await page.keyboard.press('Control+,');
+    await page.keyboard.press('ControlOrMeta+,');
     const dlg = page.getByRole('dialog', { name: /Settings|Welcome/ });
     await expect(dlg).not.toContainText('Claude Code');
     await expect(dlg).toContainText('Claude Agent SDK');

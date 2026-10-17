@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { api, makeServer, type TestServer } from './helpers.js';
+import { api, canSymlink, makeServer, type TestServer } from './helpers.js';
 
 let s: TestServer;
 let repo: string;
@@ -74,7 +74,7 @@ describe('revert: literal paths only', () => {
     expect((await post('/api/git/revert', { cwd: repo, path: 'other.txt' })).status).toBe(409);
   });
 
-  it('symlinks: a parent link escaping the repo is refused; an untracked link is removed, not its target', async () => {
+  it.skipIf(!canSymlink())('symlinks: a parent link escaping the repo is refused; an untracked link is removed, not its target', async () => {
     const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-outside-'));
     fs.writeFileSync(path.join(outside, 'victim.txt'), 'v\n');
     fs.symlinkSync(outside, path.join(repo, 'escape'));

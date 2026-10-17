@@ -628,4 +628,4 @@ export const useSessions = create<Store>((set, get) => {
 export const useActiveSession = () => useSessions((s) => (s.activeId ? s.sessions[s.activeId] : undefined));
 export const projectName = (cwd: string) => basename(cwd) || cwd;
 
-declare global { interface Window { __ws?: { simulateDrop?: (ms?: number) => void } } }
+declare global { interface Window { __ws?: { simulateDrop?: (ms?: number) => void; toast?: (t: { kind: 'info' | 'success' | 'error' | 'attention'; title: string; body?: string; tag?: string; ttl?: number }) => string } } }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FsEntry } from '@workstation/protocol';
 import { api } from '../lib/api';
 import { highlightLines, langFromPath } from '../lib/shiki';
-import { basename, dirname, relPath } from '../lib/utils';
+import { basename, dirname, normPath, relPath } from '../lib/utils';
 import { Icon } from '../components/Icon';
 import { Markdown } from '../components/Markdown';
 import { CopyButton, IconButton, Spinner } from '../components/ui';
@@ -28,12 +28,13 @@ function useDirty(id: string, cwd: string): Map<string, string> {
   const git = useGit(selectGit(id));
   return useMemo(() => {
     const m = new Map<string, string>();
+    const root = normPath(cwd);
     if (!git.isRepo || !git.root) return m;
     for (const f of git.files) {
       const abs = absPath(f.path.replace(/\/$/, ''), git.root);
       const st = porcelainStatus(f);
       m.set(abs, st === 'untracked' ? 'U' : st === 'added' ? 'A' : st === 'deleted' ? 'D' : 'M');
-      for (let d = dirname(abs); d.length > cwd.length - 1 && d.startsWith(cwd.replace(/\/+$/, '')); d = dirname(d)) { if (m.get(d) === 'dir') break; m.set(d, 'dir'); if (d === cwd) break; }
+      for (let d = dirname(abs); d.length > root.length - 1 && d.startsWith(root.replace(/\/+$/, '')); d = dirname(d)) { if (m.get(d) === 'dir') break; m.set(d, 'dir'); if (d === root) break; }
     }
     return m;
   }, [git, cwd]);

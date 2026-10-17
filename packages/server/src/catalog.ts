@@ -1,3 +1,4 @@
+import { claudeExecutableOption } from './platform.js';
 import type { ModelInfo, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelOption, SlashCommandInfo } from '@workstation/protocol';
 import type { ConfigStore } from './config.js';
@@ -23,7 +24,7 @@ export class Catalog {
   private async withProbe<T>(cwd: string, fn: (q: QueryHandle) => Promise<T>): Promise<T> {
     const q = this.adapter.query({
       prompt: idle as AsyncIterable<never>,
-      options: { cwd, settingSources: ['user', 'project', 'local'], env: this.config.cliEnv() },
+      options: { cwd, settingSources: ['user', 'project', 'local'], env: this.config.cliEnv(), ...claudeExecutableOption() },
     });
     try {
       return await Promise.race([fn(q), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('probe timeout')), 25_000))]);

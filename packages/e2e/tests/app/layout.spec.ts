@@ -165,15 +165,15 @@ test.describe('layout lint: every state at sampled combinations', () => {
 
       // dialogs
       await closeDrawers(page);
-      await page.keyboard.press('Control+,');
+      await page.keyboard.press('ControlOrMeta+,');
       await expect(page.getByRole('dialog')).toBeVisible();
       await lint.check('settings');
       await page.keyboard.press('Escape');
-      await page.keyboard.press('Control+k');
+      await page.keyboard.press('ControlOrMeta+k');
       await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
       await lint.check('command palette');
       await page.keyboard.press('Escape');
-      await page.keyboard.press('Control+/');
+      await page.keyboard.press('ControlOrMeta+/');
       await expect(page.getByRole('dialog', { name: 'Keyboard shortcuts' })).toBeVisible();
       await lint.check('shortcuts');
       await page.keyboard.press('Escape');

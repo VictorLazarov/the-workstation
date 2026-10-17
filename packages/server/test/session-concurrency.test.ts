@@ -94,6 +94,7 @@ describe('live session cap', () => {
     const r = await a.waitFor(forReq('r3'));
     expect(r.type).toBe('error');
     expect((r as Extract<ServerMessage, { type: 'error' }>).message).toMatch(/too many live sessions/);
+    expect((r as Extract<ServerMessage, { type: 'error' }>).code).toBe('session_limit'); // the UI offers "Close idle sessions" for this code
     expect(s.sessions.list()).toHaveLength(2);
     a.ws.close();
   });

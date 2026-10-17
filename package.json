@@ -3,13 +3,18 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "workspaces": ["packages/*"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "npm run dev -w @workstation/server",
     "build": "npm run build -w @workstation/protocol && npm run build -w @workstation/web && npm run build -w @workstation/server",
     "start": "node packages/server/dist/cli.js",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm test --workspaces --if-present"
+    "test": "npm test -w @workstation/protocol -w @workstation/server -w @workstation/web --if-present",
+    "test:e2e": "npm test -w @workstation/e2e"
   }
 }
