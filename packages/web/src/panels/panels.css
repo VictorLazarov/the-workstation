@@ -4,8 +4,8 @@
 .btn.sm { height: 24px; padding: 0 8px; font-size: var(--fs-sm); }
 
 /* ── Changes ── */
-.changes { display: flex; flex-direction: column; min-height: 100%; }
-.changes-bar { position: sticky; top: 0; z-index: 3; background: var(--bg); border-bottom: 1px solid var(--border); padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.changes { position: absolute; inset: 0; display: flex; flex-direction: column; min-height: 0; }
+.changes-bar { flex: none; background: var(--bg); border-bottom: 1px solid var(--border); padding: 4px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
 .changes-sum { display: flex; align-items: center; gap: 8px; font-size: var(--fs-base); color: var(--text-2); min-width: 0; }
 .chip-branch { display: inline-flex; align-items: center; gap: 4px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 7px; border-radius: 99px; background: var(--hover); font: 500 var(--fs-xs) var(--font-mono); color: var(--text-2); }
 .changes-tools { display: flex; align-items: center; gap: 2px; }
@@ -16,7 +16,8 @@
 .changes-scope i { font-style: normal; font-size: var(--fs-xs); margin-left: 4px; color: var(--muted); }
 .changes-note { display: flex; gap: 6px; align-items: center; margin: 6px 10px 0; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); font-size: var(--fs-sm); }
 .changes-note.err { background: var(--danger-soft); color: var(--danger); }
-.changes-list { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.changes-list { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; flex: 1 1 0; min-height: 0; overflow-y: auto; }
+.changes > .changes-scope, .changes > .changes-note { flex: none; }
 .cfile { border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); overflow: hidden; transition: box-shadow 0.4s; }
 .cfile.flash { box-shadow: 0 0 0 2px var(--accent); }
 .cfile-head { display: flex; align-items: center; padding-right: 4px; min-height: var(--tool-head-h); } .cfile-head:hover { background: var(--hover); }
@@ -46,7 +47,7 @@
 .cdiff-table .diff-no.diff-add, .split-table .diff-no.diff-add { background: var(--diff-add-strong); color: var(--text-2); } .split-table .diff-no.diff-del { color: var(--text-2); } .cdiff-table .diff-no.diff-del { background: var(--diff-del); }
 .cdiff-table .diff-empty { background: var(--surface-2); }
 .cdiff-table .diff-sep td { text-align: left; padding-left: 12px; }
-.ccommit { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; gap: 6px; z-index: 3; }
+.ccommit { flex: none; background: var(--bg); border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; gap: 6px; z-index: 3; }
 .ccommit textarea { width: 100%; resize: vertical; min-height: 44px; max-height: 140px; padding: 4px 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); font: inherit; font-size: var(--fs-base); color: var(--text); }
 .ccommit textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
 .ccommit-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

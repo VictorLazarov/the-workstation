@@ -60,9 +60,9 @@ function AppearanceMenu() {
       </button>
       <Popover anchor={ref} open={open} onClose={() => setOpen(false)} className="appearance">
         <div className="appearance-body" role="dialog" aria-label="Appearance">
-          <div className="ap-row"><span>Theme</span><Segmented<Theme> value={theme} onChange={(t) => useUi.getState().setTheme(t)} options={[{ id: 'system', label: 'Auto' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} /></div>
+          <div className="ap-row"><span>Theme</span><Segmented<Theme> value={theme} onChange={(t) => useUi.getState().setTheme(t)} options={[{ id: 'system', label: 'System' }, { id: 'light', label: 'Light' }, { id: 'dark', label: 'Dark' }]} /></div>
           <div className="ap-row"><span>Brand</span><Segmented<Brand> value={brand} onChange={(b) => useUi.getState().setBrand(b)} options={[{ id: 'horizon', label: 'Horizon' }, { id: 'warm', label: 'Warm' }]} /></div>
-          <div className="ap-row"><span>Density</span><Segmented<Density> value={density} onChange={(d) => useUi.getState().setDensity(d)} options={[{ id: 'compact', label: 'Compact' }, { id: 'comfortable', label: 'Roomy' }]} /></div>
+          <div className="ap-row"><span>Density</span><Segmented<Density> value={density} onChange={(d) => useUi.getState().setDensity(d)} options={[{ id: 'compact', label: 'Compact' }, { id: 'comfortable', label: 'Comfortable' }]} /></div>
         </div>
       </Popover>
     </>

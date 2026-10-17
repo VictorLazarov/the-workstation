@@ -108,15 +108,14 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
   const branch = useBranch(sessionId);
   const [mode, setMode] = useState<Mode>(() => (ls.get('ws.diffMode') as Mode) || 'unified');
   // Split needs room for two readable panes; in a narrow inspector it falls back to unified (the preference is kept).
-  const root = useRef<HTMLDivElement>(null);
+  const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(1000);
   useEffect(() => {
-    const el = root.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setWidth(el.clientWidth));
-    ro.observe(el); setWidth(el.clientWidth);
+    if (!root || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => setWidth(root.clientWidth));
+    ro.observe(root); setWidth(root.clientWidth);
     return () => ro.disconnect();
-  }, []);
+  }, [root]);
   const canSplit = width >= SPLIT_MIN_WIDTH;
   const shownMode: Mode = mode === 'split' && canSplit ? 'split' : 'unified';
   const [scope, setScope] = useState<Scope>(() => (ls.get('ws.changesScope') as Scope) || 'all');
@@ -156,7 +155,7 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
   if (!git.loaded && !all.length) return <div className="panel-empty"><Spinner size={18} /><span>Checking for changes…</span></div>;
 
   return (
-    <div className="changes" ref={root}>
+    <div className="changes" ref={setRoot}>
       <div className="changes-bar">
         <div className="changes-sum">
           {git.isRepo && branch && <span className="chip-branch" title="Current branch"><Icon name="branch" size={12} />{branch}</span>}

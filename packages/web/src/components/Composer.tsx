@@ -199,7 +199,7 @@ export function Composer({ session }: { session: SessionData }) {
           <textarea
             ref={ta} rows={1} value={text} spellCheck
             aria-label="Message Claude"
-            placeholder={session.perms.length ? 'Waiting for your decision above. Type to queue a follow-up…' : running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
+            placeholder={session.perms.length ? 'Waiting for your decision above…' : running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
             onChange={(e) => { setText(e.target.value); setPopup(detect(e.target.value, e.target.selectionStart)); }}
             onKeyDown={onKeyDown}
             onKeyUp={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setPopup(detect(text, e.currentTarget.selectionStart)); }}

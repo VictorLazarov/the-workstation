@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'reac
 import type { Conversation, PermissionRequest, TaskInfo, ToolResult, ToolUseBlock } from '../lib/types';
 import { MAIN_LANE } from '../lib/types';
 import { collapseContext, diffLines, diffStats, fromStructuredPatch, type DiffLine } from '../lib/diff';
-import { hostOf, mcpParts, str, toolKind, toolPath, toolTitle, webVerb } from '../lib/tools';
+import { hostOf, isInterruptResult, mcpParts, str, toolKind, toolPath, toolTitle, webVerb } from '../lib/tools';
 import { basename, formatDuration, formatTokens, isHttpUrl, relPath, truncate } from '../lib/utils';
 import { useHasPanel } from '../panels/registry';
 import { useUi } from '../store/ui';
@@ -30,7 +30,7 @@ export interface ToolProps {
 
 export function toolStatus(p: Pick<ToolProps, 'block' | 'result' | 'perm' | 'outcome' | 'sessionRunning'>): ToolStatus {
   if (p.perm) return 'waiting';
-  if (p.result) return p.outcome === 'denied' ? 'denied' : p.result.isError ? 'error' : 'done';
+  if (p.result) return p.outcome === 'denied' ? 'denied' : p.result.isError ? (isInterruptResult(p.result.content) ? 'stopped' : 'error') : 'done';
   if (!p.block.final && p.block.partialJson !== undefined) return 'streaming';
   return p.sessionRunning ? 'running' : 'stopped';
 }
@@ -164,7 +164,7 @@ function EditCard(p: ToolProps & { status: ToolStatus; footer: ReactNode }) {
     <Shell kind={p.block.name === 'Write' ? 'write' : 'edit'} status={p.status} flush forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
       title={<>{editVerb(p.block.name, isNew, p.status)} <span className="filename" title={path}>{relPath(path, p.cwd)}</span></>}
       subtitle={p.block.name === 'MultiEdit' ? `${(p.block.input.edits as unknown[] | undefined)?.length ?? 0} edits` : undefined}
-      meta={hasInput && p.status !== 'streaming' ? <span className="stats"><span className="add">+{st.added}</span><span className="del">−{st.removed}</span></span> : null}
+      meta={hasInput && p.status !== 'streaming' ? <span className="stats">{(st.added > 0 || st.removed === 0) && <span className="add">+{st.added}</span>}{st.removed > 0 && <span className="del">−{st.removed}</span>}</span> : null}
       actions={hasChanges && p.status === 'done' ? <button type="button" className="link-btn row-action" onClick={(e) => { e.stopPropagation(); useUi.getState().openInspector('changes', path); }}>Review</button> : null}>
       {hasInput ? <DiffView lines={lines} path={path} maxLines={p.status === 'waiting' ? 40 : 14} /> : <div className="skeleton-lines"><i /><i /><i /></div>}
       {p.status === 'error' && p.result && <Output text={p.result.content} isError />}

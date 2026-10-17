@@ -94,7 +94,7 @@ export function App() {
       <div className="shell">
         {ui.sidebarOpen && (
           <>
-            {sidebarDrawer && <div className="drawer-scrim" data-testid="sidebar-scrim" onClick={() => ui.set({ sidebarOpen: false })} />}
+            {sidebarDrawer && <div className="drawer-scrim side" data-testid="sidebar-scrim" onClick={() => ui.set({ sidebarOpen: false })} />}
             <Sidebar />
             {!sidebarDrawer && <Resizer label="Resize sidebar" onDrag={(dx) => ui.set({ sidebarWidth: Math.min(480, Math.max(220, useUi.getState().sidebarWidth + dx)) })} />}
           </>
@@ -110,7 +110,7 @@ export function App() {
         </main>
         {session && ui.inspectorOpen && (
           <>
-            {inspectorDrawer && <div className="drawer-scrim" data-testid="inspector-scrim" onClick={() => ui.set({ inspectorOpen: false })} />}
+            {inspectorDrawer && <div className="drawer-scrim insp" data-testid="inspector-scrim" onClick={() => ui.set({ inspectorOpen: false })} />}
             {!inspectorDrawer && <Resizer label="Resize inspector" onDrag={(dx) => ui.set({ inspectorWidth: Math.min(720, Math.max(280, useUi.getState().inspectorWidth - dx)) })} />}
             <Inspector session={session} />
           </>

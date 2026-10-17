@@ -111,6 +111,9 @@ export function humanizeError(code: string): string {
   return map[code] ?? code;
 }
 
+/** A tool result that only says the user stopped the run: a neutral "stopped" step, not a red error. */
+export const isInterruptResult = (text: string): boolean => /^\s*\[Request interrupted by user/i.test(text);
+
 /** The single live checklist of a lane: id of its most recent TodoWrite (older snapshots collapse to a quiet line). */
 export function latestTodoId(rows: Row[]): string | undefined {
   for (let i = rows.length - 1; i >= 0; i--) { const r = rows[i]; if (r.kind === 'tool' && r.block.name === 'TodoWrite') return r.block.id; }

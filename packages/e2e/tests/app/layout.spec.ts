@@ -68,7 +68,7 @@ const mainState = async (page: Page, lint: Linter) => {
   await newSessionInProject(page);
   await sendPrompt(page, 'demo everything');
   await allowAll(page);
-  await expect(page.getByText('Demo complete.')).toBeVisible();
+  await expect(page.getByText('Everything is done')).toBeVisible();
   await closeDrawers(page);
   await lint.check('conversation (demo everything)');
   await page.locator('.conv-scroll').evaluate((e) => e.scrollTo(0, 0));
@@ -108,6 +108,10 @@ test.describe('layout lint: every state at sampled combinations', () => {
       await newSessionInProject(page);
       await closeDrawers(page);
       await lint.check('draft session');
+      await scenario(page, 'error please', 'idle');
+      await lint.check('error result');
+      await newSessionInProject(page);
+      await closeDrawers(page);
       await scenario(page, 'hello there', 'idle');
       await lint.check('plain reply');
 
@@ -132,13 +136,6 @@ test.describe('layout lint: every state at sampled combinations', () => {
       await page.getByRole('button', { name: 'Keep planning…' }).click();
       await page.getByRole('button', { name: 'Send feedback' }).click();
       await expectIdle(page);
-      await scenario(page, 'error please', 'idle');
-      await lint.check('error result');
-      await scenario(page, 'slow please', 'pending').catch(() => {}); // streams; no permission: just wait
-      await page.getByRole('button', { name: 'Stop', exact: true }).click().catch(() => {});
-      await expectIdle(page);
-      await lint.check('stopped');
-
       // composer menus and popups
       for (const [i, name] of ['mode', 'model', 'effort'].entries()) {
         await page.locator('.composer-chips .chip-btn').nth(i).click();

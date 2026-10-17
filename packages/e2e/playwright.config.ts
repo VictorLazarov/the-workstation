@@ -75,7 +75,7 @@ const state: E2EState = process.env.E2E_STATE ? JSON.parse(process.env.E2E_STATE
 process.env.E2E_STATE = JSON.stringify(state);
 
 const launchOptions = { executablePath: chromePath() };
-const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
+const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_MAX_SESSIONS: '500', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
 const serverCmd = (url: string) => `node ${path.join(repoRoot, 'packages/server/dist/cli.js')} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${state.project}`;
 
 export default defineConfig({

@@ -10,8 +10,14 @@ Run against the mock (`WORKSTATION_MOCK=1`), built from the working tree at the 
 
 ## BUG-001: a rejected token shows "Connecting to the server…" forever
 
+> **FIXED** (scrutiniser pass 2, M2). The client now probes `/api/health` with the Bearer token; a refusal shows the
+> full-screen "Access token missing or invalid" state with how to get the right link and a Retry button, and the
+> WebSocket stops retrying (backoff capped at 30s, at most 10 attempts, then an "offline" banner with Retry). The
+> `test.fail()` was removed; the regression tests are in `tests/app/token.spec.ts` (and `lib/access.test.ts`,
+> `lib/transport/ws.test.ts` in the web package). The text below is the original report.
+
 - **Severity:** medium (usability; no security impact, the token is still enforced)
-- **Test:** `tests/app/token.spec.ts`, "BUG-001: a rejected token is named as an access problem…"
+- **Test:** `tests/app/token.spec.ts`, "a wrong token is detected through /api/health…" (was an expected-fail)
 
 **Repro**
 1. Start the server in mock mode: `WORKSTATION_MOCK=1 node packages/server/dist/cli.js --no-open --port 7777`.
