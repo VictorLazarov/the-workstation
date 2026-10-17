@@ -99,10 +99,12 @@ test.describe('session features', () => {
   test('the inspector toggles open and closed from the keyboard', async ({ page }) => {
     await sendPrompt(page, 'inspector check');
     await expectIdle(page);
-    await page.keyboard.press('Control+Alt+b');
+    // The overview pane is open by default; the shortcut hides it and shows it again.
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
     await page.keyboard.press('Control+Alt+b');
     await expect(page.getByRole('complementary', { name: 'Inspector' })).toHaveCount(0);
+    await page.keyboard.press('Control+Alt+b');
+    await expect(page.getByRole('complementary', { name: 'Inspector' })).toBeVisible();
   });
 
   test('the sidebar search filters sessions and reports no matches', async ({ page }) => {
