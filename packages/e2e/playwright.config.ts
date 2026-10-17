@@ -44,10 +44,14 @@ function setup(): E2EState {
   // with one uncommitted edit and one new file, so the Changes tab and the "one branch everywhere" checks have real data.
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', ...args], { cwd: project, stdio: 'ignore' });
   fs.writeFileSync(path.join(project, 'alpha/.keep'), '');
+  // a long tracked file whose every line is edited below: both panes of a split diff are tall and wide enough to scroll
+  const longLine = (i: number, tail = '') => `line ${i}: ${'lorem ipsum dolor sit amet, '.repeat(7)}${tail}`;
+  fs.writeFileSync(path.join(project, 'long.txt'), Array.from({ length: 70 }, (_, i) => longLine(i)).join('\n') + '\n');
   git('init', '-q', '-b', 'develop');
   git('add', '-A');
   git('commit', '-q', '-m', 'fixture');
   fs.writeFileSync(path.join(project, 'src/example.ts'), 'export const greeting = "hello, world";\nexport const answer = 42;\nexport function add(a: number, b: number): number { return a + b; }\n');
+  fs.writeFileSync(path.join(project, 'long.txt'), Array.from({ length: 70 }, (_, i) => longLine(i, 'EDITED')).join('\n') + '\n');
   fs.writeFileSync(path.join(project, 'NOTES.md'), '# Notes\n\nA new, untracked file.\n');
   // Two isolated config homes (one per server) that share the fixed token.
   const mainHome = path.join(home, 'home-main');

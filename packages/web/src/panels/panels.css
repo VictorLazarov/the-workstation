@@ -43,7 +43,7 @@
 .split-table .diff-code { padding: 0 8px; }
 .split-table .diff-sep td { text-align: left; padding-left: 12px; height: 1.45em; }
 .cdiff-table .diff-code.diff-add { background: var(--diff-add); } .cdiff-table .diff-code.diff-del { background: var(--diff-del); }
-.cdiff-table .diff-no.diff-add { background: var(--diff-add-strong); opacity: 1; } .cdiff-table .diff-no.diff-del { background: var(--diff-del); }
+.cdiff-table .diff-no.diff-add, .split-table .diff-no.diff-add { background: var(--diff-add-strong); color: var(--text-2); } .split-table .diff-no.diff-del { color: var(--text-2); } .cdiff-table .diff-no.diff-del { background: var(--diff-del); }
 .cdiff-table .diff-empty { background: var(--surface-2); }
 .cdiff-table .diff-sep td { text-align: left; padding-left: 12px; }
 .ccommit { position: sticky; bottom: 0; background: var(--bg); border-top: 1px solid var(--border); padding: 6px 10px 8px; display: grid; gap: 6px; z-index: 3; }
@@ -120,9 +120,10 @@
 .mcp.tone-ok .mcp-dot { background: var(--ok); } .mcp.tone-warn .mcp-dot { background: var(--warn); } .mcp.tone-err .mcp-dot { background: var(--danger); }
 .mcp-main { flex: 1; min-width: 0; display: grid; } .mcp-main b { font-size: var(--fs-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .mcp-main .muted { display: flex; gap: 5px; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mcp.tone-off .mcp-main b { color: var(--muted); }
-.switch { flex: none; width: 32px; height: 18px; border-radius: 99px; background: var(--border-strong); position: relative; transition: background 0.15s; }
-.switch i { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); transition: transform 0.15s; }
-.switch.on { background: var(--accent); } .switch.on i { transform: translateX(14px); } .switch:disabled { opacity: 0.45; cursor: not-allowed; }
+.switch { flex: none; width: 36px; height: 24px; border-radius: 99px; background: transparent; position: relative; }
+.switch::before { content: ''; position: absolute; left: 2px; right: 2px; top: 3px; bottom: 3px; border-radius: 99px; background: var(--border-strong); transition: background 0.15s; }
+.switch i { position: absolute; top: 5px; left: 4px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: var(--shadow-sm); transition: transform 0.15s; }
+.switch.on::before { background: var(--accent); } .switch.on i { transform: translateX(14px); } .switch:disabled { opacity: 0.45; cursor: not-allowed; }
 .switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .disc { border-bottom: 1px solid var(--border); } .disc:first-of-type { border-top: 1px solid var(--border); }
 .disc-head { width: 100%; display: flex; align-items: center; gap: 6px; padding: 5px 2px; font-size: var(--fs-base); font-weight: 500; text-align: left; } .disc-head:hover { color: var(--accent); }
@@ -161,7 +162,7 @@
 .ov-stop { width: 22px; height: 22px; margin-left: 2px; color: var(--muted); } .ov-stop:hover:not(:disabled) { color: var(--danger); background: var(--danger-soft); }
 .mcp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-strong); flex: none; }
 .mcp-tone-ok .mcp-dot { background: var(--ok); } .mcp-tone-warn .mcp-dot { background: var(--info); } .mcp-tone-err .mcp-dot { background: var(--danger); } .mcp-tone-off .ov-item-main { color: var(--muted); }
-.switch.sm { width: 26px; height: 15px; } .switch.sm i { width: 11px; height: 11px; top: 2px; left: 2px; } .switch.sm.on i { transform: translateX(11px); }
+.switch.sm { width: 30px; height: 24px; } .switch.sm::before { top: 4.5px; bottom: 4.5px; } .switch.sm i { width: 11px; height: 11px; top: 6.5px; left: 4px; } .switch.sm.on i { transform: translateX(11px); }
 /* context breakdown */
 .cx-head { display: inline-flex; align-items: baseline; gap: 8px; } .cx-head b { color: var(--text); font-weight: 600; } .cx-head.warm b { color: var(--text); } .cx-head.hot b { color: var(--danger); }
 .cx-bar { display: flex; height: 8px; border-radius: 6px; overflow: hidden; background: var(--active); gap: 1px; margin: 4px 0 8px; }

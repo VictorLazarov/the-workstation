@@ -29,7 +29,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .btn.primary:hover:not(:disabled) { background: var(--accent-solid-hover); border-color: var(--accent-solid-hover); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--text-2); } .btn.ghost:hover:not(:disabled) { background: var(--hover); }
 .btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--border)); } .btn.danger:hover:not(:disabled) { background: var(--danger-soft); }
-.btn.danger-solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.danger-solid { background: var(--danger-fill); border-color: var(--danger-fill); color: #fff; }
 .btn.block { width: 100%; } .btn.lg { height: var(--ctl-h-lg); padding: 0 14px; font-size: var(--fs-base); border-radius: var(--radius); }
 .icon-btn { display: inline-grid; place-items: center; width: var(--ctl-h); height: var(--ctl-h); border-radius: 6px; color: var(--muted); flex: none; }
 .icon-btn:hover:not(:disabled), .icon-btn.active { background: var(--hover); color: var(--text); }

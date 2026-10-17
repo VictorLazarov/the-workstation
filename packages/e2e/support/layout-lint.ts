@@ -212,9 +212,19 @@ function lintInPage(opts: { brand: string }) {
     return { left: L, top: T, right: R, bottom: B, width: Math.max(0, R - L), height: Math.max(0, B - T) };
   }
   const boxes = interactive.filter((e) => !e.matches('input,textarea,select') && !e.closest('[role=tablist] , .segmented, .seg, [role=radiogroup], .pal-list, [role=listbox], [role=menu], .menu')).map((e) => ({ e, r: clipRect(e) })).filter((x) => x.r.width > 1 && x.r.height > 1);
+  // Overlays (toasts, popovers, drawers) are meant to sit above the page: compare controls only within the same layer.
+  // Toasts vs. the composer / inspector tabs / commit box are asserted by the dedicated B2 test instead.
+  const layerOf = (el) => {
+    if (el.closest('.toasts')) return 'toast';
+    if (el.closest('.popover')) return 'popover';
+    const d = el.closest('.sidebar, .inspector');
+    if (d && getComputedStyle(d).position === 'absolute') return d.classList.contains('sidebar') ? 'drawer-side' : 'drawer-insp';
+    return 'page';
+  };
   for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
     const a = boxes[i], b = boxes[j];
     if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+    if (layerOf(a.e) !== layerOf(b.e)) continue;
     const hOver = Math.min(a.r.right, b.r.right) - Math.max(a.r.left, b.r.left);
     const vOver = Math.min(a.r.bottom, b.r.bottom) - Math.max(a.r.top, b.r.top);
     const vGap = Math.max(b.r.top - a.r.bottom, a.r.top - b.r.bottom);
