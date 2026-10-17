@@ -38,10 +38,10 @@ export function ProjectPicker() {
   return (
     <Dialog open={open} onClose={close} title="Open a project" width={600} className="picker"
       footer={<><span className="picker-path" title={path}>{path}</span><button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={!path} onClick={() => choose(path)}>Open “{projectName(path) || '/'}”</button></>}>
-      {projects.length > 0 && (
+      {(projects.length > 0 || serverCwd) && (
         <div className="picker-recent">
-          <div className="picker-label">Recent</div>
-          {projects.slice(0, 5).map((p) => <button type="button" key={p} className="recent-row" onClick={() => choose(p)}><Icon name="folder" size={14} /><b>{projectName(p)}</b><span>{p}</span></button>)}
+          <div className="picker-label">{projects.length ? 'Recent' : 'This server\'s project'}</div>
+          {(serverCwd && !projects.includes(serverCwd) ? [serverCwd, ...projects] : projects).slice(0, 5).map((p) => <button type="button" key={p} className="recent-row" onClick={() => choose(p)}><Icon name="folder" size={14} /><b>{projectName(p)}</b><span>{p}</span></button>)}
         </div>
       )}
       <div className="picker-label">Browse{platform.pickFolder && <button type="button" className="link-btn" onClick={async () => { const p = await platform.pickFolder!(); if (p) choose(p); }}>System dialog…</button>}</div>

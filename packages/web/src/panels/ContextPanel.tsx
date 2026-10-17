@@ -47,15 +47,17 @@ function Usage({ sessionId }: { sessionId: string }) {
   const costs = useMemo(() => (conv ? turnCosts(conv) : []), [conv]);
   if (!conv) return null;
   const u = conv.usage;
+  const known = u.known !== false; // a resumed session's past usage is not in its transcript
   const max = Math.max(...costs, 0.0001);
   return (
     <Section title="Usage">
       <div className="stat-grid">
-        <div className="stat"><span>Cost</span><b>{formatCost(u.costUsd)}</b></div>
-        <div className="stat"><span>Turns</span><b>{u.turns}</b></div>
-        <div className="stat"><span>Time</span><b>{u.durationMs ? formatDuration(u.durationMs) : '–'}</b></div>
-        <div className="stat"><span>Avg / turn</span><b>{u.turns ? formatCost(u.costUsd / u.turns) : '–'}</b></div>
+        <div className="stat"><span>Cost</span><b>{known ? formatCost(u.costUsd) : '–'}</b></div>
+        <div className="stat"><span>Turns</span><b>{known ? u.turns : '–'}</b></div>
+        <div className="stat"><span>Time</span><b>{known && u.durationMs ? formatDuration(u.durationMs) : '–'}</b></div>
+        <div className="stat"><span>Avg / turn</span><b>{known && u.turns ? formatCost(u.costUsd / u.turns) : '–'}</b></div>
       </div>
+      {!known && <p className="muted small">Usage of earlier runs is not available for a resumed session. It counts from the next message.</p>}
       {costs.length > 1 && (
         <div className="spark" aria-label="Cost per turn">
           {costs.map((c, i) => <i key={i} title={formatCost(c)} style={{ height: `${Math.max(8, (c / max) * 100)}%` }} />)}

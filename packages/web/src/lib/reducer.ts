@@ -4,7 +4,7 @@
  * subagent lanes (parent_tool_use_id), thinking, result/cost, API retries, tasks.
  */
 import type {
-  AssistantItem, Block, Conversation, ImageRef, Item, Lane, NoticeAction, NoticeItem, ResultOutcome, ToolResult, ToolUseBlock, Todo, UserItem,
+  AssistantItem, Block, Conversation, UsageTotals, ImageRef, Item, Lane, NoticeAction, NoticeItem, ResultOutcome, ToolResult, ToolUseBlock, Todo, UserItem,
 } from './types';
 import { MAIN_LANE } from './types';
 
@@ -274,7 +274,16 @@ export function resultOutcome(c: Pick<Conversation, 'interruptRequested' | 'turn
 
 const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error']);
 /** The action that fits an error event: provider/model problems go to Settings, anything else can be retried. */
-export function errorAction(code?: string): NoticeAction { return code && SETTINGS_CODES.has(code) ? 'settings' : 'retry'; }
+export function errorAction(code?: string): NoticeAction {
+  if (code === 'session_limit') return 'close-idle';
+  return code && SETTINGS_CODES.has(code) ? 'settings' : 'retry';
+}
+
+/** The text the user sees for a server error: provider/limit codes get plain words instead of the server's jargon. */
+export function friendlyError(message: string, code?: string, liveCount?: number): string {
+  if (code === 'session_limit') return `Too many sessions are open at once${liveCount ? ` (${liveCount})` : ''}. Close the idle ones to start another.`;
+  return message;
+}
 
 const SUBTYPE_TEXT: Record<string, string> = {
   error_max_turns: 'Reached the turn limit',
@@ -284,7 +293,7 @@ const SUBTYPE_TEXT: Record<string, string> = {
 };
 
 function onResult(c: Conversation, msg: AnyMsg) {
-  const total = Number(msg.total_cost_usd ?? 0);
+  const total = Number(msg.total_cost_usd ?? 0) + (c.usage.costBase ?? 0);
   const turnCost = Math.max(0, total - c.usage.costUsd);
   const outcome = resultOutcome(c, msg);
   const errors: string[] | undefined = Array.isArray(msg.errors) ? msg.errors.map(String) : undefined;
@@ -299,7 +308,7 @@ function onResult(c: Conversation, msg: AnyMsg) {
     action: outcome === 'error' ? (/\b(401|403|authentication|api key|credential|model[ _]not[ _]found)\b/i.test(message ?? '') ? 'settings' as const : 'retry' as const) : undefined,
     costUsd: total, turnCostUsd: turnCost, durationMs: Number(msg.duration_ms ?? 0), turns: Number(msg.num_turns ?? 0), ts: Date.now(),
   };
-  c.usage = { costUsd: total || c.usage.costUsd, turns: c.usage.turns + 1, durationMs: c.usage.durationMs + item.durationMs };
+  c.usage = { ...c.usage, costUsd: total || c.usage.costUsd, turns: c.usage.turns + 1, durationMs: c.usage.durationMs + item.durationMs, known: true };
   c.retry = null;
   c.statusText = null;
   c.interruptRequested = false;
@@ -396,6 +405,19 @@ export function applyServer(c: Conversation, m: { type: string; message?: unknow
     case 'permission.cancelled': return c.turnError ? c : { ...c, interruptRequested: true };
     default: return c;
   }
+}
+
+/**
+ * A resumed session: the transcript has the conversation but no result messages, so its past cost/turns cannot be derived.
+ * Carry over the totals remembered from earlier runs in this browser; with none, mark usage as unknown (shown as "–").
+ */
+export function withKnownUsage(c: Conversation, remembered: UsageTotals | null | undefined): Conversation {
+  const hasResults = Object.values(c.lanes).some((l) => l.items.some((i) => i.kind === 'result'));
+  if (hasResults || c.usage.turns > 0) return c;
+  const any = Object.values(c.lanes).some((l) => l.items.length > 0);
+  if (!any) return c;
+  if (remembered && remembered.turns > 0) return { ...c, usage: { costUsd: remembered.costUsd, turns: remembered.turns, durationMs: remembered.durationMs, costBase: remembered.costUsd, known: true } };
+  return { ...c, usage: { costUsd: 0, turns: 0, durationMs: 0, known: false } };
 }
 
 /** Optimistic local user message (confirmed when the SDK echoes it back). */

@@ -1,3 +1,4 @@
+import { sessionTitle } from './title.js';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import type { IncomingMessage, Server } from 'node:http';
@@ -139,7 +140,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     const out = new Map<string, SessionSummary>();
     for (const s of stored) {
       out.set(s.sessionId, {
-        sessionId: s.sessionId, title: s.customTitle || s.summary || s.firstPrompt || 'Untitled', cwd: s.cwd, gitBranch: s.gitBranch,
+        sessionId: s.sessionId, title: sessionTitle(s), cwd: s.cwd, gitBranch: s.gitBranch,
         lastModified: s.lastModified, createdAt: (s as { createdAt?: number }).createdAt, live: sessions.isLive(s.sessionId), tag: s.tag,
       });
     }

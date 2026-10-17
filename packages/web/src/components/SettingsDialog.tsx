@@ -20,9 +20,9 @@ export function SettingsDialog() {
   const [server, setServer] = useState(getServerBase());
   const [serverToken, setServerToken] = useState('');
   const [saving, setSaving] = useState(false);
-  // the welcome title is for the very first visit only (people signed in through a Claude login never need keys)
-  let firstRunPending = true; try { firstRunPending = localStorage.getItem('ws.firstRunDone') !== '1'; } catch { /* ignore */ }
-  const close = () => { useUi.getState().set({ settingsOpen: false }); try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* ignore */ } };
+  // "Welcome" belongs to the automatic first-run prompt only; opening Settings yourself later is just "Settings"
+  const firstRunPending = useUi((s) => s.settingsFirstRun);
+  const close = () => { useUi.getState().set({ settingsOpen: false }); useUi.setState({ settingsFirstRun: false }); try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* ignore */ } };
 
   useEffect(() => {
     if (!open || !config) return;
@@ -37,7 +37,7 @@ export function SettingsDialog() {
     if (!ready || !config || firstRun) return;
     useUi.setState({ firstRunChecked: true });
     let done = false; try { done = localStorage.getItem('ws.firstRunDone') === '1'; } catch { /* ignore */ }
-    if (!done && !config.hasApiKey && !config.hasAuthToken && !config.anthropicBaseUrl) useUi.getState().set({ settingsOpen: true });
+    if (!done && !config.hasApiKey && !config.hasAuthToken && !config.anthropicBaseUrl) { useUi.setState({ settingsFirstRun: true }); useUi.getState().set({ settingsOpen: true }); }
   }, [ready, config, firstRun]);
 
   const save = async () => {

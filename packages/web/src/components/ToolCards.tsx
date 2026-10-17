@@ -6,6 +6,7 @@ import { hostOf, isInterruptResult, mcpParts, str, toolKind, toolPath, toolTitle
 import { basename, formatDuration, formatTokens, isHttpUrl, relPath, truncate } from '../lib/utils';
 import { useHasPanel } from '../panels/registry';
 import { useUi } from '../store/ui';
+import { useExpanded } from '../lib/expand';
 import { Icon, type IconName } from './Icon';
 import { CopyButton, Dots, Spinner, Stats } from './ui';
 import { DiffView } from './DiffView';
@@ -67,7 +68,7 @@ export function Shell({ kind, title, subtitle, status, meta, defaultOpen = false
   kind: string; title: ReactNode; subtitle?: ReactNode; status: ToolStatus; meta?: ReactNode; defaultOpen?: boolean; forceOpen?: boolean;
   children?: ReactNode; actions?: ReactNode; flush?: boolean; tone?: 'warn'; elapsed?: number;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useExpanded(defaultOpen);
   const isOpen = forceOpen || open;
   const has = children != null && children !== false;
   const live = status === 'running' || status === 'streaming';
@@ -221,7 +222,7 @@ function TaskCard(p: ToolProps & { status: ToolStatus; conv: Conversation; task?
   const i = p.block.input;
   const lane = p.conv.lanes[p.block.id];
   const running = p.status === 'running' || p.status === 'waiting';
-  const [showPrompt, setShowPrompt] = useState(false);
+  const [showPrompt, setShowPrompt] = useExpanded(false, 'prompt');
   const toolCount = p.task?.toolUses ?? (lane?.items ?? []).reduce((n, it) => n + (it.kind === 'assistant' ? it.blocks.filter((b) => b.type === 'tool_use').length : 0), 0);
   return (
     <Shell kind="task" status={p.status} defaultOpen={running} forceOpen={p.status === 'waiting'} elapsed={p.elapsed}
@@ -298,7 +299,7 @@ export const ToolCard = memo(function ToolCard(p: ToolProps & { conv?: Conversat
 export const ExploreGroup = memo(function ExploreGroup({ blocks, results, cwd, sessionRunning }: {
   blocks: ToolUseBlock[]; results: Record<string, ToolResult>; cwd: string; sessionRunning: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useExpanded(false, 'explore');
   const reads = blocks.filter((b) => b.name === 'Read' || b.name === 'LS').length;
   const searches = blocks.length - reads;
   const running = sessionRunning && blocks.some((b) => !results[b.id]);

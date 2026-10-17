@@ -158,3 +158,29 @@ describe('buildRows', () => {
     expect((rows[0] as any).blocks).toHaveLength(2);
   });
 });
+
+describe('usage after resume', () => {
+  const history = [
+    { type: 'user', message: { role: 'user', content: 'hello' }, parent_tool_use_id: null, uuid: 'u1' },
+    { type: 'assistant', message: { id: 'm1', content: [{ type: 'text', text: 'hi' }] }, parent_tool_use_id: null },
+  ];
+  it('a resumed transcript has no result messages: usage is unknown (not a fake $0.00 / 0 turns)', async () => {
+    const { withKnownUsage } = await import('./reducer');
+    const c = withKnownUsage(foldMessages(history), null);
+    expect(c.usage).toMatchObject({ known: false, turns: 0 });
+  });
+  it('remembered totals carry over and the next turn adds to them (the SDK restarts total_cost_usd at 0)', async () => {
+    const { withKnownUsage } = await import('./reducer');
+    let c = withKnownUsage(foldMessages(history), { costUsd: 0.05, turns: 3, durationMs: 9000 });
+    expect(c.usage).toMatchObject({ known: true, turns: 3, costUsd: 0.05 });
+    c = applySdk(c, { type: 'result', subtype: 'success', is_error: false, total_cost_usd: 0.01, duration_ms: 1000, num_turns: 1, result: 'ok' });
+    expect(c.usage.turns).toBe(4);
+    expect(c.usage.costUsd).toBeCloseTo(0.06, 5);
+    const r = c.lanes[''].items.at(-1) as { turnCostUsd: number };
+    expect(r.turnCostUsd).toBeCloseTo(0.01, 5);
+  });
+  it('an empty conversation stays a normal $0.00 / 0 turns', async () => {
+    const { withKnownUsage } = await import('./reducer');
+    expect(withKnownUsage(emptyConversation(), null).usage.known).toBeUndefined();
+  });
+});

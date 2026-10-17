@@ -44,6 +44,8 @@ interface UiState {
   confirm: (ConfirmOpts & { resolve: (ok: boolean) => void }) | null;
   prompt: (PromptOpts & { resolve: (v: string | null) => void }) | null;
   firstRunChecked: boolean;
+  /** the settings dialog was opened by the first-run prompt (not by the user): only then is it titled "Welcome" */
+  settingsFirstRun: boolean;
   set: (p: Partial<UiState>) => void;
   setTheme: (t: Theme) => void;
   setBrand: (b: Brand) => void;
@@ -108,7 +110,7 @@ export const useUi = create<UiState>((set, get) => ({
   inspectorWidth: clamp(Number(ls.get('ws.inspectorW')) || 340, 280, 720),
   inspectorTab: ls.get('ws.inspectorTab') || 'overview',
   paletteOpen: false, settingsOpen: false, pickerOpen: false, shortcutsOpen: false,
-  sidebarQuery: '', toasts: [], confirm: null, prompt: null, firstRunChecked: false,
+  sidebarQuery: '', toasts: [], confirm: null, prompt: null, firstRunChecked: false, settingsFirstRun: false,
   set: (p) => {
     set(p);
     if ('sidebarOpen' in p && !sidebarIsDrawer()) ls.set('ws.sidebarOpen', p.sidebarOpen ? '1' : '0');

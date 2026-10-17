@@ -33,7 +33,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .btn.block { width: 100%; } .btn.lg { height: var(--ctl-h-lg); padding: 0 14px; font-size: var(--fs-base); border-radius: var(--radius); }
 .icon-btn { display: inline-grid; place-items: center; width: var(--ctl-h); height: var(--ctl-h); border-radius: 6px; color: var(--muted); flex: none; }
 .icon-btn:hover:not(:disabled), .icon-btn.active { background: var(--hover); color: var(--text); }
-.link-btn { color: var(--accent); font-weight: 500; font-size: var(--fs-sm); padding: 2px 6px; border-radius: 4px; } .link-btn:hover { background: var(--accent-soft); }
+.link-btn { color: var(--accent); font-weight: 500; font-size: var(--fs-sm); padding: 2px 6px; border-radius: 4px; min-height: 24px; min-width: 24px; display: inline-flex; align-items: center; justify-content: center; } .link-btn:hover { background: var(--accent-soft); }
 .chip-btn { display: inline-flex; align-items: center; gap: 4px; height: var(--ctl-h); padding: 0 6px; border-radius: 6px; color: var(--text-2); font-size: var(--fs-sm); font-weight: 500; }
 .chip-btn:hover, .chip-btn[aria-expanded='true'] { background: var(--hover); color: var(--text); }
 .kbd { font: 500 10px var(--font-sans); padding: 1px 5px; border: 1px solid var(--border-strong); border-bottom-width: 2px; border-radius: 4px; color: var(--muted); background: var(--surface); }
@@ -132,10 +132,11 @@ input, textarea, select { font: inherit; color: inherit; }
 @media (max-width: 900px) { .topbar-session, .status-pill { display: none; } }
 
 /* conversation */
-.conv { flex: 1; min-height: 0; position: relative; display: flex; }
-.conv-scroll { flex: 1; overflow-y: auto; scroll-behavior: auto; overscroll-behavior: contain; }
+.conv { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
+.conv-scroll { flex: 1; min-height: 0; overflow-y: auto; scroll-behavior: auto; overscroll-behavior: contain; }
 .conv-inner { max-width: var(--col); margin: 0 auto; padding: var(--sp-7) var(--sp-7) var(--sp-5); display: flex; flex-direction: column; gap: var(--gap-turn); }
-.jump { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 5px; height: var(--ctl-h); padding: 0 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-md); font-size: var(--fs-sm); font-weight: 500; }
+.jump-strip { flex: none; display: flex; justify-content: center; padding: 6px 0 2px; }
+.jump { display: inline-flex; align-items: center; gap: 5px; height: var(--ctl-h); padding: 0 10px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-md); font-size: var(--fs-sm); font-weight: 500; }
 .jump:hover { background: var(--surface-2); }
 .working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: var(--fs-base); padding: 0 2px; align-self: flex-start; min-height: 24px; }
 .working .spinner, .thinking .spinner, .subagent-wait .spinner, .todo .spinner, .tool-task .spinner { border-top-color: var(--ai-fill); }

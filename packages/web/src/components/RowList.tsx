@@ -5,14 +5,14 @@ import { buildRows, latestTodoId, type Row } from '../lib/tools';
 import { formatCost, formatDuration, relPath, truncate } from '../lib/utils';
 import { useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
+import { ExpandScope, useExpanded } from '../lib/expand';
 import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { ExploreGroup, ToolCard } from './ToolCards';
 import { CopyButton } from './ui';
 
 export const Thinking = memo(function Thinking({ block, streaming }: { block: ThinkingBlock; streaming: boolean }) {
-  const [open, setOpen] = useState<boolean | null>(null);
-  const isOpen = open ?? false;
+  const [isOpen, setOpen] = useExpanded(false);
   if (block.redacted) return <div className="thinking"><span className="thinking-head dim"><Icon name="brain" size={14} /> Reasoning (hidden)</span></div>;
   const first = block.text.trim().split('\n')[0];
   return (
@@ -75,8 +75,9 @@ function Img({ im }: { im: ImageRef }) {
   return src ? <img className="msg-img" src={src} alt={im.name ?? 'attached image'} /> : null;
 }
 
-function ErrorAction({ action, sessionId }: { action?: 'settings' | 'retry'; sessionId: string }) {
+function ErrorAction({ action, sessionId }: { action?: 'settings' | 'retry' | 'close-idle'; sessionId: string }) {
   if (action === 'settings') return <button type="button" className="link-btn banner-action" onClick={() => useUi.getState().set({ settingsOpen: true })}>Open Settings</button>;
+  if (action === 'close-idle') return <button type="button" className="link-btn banner-action" onClick={() => useSessions.getState().closeIdleSessions(sessionId)}>Close idle sessions</button>;
   if (action === 'retry') return <button type="button" className="link-btn banner-action" onClick={() => useSessions.getState().retryLast(sessionId)}>Retry</button>;
   return null;
 }
@@ -124,18 +125,20 @@ export const RowList = memo(function RowList({ conv, laneKey, sessionId, cwd, se
   const flush = () => { if (steps.length) { out.push(<div className="steps" key={'steps:' + out.length}>{steps}</div>); steps = []; } };
   for (const r of rows) {
     switch (r.kind) {
-      case 'thinking': steps.push(<Thinking key={r.key} block={r.block} streaming={r.streaming} />); break;
-      case 'explore': steps.push(<ExploreGroup key={r.key} blocks={r.blocks} results={conv.toolResults} cwd={cwd} sessionRunning={sessionRunning} />); break;
+      case 'thinking': steps.push(<ExpandScope.Provider key={r.key} value={`${sessionId}/${r.key}`}><Thinking block={r.block} streaming={r.streaming} /></ExpandScope.Provider>); break;
+      case 'explore': steps.push(<ExpandScope.Provider key={r.key} value={`${sessionId}/${r.key}`}><ExploreGroup blocks={r.blocks} results={conv.toolResults} cwd={cwd} sessionRunning={sessionRunning} /></ExpandScope.Provider>); break;
       case 'tool': {
         const b = r.block;
         const perm = perms.find((p) => p.toolUseID === b.id);
         steps.push(
           <div key={b.id} data-tool-id={b.id}>
+            <ExpandScope.Provider value={`${sessionId}/${b.id}`}>
             <ToolCard
               block={b} result={conv.toolResults[b.id]} perm={perm} outcome={outcomes[b.id]} sessionRunning={sessionRunning}
               sessionId={sessionId} cwd={cwd} elapsed={conv.toolProgress[b.id]} conv={b.name === 'Task' || b.name === 'Agent' ? conv : undefined}
               task={conv.tasks[b.id]} todoLatest={b.name === 'TodoWrite' ? b.id === latestTodo : undefined} onRespond={perm ? respond(b.id, perm.requestId) : noop}
             />
+            </ExpandScope.Provider>
           </div>,
         );
         break;

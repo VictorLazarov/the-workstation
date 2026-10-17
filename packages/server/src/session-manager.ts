@@ -1,3 +1,4 @@
+import { titleFromPrompt } from './title.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Options, PermissionResult, PermissionUpdate, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
@@ -98,6 +99,9 @@ const MAX_FORWARDED_TEXT = Math.max(100_000, Number(process.env.WORKSTATION_MAX_
 const FATAL_API_ERRORS = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error']);
 const MODES = new Set(['default', 'acceptEdits', 'plan', 'bypassPermissions', 'auto', 'dontAsk']);
 const EFFORTS = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+
+/** An error with a machine-readable code the UI can act on (e.g. `session_limit` -> "Close idle sessions"). */
+export class CodedError extends Error { constructor(message: string, readonly code: string) { super(message); } }
 
 export class SessionManager {
   private sessions = new Map<SessionId, LiveSession>();
@@ -214,7 +218,7 @@ export class SessionManager {
           sub.send({ type: 'error', message: `unknown message type: ${(msg as { type?: string }).type}` });
       }
     } catch (e) {
-      sub.send({ type: 'error', reqId, sessionId, message: e instanceof Error ? e.message : String(e) });
+      sub.send({ type: 'error', reqId, sessionId, message: e instanceof Error ? e.message : String(e), ...(e instanceof CodedError ? { code: e.code } : {}) });
     }
   }
 
@@ -249,7 +253,7 @@ export class SessionManager {
       return this.sessions.get(resumeId)!;
     }
     const max = Math.max(1, Number(process.env.WORKSTATION_MAX_SESSIONS) || 20);
-    if (new Set([...this.sessions.keys(), ...this.starting.keys()]).size >= max) throw new Error(`too many live sessions (max ${max}); close one first or raise WORKSTATION_MAX_SESSIONS`);
+    if (new Set([...this.sessions.keys(), ...this.starting.keys()]).size >= max) throw new CodedError(`too many live sessions (max ${max}); close one first or raise WORKSTATION_MAX_SESSIONS`, 'session_limit');
     // Registered synchronously, before the first await, so a concurrent start of the same id finds it
     // (new sessions are registered under a private key so they count against the cap while starting).
     const key = resumeId ?? `\0new:${randomUUID()}`;
@@ -436,7 +440,7 @@ export class SessionManager {
     const echoContent = typeof content === 'string' ? content : (content as Json[]).map((b) => (b.type === 'image' ? { type: 'image', name: imgs.find((i) => i.dataBase64 === (b.source as Json).data)?.name } : b));
     this.emitSdk(s, { type: 'user', message: { role: 'user', content: echoContent }, parent_tool_use_id: null, session_id: s.id, uuid, clientMsgId, origin: 'workstation' });
     s.inflight.set(uuid, 'queued');
-    if (!s.title) s.title = text.slice(0, 80);
+    if (!s.title) s.title = titleFromPrompt(text) || 'New session';
     this.emitState(s);
     s.queue.push(user);
   }

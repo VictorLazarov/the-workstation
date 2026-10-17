@@ -19,7 +19,7 @@ export function TopBar({ session }: { session?: SessionData }) {
   const inspectorOpen = useUi((s) => s.inspectorOpen);
   const status = session ? sessionStatus(session) : 'idle';
   const label = { running: 'Working', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished', idle: 'Idle', starting: 'Starting' }[status];
-  const cost = session?.conv.usage.costUsd ?? 0;
+  const cost = session?.conv.usage.known === false ? 0 : session?.conv.usage.costUsd ?? 0; // unknown after a resume: hidden, not $0.00
   const mod = isMac() ? '⌘' : 'Ctrl';
   return (
     <header className="topbar">

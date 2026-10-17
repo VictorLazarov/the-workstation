@@ -5,9 +5,9 @@ import type {
 } from '@workstation/protocol';
 import { api } from '../lib/api';
 import {
-  addLocalUser, addNotice, applySdk, applyServer, emptyConversation, finishStreaming, foldMessages, lastItem, markInterruptRequested,
+  addLocalUser, addNotice, applySdk, applyServer, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, lastItem, markInterruptRequested, withKnownUsage,
 } from '../lib/reducer';
-import type { Conversation, ImageRef, PermissionRequest } from '../lib/types';
+import type { Conversation, ImageRef, PermissionRequest, UsageTotals } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
 import { basename, truncate, uid } from '../lib/utils';
 import { clearFailed, failMessage, hasFailed, markAllFailed, nextSendable, type QueuedPrompt } from '../lib/queue';
@@ -84,6 +84,8 @@ interface Store {
   interrupt: (id: string) => void;
   /** Re-send the last prompt (the Retry action of an error banner). */
   retryLast: (id: string) => void;
+  /** Close live sessions that are idle (frees the server's session cap), then re-send what was waiting in `then`. */
+  closeIdleSessions: (then?: string) => void;
   respondPermission: (id: string, requestId: string, decision: PermissionDecision) => void;
   setModel: (id: string, model?: string) => void;
   setMode: (id: string, mode: PermissionMode) => void;
@@ -203,6 +205,8 @@ export const useSessions = create<Store>((set, get) => {
       if (!cur) return;
       let conv = foldMessages(messages ?? [], emptyConversation());
       const buffered = histBuffer.get(id) ?? [];
+      // past usage is not in the transcript: use what this browser remembered, else mark it unknown (never a fake $0.00 / 0 turns)
+      if (!buffered.some((b) => (b as { type?: string })?.type === 'result')) conv = withKnownUsage(conv, ls.getJson<UsageTotals | null>('ws.usage.' + id, null));
       for (const m of buffered) conv = applySdk(conv, m);
       if (cur.conv.init) conv = { ...conv, init: cur.conv.init };
       patch(id, () => ({ conv, loading: false }));
@@ -238,7 +242,8 @@ export const useSessions = create<Store>((set, get) => {
         if (m.reqId && pendingStarts.has(m.reqId)) {
           const lid = pendingStarts.get(m.reqId)!;
           pendingStarts.delete(m.reqId);
-          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', m.message) }));
+          const live = Object.values(get().sessions).filter((x) => x.live).length;
+          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', friendlyError(m.message, m.code, live), { code: m.code, action: errorAction(m.code) }) }));
         } else if (m.sessionId && get().sessions[m.sessionId]) {
           // a turn failure: one actionable notice (Settings for provider/model problems, Retry otherwise); the result that follows is not shown again
           patch(m.sessionId, (s) => ({ conv: applyServer(s.conv, m), failed: true, runtime: { ...s.runtime, status: s.runtime.status === 'closed' ? 'closed' : 'idle' } }));
@@ -290,6 +295,7 @@ export const useSessions = create<Store>((set, get) => {
           const stopped = outcome === 'stopped';
           const isErr = outcome === 'error' || outcome === 'reported';
           const unread = get().activeId !== m.sessionId || document.hidden;
+          ls.setJson('ws.usage.' + m.sessionId, conv.usage);
           patch(m.sessionId, () => ({ conv, failed: isErr, unread: unread && !stopped, lastActivity: Date.now() }));
           if (!stopped) {
             const why = done?.kind === 'result' ? (done.message ?? s.conv.turnError ?? 'Error') : 'Error';
@@ -507,6 +513,13 @@ export const useSessions = create<Store>((set, get) => {
       transport?.send({ type: 'interrupt', sessionId: id });
       // remember that WE asked: the error result that follows is a stop (neutral marker, idle session), not a failure
       patch(id, (s) => ({ queue: [], conv: s.runtime.status === 'idle' ? finishStreaming(s.conv) : markInterruptRequested(s.conv) }));
+    },
+
+    closeIdleSessions(then) {
+      const idle = Object.values(get().sessions).filter((x) => x.live && !x.isDraft && x.runtime.status === 'idle' && !x.perms.length && x.id !== get().activeId);
+      for (const x of idle) get().closeSession(x.id);
+      useUi.getState().toast({ kind: 'info', title: idle.length ? `Closed ${idle.length} idle session${idle.length === 1 ? '' : 's'}` : 'No idle sessions to close', body: idle.length ? 'Their history is kept; open one again to continue it.' : 'Every open session is busy or waiting for you.' });
+      if (idle.length && then) get().retryQueued(then);
     },
 
     retryLast(id) {

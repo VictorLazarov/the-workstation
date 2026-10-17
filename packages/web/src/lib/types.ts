@@ -31,7 +31,7 @@ export interface UserItem {
   failed?: boolean;
   ts: number;
 }
-export type NoticeAction = 'settings' | 'retry';
+export type NoticeAction = 'settings' | 'retry' | 'close-idle';
 export interface NoticeItem { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; ts: number; code?: string; action?: NoticeAction }
 /**
  * How a turn ended, from structural signals only (never from error text):
@@ -107,6 +107,10 @@ export interface UsageTotals {
   costUsd: number;
   turns: number;
   durationMs: number;
+  /** false for a resumed session whose past usage cannot be read (the transcript has no result messages): show "–", not $0.00 / 0 turns */
+  known?: boolean;
+  /** cost of earlier runs of this session: the SDK's total_cost_usd restarts from 0 in every new process */
+  costBase?: number;
 }
 
 export interface Conversation {

@@ -74,6 +74,7 @@ export function Sidebar() {
   const projects = useSessions((s) => s.projects);
   const activeId = useSessions((s) => s.activeId);
   const conn = useSessions((s) => s.conn);
+  const serverCwd = useSessions((s) => s.hello?.serverCwd);
   const { openSession, newSession, setActive, renameSession, deleteSession, forkSession } = useSessions.getState();
   const query = useUi((s) => s.sidebarQuery);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -142,7 +143,8 @@ export function Sidebar() {
         {groups.length === 0 && (
           <div className="sidebar-empty">
             {query ? 'No sessions match.' : conn === 'open' ? 'No projects yet.' : 'Connecting…'}
-            {!query && <button type="button" className="btn" onClick={() => useUi.getState().set({ pickerOpen: true })}>Open a project</button>}
+            {!query && serverCwd && <button type="button" className="btn primary" title={serverCwd} onClick={() => useSessions.getState().newSession(serverCwd)}>Open {projectName(serverCwd)}</button>}
+            {!query && <button type="button" className="btn" onClick={() => useUi.getState().set({ pickerOpen: true })}>{serverCwd ? 'Choose another folder' : 'Open a project'}</button>}
           </div>
         )}
         {groups.map((g) => {

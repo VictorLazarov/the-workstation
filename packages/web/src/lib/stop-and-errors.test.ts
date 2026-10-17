@@ -103,3 +103,15 @@ describe('N1: real API error (401 from a bad base URL, real stream)', () => {
     expect(errorAction(undefined)).toBe('retry');
   });
 });
+
+describe('session cap error', () => {
+  it('is plain words with a Close-idle action, not the server jargon', async () => {
+    const { friendlyError, errorAction } = await import('./reducer');
+    const raw = 'too many live sessions (max 20); close one first or raise WORKSTATION_MAX_SESSIONS';
+    const msg = friendlyError(raw, 'session_limit', 20);
+    expect(msg).not.toMatch(/WORKSTATION_MAX_SESSIONS|live sessions/);
+    expect(msg).toMatch(/Close the idle ones/);
+    expect(errorAction('session_limit')).toBe('close-idle');
+    expect(friendlyError('boom', 'other')).toBe('boom');
+  });
+});

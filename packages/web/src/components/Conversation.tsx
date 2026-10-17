@@ -91,9 +91,12 @@ export function Conversation({ session }: { session: SessionData }) {
         </div>
       </div>
       {away && (
-        <button type="button" className="jump" onClick={() => { stick.current = true; toBottom(true); setAway(false); }}>
-          <Icon name="arrow-up" size={13} style={{ transform: 'rotate(180deg)' }} /> Jump to latest
-        </button>
+        // its own strip between the conversation and the composer: never floats over a tool line or message
+        <div className="jump-strip">
+          <button type="button" className="jump" onClick={() => { stick.current = true; toBottom(true); setAway(false); }}>
+            <Icon name="arrow-up" size={13} style={{ transform: 'rotate(180deg)' }} /> Jump to latest
+          </button>
+        </div>
       )}
     </div>
   );
@@ -127,6 +130,9 @@ export function Home() {
   const newSession = useSessions((s) => s.newSession);
   const open = useSessions((s) => s.openSession);
   const recent = [...summaries].sort((a, b) => b.lastModified - a.lastModified).slice(0, 5);
+  // the folder the server was started in (--cwd / the shell's directory) is the obvious first project
+  const serverCwd = useSessions((s) => s.hello?.serverCwd);
+  const offerServer = !!serverCwd && !projects.includes(serverCwd);
   return (
     <div className="home">
       <div className="home-inner">
@@ -134,7 +140,8 @@ export function Home() {
         <h1 className="serif">Welcome to The Workstation</h1>
         <p className="muted">Run coding agents side by side in your projects. Pick up where you left off, or start something new.</p>
         <div className="home-actions">
-          <button type="button" className="btn primary lg" onClick={() => useUi.getState().set({ pickerOpen: true })}><Icon name="folder-open" size={16} /> Open a project</button>
+          {offerServer && <button type="button" className="btn primary lg" title={serverCwd} onClick={() => newSession(serverCwd!)}><Icon name="folder-open" size={16} /> Open {projectName(serverCwd!)}</button>}
+          <button type="button" className={`btn lg${offerServer ? '' : ' primary'}`} onClick={() => useUi.getState().set({ pickerOpen: true })}><Icon name={offerServer ? 'folder' : 'folder-open'} size={16} /> {offerServer ? 'Choose another folder' : 'Open a project'}</button>
         </div>
         {projects.length > 0 && (
           <section>
