@@ -57,7 +57,7 @@ const P: Record<string, string> = {
 
 export type IconName = keyof typeof P;
 
-export function Icon({ name, size = 16, className, style, fill }: { name: IconName; size?: number; className?: string; style?: CSSProperties; fill?: boolean }) {
+export function Icon({ name, size = 15, className, style, fill }: { name: IconName; size?: number; className?: string; style?: CSSProperties; fill?: boolean }) {
   return (
     <svg
       width={size} height={size} viewBox="0 0 24 24" className={`icon${className ? ' ' + className : ''}`} style={style}

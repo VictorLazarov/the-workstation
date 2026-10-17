@@ -4,6 +4,7 @@ import { uid } from '../lib/utils';
 
 export type Theme = 'system' | 'light' | 'dark';
 export type Brand = 'horizon' | 'warm';
+export type Density = 'compact' | 'comfortable';
 export interface Toast {
   id: string; kind: 'info' | 'success' | 'error' | 'attention'; title: string; body?: string;
   action?: { label: string; run: () => void }; ttl: number;
@@ -16,6 +17,7 @@ export interface PromptOpts { title: string; label?: string; initial?: string; c
 interface UiState {
   theme: Theme;
   brand: Brand;
+  density: Density;
   sidebarOpen: boolean; sidebarWidth: number;
   inspectorOpen: boolean; inspectorWidth: number; inspectorTab: string; inspectorFocus?: string;
   paletteOpen: boolean; settingsOpen: boolean; pickerOpen: boolean; shortcutsOpen: boolean;
@@ -27,6 +29,7 @@ interface UiState {
   set: (p: Partial<UiState>) => void;
   setTheme: (t: Theme) => void;
   setBrand: (b: Brand) => void;
+  setDensity: (d: Density) => void;
   toast: (t: Omit<Toast, 'id' | 'ttl'> & { ttl?: number }) => string;
   dismissToast: (id: string) => void;
   ask: (o: ConfirmOpts) => Promise<boolean>;
@@ -45,11 +48,18 @@ export function applyBrand(b: Brand) {
   if (b === 'warm') el.dataset.brand = 'warm'; else delete el.dataset.brand;
 }
 
+/** 'compact' is the default (no attribute); 'comfortable' loosens every --sp-*, --fs-* and row height token. */
+export function applyDensity(d: Density) {
+  const el = document.documentElement;
+  if (d === 'comfortable') el.dataset.density = 'comfortable'; else delete el.dataset.density;
+}
+
 const clamp = (n: number, a: number, b: number) => Math.min(b, Math.max(a, n));
 
 export const useUi = create<UiState>((set, get) => ({
   theme: (ls.get('ws.theme') as Theme) || 'system',
   brand: ls.get('ws.brand') === 'warm' ? 'warm' : 'horizon',
+  density: ls.get('ws.density') === 'comfortable' ? 'comfortable' : 'compact',
   sidebarOpen: ls.get('ws.sidebarOpen') !== '0',
   sidebarWidth: clamp(Number(ls.get('ws.sidebarW')) || 288, 220, 480),
   inspectorOpen: ls.get('ws.inspectorOpen') === '1',
@@ -67,6 +77,7 @@ export const useUi = create<UiState>((set, get) => ({
   },
   setTheme: (t) => { ls.set('ws.theme', t); applyTheme(t); set({ theme: t }); },
   setBrand: (b) => { ls.set('ws.brand', b); applyBrand(b); set({ brand: b }); },
+  setDensity: (d) => { ls.set('ws.density', d); applyDensity(d); set({ density: d }); },
   toast: (t) => {
     const id = uid('t');
     const ttl = t.ttl ?? (t.kind === 'error' ? 8000 : 4500);

@@ -43,6 +43,13 @@ export function langFromPath(path: string): string | null {
   return resolveLang(m[1]);
 }
 
+/** Horizon has no orange: swap the stock GitHub themes' orange/amber token colours for teal/blue/violet equivalents. */
+const LIGHT_SWAPS: Record<string, string> = { '#e36209': '#17707a', '#b08800': '#6f42c1', '#dbab09': '#6f42c1', '#ffdf5d': '#dbedff', '#ffd33d': '#dbedff', '#f9c513': '#dbedff', '#ffebda': '#ebf8ff' };
+const DARK_SWAPS: Record<string, string> = { '#e0823d': '#56d4dd', '#f69d50': '#76e3ea', '#cc6b2c': '#39c5cf', '#682d0f': '#0d3b40', '#c69026': '#96d0ff', '#ae7c14': '#6cb6ff', '#eac55f': '#96d0ff', '#daaa3f': '#96d0ff', '#966600': '#316dca' };
+function noOrange<T extends object>(theme: T, swaps: Record<string, string>): T {
+  return JSON.parse(JSON.stringify(theme).replace(/#[0-9a-fA-F]{6}\b/g, (c) => swaps[c.toLowerCase()] ?? c));
+}
+
 let hl: Promise<HighlighterCore> | null = null;
 const loaded = new Set<string>();
 
@@ -50,7 +57,10 @@ async function getHl(): Promise<HighlighterCore> {
   hl ??= (async () => {
     const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([import('shiki/core'), import('shiki/engine/javascript')]);
     return createHighlighterCore({
-      themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark-dimmed.mjs')],
+      themes: [
+        import('shiki/themes/github-light.mjs').then((m) => noOrange(m.default, LIGHT_SWAPS)),
+        import('shiki/themes/github-dark-dimmed.mjs').then((m) => noOrange(m.default, DARK_SWAPS)),
+      ],
       langs: [],
       engine: createJavaScriptRegexEngine(),
     });

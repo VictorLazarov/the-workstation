@@ -17,6 +17,35 @@
 @font-face { font-family: '72'; font-style: normal; font-weight: 550 650; font-display: swap; src: url('/fonts/72-Semibold.woff2') format('woff2'); }
 @font-face { font-family: '72'; font-style: normal; font-weight: 700 900; font-display: swap; src: url('/fonts/72-Bold.woff2') format('woff2'); }
 
+/* ── density: every size/space the UI uses comes from here. data-density="compact" (default) | "comfortable" ── */
+:root {
+  --fs-base: 13px;      /* UI text */
+  --fs-body: 13.5px;    /* conversation prose */
+  --fs-sm: 12px;        /* secondary */
+  --fs-xs: 11px;        /* meta */
+  --fs-code: 12px;      /* code, diffs, terminal-ish */
+  --fs-h: 15px;         /* dialog / panel headings */
+  --lh: 1.5;
+  --lh-body: 1.55;
+  --sp-1: 2px; --sp-2: 4px; --sp-3: 6px; --sp-4: 8px; --sp-5: 10px; --sp-6: 12px; --sp-7: 16px; --sp-8: 20px;
+  --topbar-h: 38px;
+  --row-h: 34px;        /* sidebar session row (title + meta line) */
+  --row-h-sm: 26px;     /* tree rows, menu rows */
+  --ctl-h: 26px;        /* buttons, chips, tabs */
+  --ctl-h-lg: 30px;     /* primary actions, fields */
+  --field-h: 28px;
+  --tool-head-h: 28px;
+  --gap-turn: 10px;     /* vertical gap between conversation turns */
+  --pad-card: 10px;     /* horizontal padding inside cards */
+  --icon: 15px;
+}
+:root[data-density='comfortable'] {
+  --fs-base: 14px; --fs-body: 14.5px; --fs-sm: 12.5px; --fs-xs: 11.5px; --fs-code: 12.8px; --fs-h: 17px; --lh: 1.5; --lh-body: 1.65;
+  --sp-1: 3px; --sp-2: 6px; --sp-3: 8px; --sp-4: 10px; --sp-5: 12px; --sp-6: 14px; --sp-7: 18px; --sp-8: 24px;
+  --topbar-h: 46px; --row-h: 44px; --row-h-sm: 30px; --ctl-h: 30px; --ctl-h-lg: 36px; --field-h: 34px; --tool-head-h: 36px;
+  --gap-turn: 16px; --pad-card: 14px; --icon: 16px;
+}
+
 /* ── horizon (default): shape, type + light ── */
 :root {
   color-scheme: light;
@@ -28,7 +57,7 @@
   --font-serif: '72', '72full', Arial, Helvetica, sans-serif;
   --heading-weight: 600;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  --col: 780px;
+  --col: 760px;
   --field-border: #758ca4;
   --chrome: #ffffff;
   --bg: #f5f6f7;
@@ -58,8 +87,8 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(120, 88, 255, 0.11), rgba(0, 112, 242, 0.06));
   --ok: #256f3a;
   --ok-soft: rgba(37, 111, 58, 0.12);
-  --warn: #9f4f00;
-  --warn-soft: rgba(231, 101, 0, 0.12);
+  --warn: #8a5700;
+  --warn-soft: rgba(214, 150, 0, 0.13);
   --danger: #aa0808;
   --danger-soft: rgba(170, 8, 8, 0.09);
   --info: #0064d9;

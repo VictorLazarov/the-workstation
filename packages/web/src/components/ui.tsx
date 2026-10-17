@@ -15,7 +15,7 @@ export function Spinner({ size = 14 }: { size?: number }) {
 
 export function Kbd({ children }: { children: ReactNode }) { return <kbd className="kbd">{children}</kbd>; }
 
-export function IconButton({ icon, label, onClick, active, disabled, size = 16, className = '' }: {
+export function IconButton({ icon, label, onClick, active, disabled, size = 15, className = '' }: {
   icon: IconName; label: string; onClick?: (e: React.MouseEvent) => void; active?: boolean; disabled?: boolean; size?: number; className?: string;
 }) {
   return (
