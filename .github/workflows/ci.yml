@@ -83,7 +83,7 @@ jobs:
           E2E_BROWSERS: ${{ matrix.browser }}
           E2E_REPORT_DIR: ${{ github.workspace }}/e2e-report
           E2E_RESULTS_DIR: ${{ github.workspace }}/e2e-results
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-${{ matrix.browser }}-linux
@@ -128,7 +128,7 @@ jobs:
           E2E_BROWSERS: ${{ matrix.browser }}
           E2E_REPORT_DIR: ${{ github.workspace }}/e2e-report
           E2E_RESULTS_DIR: ${{ github.workspace }}/e2e-results
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: e2e-smoke-${{ matrix.browser }}-${{ runner.os }}
@@ -174,7 +174,7 @@ jobs:
         env:
           WS_TEST_KEEP: '1'
           WS_TEST_WORKDIR: ${{ runner.temp }}/wstest
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: devcontainer-logs-${{ strategy.job-index }}
