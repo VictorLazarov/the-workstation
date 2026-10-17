@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fuzzy, isMac, modelLabel, relativeTime } from '../lib/utils';
+import { clearRemoteServer, getRemoteServer } from '../lib/storage';
 import { projectName, useActiveSession, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
 import { Icon, type IconName } from './Icon';
@@ -52,6 +53,17 @@ export function ConnectionBanner() {
   const cfgErr = useSessions((s) => s.configError);
   const [grace, setGrace] = useState(false);
   useEffect(() => { const t = setTimeout(() => setGrace(true), 900); return () => clearTimeout(t); }, []);
+  const remote = getRemoteServer();
+  if (remote && conn === 'open' && !cfgErr) {
+    // Security: always show which non-same-origin server receives the token (B1). Switch back in Settings.
+    return (
+      <div className="conn-banner" role="status" data-testid="remote-server-banner">
+        <Icon name="alert" size={14} />
+        <span>Connected to another server: <b>{remote.origin}</b></span>
+        <button type="button" className="link-btn" onClick={() => { clearRemoteServer(); location.reload(); }}>Use this page's server</button>
+      </div>
+    );
+  }
   if (conn === 'open' && !cfgErr) return null;
   if (!grace && !ready) return null;
   return (

@@ -3,15 +3,22 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GitStatus, GitFileStatus, GitCommitResult, GitRevertResult } from '@workstation/protocol';
 
-const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat', LC_ALL: 'C' };
-// Defuse repo-controlled code execution paths when merely reading status/diff.
-const SAFE_ARGS = ['-c', 'core.fsmonitor=false', '-c', 'core.hooksPath=/dev/null', '-c', 'diff.external=', '-c', 'core.pager=cat'];
+// GIT_LITERAL_PATHSPECS=1: every path we pass is a literal file name, never a glob (`*`, `[x]`) or magic (`:(top)`).
+const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat', LC_ALL: 'C', GIT_LITERAL_PATHSPECS: '1' };
+// Defuse repo-controlled code execution paths when merely reading status/diff or restoring a file.
+const NO_EXEC_ARGS = ['-c', 'core.fsmonitor=false', '-c', 'diff.external=', '-c', 'core.pager=cat'];
+const SAFE_ARGS = [...NO_EXEC_ARGS, '-c', 'core.hooksPath=/dev/null'];
 
 export interface GitResult { code: number; stdout: string; stderr: string }
 
-export function git(cwd: string, args: string[], opts: { timeout?: number; maxBuffer?: number; okCodes?: number[] } = {}): Promise<GitResult> {
+export function git(cwd: string, args: string[], opts: { timeout?: number; maxBuffer?: number; okCodes?: number[]; runHooks?: boolean } = {}): Promise<GitResult> {
+  // runHooks (commit only): hooks are the user's own repository policy (secret scanners, linters) and run exactly as
+  // they would for `git commit` in a terminal. Hooks must not inherit GIT_LITERAL_PATHSPECS (it would change how their
+  // own git calls match), so those invocations pass `:(literal)` per path instead.
+  let env: NodeJS.ProcessEnv = GIT_ENV;
+  if (opts.runHooks) { env = { ...GIT_ENV }; delete env.GIT_LITERAL_PATHSPECS; }
   return new Promise((resolve, reject) => {
-    execFile('git', [...SAFE_ARGS, ...args], { cwd, env: GIT_ENV, timeout: opts.timeout ?? 15_000, maxBuffer: opts.maxBuffer ?? 20 * 1024 * 1024, encoding: 'utf8' }, (err, stdout, stderr) => {
+    execFile('git', [...(opts.runHooks ? NO_EXEC_ARGS : SAFE_ARGS), ...args], { cwd, env, timeout: opts.timeout ?? 15_000, maxBuffer: opts.maxBuffer ?? 20 * 1024 * 1024, encoding: 'utf8' }, (err, stdout, stderr) => {
       if (!err) return resolve({ code: 0, stdout, stderr });
       const e = err as NodeJS.ErrnoException & { code?: number | string };
       if (typeof e.code === 'number') return resolve({ code: e.code, stdout: stdout ?? '', stderr: stderr ?? '' });

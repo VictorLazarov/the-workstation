@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { AppConfig, EffortLevel, PermissionMode } from '@workstation/protocol';
 import { platform } from '../platform';
-import { getServerBase, setServerBase } from '../lib/storage';
+import { clearRemoteServer, confirmRemoteServer, getRemoteServer, getServerBase, normalizeServerOrigin } from '../lib/storage';
 import { useSessions } from '../store/sessions';
 import { useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { modelLabel } from '../lib/utils';
@@ -18,6 +18,7 @@ export function SettingsDialog() {
   const models = useSessions((s) => s.models);
   const [f, setF] = useState({ baseUrl: '', apiKey: '', authToken: '', model: '', effort: 'medium' as EffortLevel, mode: 'default' as PermissionMode, custom: '' });
   const [server, setServer] = useState(getServerBase());
+  const [serverToken, setServerToken] = useState('');
   const [saving, setSaving] = useState(false);
   const close = () => { useUi.getState().set({ settingsOpen: false }); try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* ignore */ } };
 
@@ -25,6 +26,7 @@ export function SettingsDialog() {
     if (!open || !config) return;
     setF({ baseUrl: config.anthropicBaseUrl ?? '', apiKey: '', authToken: '', model: config.defaultModel ?? '', effort: config.defaultEffort ?? 'medium', mode: config.defaultPermissionMode ?? 'default', custom: (config.customModels ?? []).join(', ') });
     setServer(getServerBase());
+    setServerToken('');
   }, [open, config]);
 
   // first-run: nothing configured and never dismissed
@@ -37,6 +39,12 @@ export function SettingsDialog() {
   }, [ready, config, firstRun]);
 
   const save = async () => {
+    // Server switch is confirmed FIRST (and applied only after the config below was saved to the CURRENT server).
+    let applySwitch: (() => boolean) | null = null;
+    if (server.trim().replace(/\/+$/, '') !== getServerBase()) {
+      applySwitch = await planServerSwitch(server, serverToken);
+      if (!applySwitch) return; // declined or invalid: keep Settings open, nothing switched
+    }
     setSaving(true);
     const patch: Partial<AppConfig> = {
       anthropicBaseUrl: f.baseUrl.trim(), defaultModel: f.model.trim() || undefined, defaultEffort: f.effort, defaultPermissionMode: f.mode,
@@ -46,7 +54,7 @@ export function SettingsDialog() {
     if (f.authToken.trim()) patch.authToken = f.authToken.trim();
     const ok = await useSessions.getState().saveConfig(patch);
     setSaving(false);
-    if (server.replace(/\/+$/, '') !== getServerBase()) { setServerBase(server === location.origin ? '' : server); location.reload(); return; }
+    if (applySwitch) { if (applySwitch()) location.reload(); return; }
     if (ok) { useUi.getState().toast({ kind: 'success', title: 'Settings saved' }); close(); void useSessions.getState().loadConfig(); }
   };
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
@@ -90,9 +98,30 @@ export function SettingsDialog() {
             </div>
           )}
           <label className="lbl">Server URL<input className="field" value={server} onChange={(e) => setServer(e.target.value)} spellCheck={false} /></label>
-          <p className="muted small">Defaults to this page's origin. Changing it reloads the app.</p>
+          {normalizeServerOrigin(server) !== location.origin && <label className="lbl">Access token for that server<input className="field" type="password" autoComplete="off" value={serverToken} onChange={(e) => setServerToken(e.target.value)} placeholder={getRemoteServer() ? '•••••••• (leave blank to keep)' : 'the token printed by that server'} /></label>}
+          <p className="muted small">Defaults to this page's origin. A different server must be confirmed: this page will send it your access token, API keys, prompts and code. Changing it reloads the app.</p>
         </section>
       </div>
     </Dialog>
   );
+}
+
+/**
+ * Switches the server. Same origin needs no confirmation; any other origin needs an explicit confirm that names it and
+ * says what will be sent there. Resolves to a function that applies the switch (true = reload), or null if declined.
+ */
+export async function planServerSwitch(input: string, token: string): Promise<(() => boolean) | null> {
+  const origin = normalizeServerOrigin(input.trim() || location.origin);
+  if (!origin) { useUi.getState().toast({ kind: 'error', title: 'Invalid server URL', body: 'Use an http:// or https:// URL.' }); return null; }
+  if (origin === location.origin) return () => { clearRemoteServer(); return true; };
+  const keep = getRemoteServer();
+  const tok = token.trim() || (keep?.origin === origin ? keep.token : '');
+  const ok = await useUi.getState().ask({
+    title: 'Connect to a different server?',
+    body: `This page will connect to ${origin}. Your access token, any API keys or auth tokens you save, and all prompts, files and terminal input will be sent to that server. Only continue if you run it yourself.`,
+    confirmLabel: `Send token to ${new URL(origin).host}`,
+    danger: true,
+  });
+  if (!ok) return null;
+  return () => confirmRemoteServer(origin, tok);
 }

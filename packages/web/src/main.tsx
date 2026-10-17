@@ -6,7 +6,7 @@ import './styles/tokens.css';
 import './styles/app.css';
 import './styles/content.css';
 
-bootstrapToken(); // ?token= -> sessionStorage, stripped from the URL (also handles ?server=, ?demo=1)
+bootstrapToken(); // ?token= -> sessionStorage, stripped from the URL (?server= is ignored; ?demo=1 is kept)
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
