@@ -16,7 +16,8 @@ export interface ImageAttachment { mediaType: string; dataBase64: string; name?:
 export type ClientMessage =
   | { type: 'session.start'; reqId: string; cwd: string; resume?: SessionId; fork?: boolean;
       model?: string; effort?: EffortLevel; permissionMode?: PermissionMode; worktree?: boolean }
-  | { type: 'session.attach'; reqId: string; sessionId: SessionId }   // re-subscribe to a live session after reconnect
+  // re-subscribe to a live session after reconnect; replays buffered `sdk` events with seq > fromSeq (all buffered if omitted)
+  | { type: 'session.attach'; reqId: string; sessionId: SessionId; fromSeq?: number }
   | { type: 'session.close'; sessionId: SessionId }
   | { type: 'prompt'; sessionId: SessionId; text: string; images?: ImageAttachment[]; clientMsgId: string }
   | { type: 'interrupt'; sessionId: SessionId }

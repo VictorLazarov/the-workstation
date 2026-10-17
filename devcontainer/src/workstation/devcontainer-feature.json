@@ -1,0 +1,76 @@
+{
+  "id": "workstation",
+  "version": "1.0.0",
+  "name": "The Workstation (browser UI for Claude Code)",
+  "description": "Installs The Workstation web UI for Claude Code, optionally the Claude Code CLI, and autostarts the server on container start.",
+  "documentationURL": "https://github.com/OWNER/the-workstation/blob/main/docs/DEVCONTAINER.md",
+  "options": {
+    "source": {
+      "type": "string",
+      "enum": [
+        "git",
+        "npm",
+        "tarball",
+        "local"
+      ],
+      "default": "git",
+      "description": "Where to get The Workstation. git: clone sourceUrl at 'version' and build. npm: npm i -g the package named by sourceUrl (default 'workstation') at 'version'. tarball: download a source tarball (e.g. a GitHub archive or release asset) from sourceUrl and build. local: use a bind-mounted checkout at localPath (built on first start if needed)."
+    },
+    "version": {
+      "type": "string",
+      "default": "main",
+      "description": "Git ref (branch/tag/sha) for source=git, or npm version/dist-tag for source=npm ('latest' is used if you pass 'main' with npm). Ignored for tarball/local."
+    },
+    "sourceUrl": {
+      "type": "string",
+      "default": "",
+      "description": "git: repo URL (default https://github.com/OWNER/the-workstation.git). npm: package name (default 'workstation'). tarball: tarball URL (required)."
+    },
+    "localPath": {
+      "type": "string",
+      "default": "/workspaces/the-workstation",
+      "description": "source=local only: absolute path inside the container where the checkout is mounted."
+    },
+    "port": {
+      "type": "string",
+      "default": "7777",
+      "description": "Port the server listens on."
+    },
+    "host": {
+      "type": "string",
+      "default": "0.0.0.0",
+      "description": "Bind address. 0.0.0.0 is needed so the forwarded port reaches the server; access is still token-gated."
+    },
+    "autostart": {
+      "type": "boolean",
+      "default": true,
+      "description": "Start the server in the background on every container start and print the tokenized URL."
+    },
+    "installClaudeCode": {
+      "type": "boolean",
+      "default": true,
+      "description": "Also install the Claude Code CLI (@anthropic-ai/claude-code) globally. The Agent SDK ships its own runtime; this is for terminal use and 'claude login'."
+    },
+    "nodeVersion": {
+      "type": "string",
+      "default": "22",
+      "description": "Node.js major version to install if Node >= 20 is not already present."
+    }
+  },
+  "containerEnv": {
+    "WORKSTATION_HOME": "/usr/local/share/workstation-config"
+  },
+  "mounts": [
+    {
+      "source": "workstation-config-${devcontainerId}",
+      "target": "/usr/local/share/workstation-config",
+      "type": "volume"
+    }
+  ],
+  "postStartCommand": "/usr/local/bin/workstation-autostart",
+  "installsAfter": [
+    "ghcr.io/devcontainers/features/node",
+    "ghcr.io/devcontainers/features/common-utils",
+    "ghcr.io/devcontainers/features/git"
+  ]
+}
