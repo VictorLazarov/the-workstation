@@ -29,6 +29,7 @@
   --heading-weight: 600;
   --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, 'Liberation Mono', monospace;
   --col: 780px;
+  --field-border: #758ca4;
   --chrome: #ffffff;
   --bg: #f5f6f7;
   --surface: #ffffff;
@@ -46,7 +47,7 @@
   --accent-hover: #0050b0;
   --accent-solid: #0070f2;
   --accent-solid-hover: #0064d9;
-  --accent-soft: rgba(0, 112, 242, 0.1);
+  --accent-soft: rgba(0, 112, 242, 0.08);
   --accent-fg: #ffffff;
   --focus: #0032a5;
   --ai: #6644ee;
@@ -57,7 +58,7 @@
   --ai-grad-soft: linear-gradient(90deg, rgba(120, 88, 255, 0.11), rgba(0, 112, 242, 0.06));
   --ok: #256f3a;
   --ok-soft: rgba(37, 111, 58, 0.12);
-  --warn: #a85400;
+  --warn: #9f4f00;
   --warn-soft: rgba(231, 101, 0, 0.12);
   --danger: #aa0808;
   --danger-soft: rgba(170, 8, 8, 0.09);
@@ -83,6 +84,7 @@
   --font-sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --font-serif: 'Iowan Old Style', 'Palatino Linotype', Palatino, 'Book Antiqua', ui-serif, Georgia, serif;
   --heading-weight: 500;
+  --field-border: #d6d2c4;
   --chrome: #faf9f5;
   --bg: #faf9f5;
   --surface: #ffffff;
@@ -132,6 +134,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     color-scheme: dark;
+    --field-border: #758ca4;
     --chrome: #1d232a;
     --bg: #12171c;
     --surface: #1d232a;
@@ -163,7 +166,7 @@
     --warn: #ffc247;
     --warn-soft: rgba(255, 194, 71, 0.13);
     --danger: #fa6161;
-    --danger-soft: rgba(250, 97, 97, 0.14);
+    --danger-soft: rgba(250, 97, 97, 0.1);
     --info: #4db1ff;
     --diff-add: rgba(151, 221, 64, 0.12);
     --diff-add-strong: rgba(151, 221, 64, 0.26);
@@ -179,6 +182,7 @@
 }
 :root[data-theme='dark'] {
   color-scheme: dark;
+  --field-border: #758ca4;
   --chrome: #1d232a;
   --bg: #12171c;
   --surface: #1d232a;
@@ -210,7 +214,7 @@
   --warn: #ffc247;
   --warn-soft: rgba(255, 194, 71, 0.13);
   --danger: #fa6161;
-  --danger-soft: rgba(250, 97, 97, 0.14);
+  --danger-soft: rgba(250, 97, 97, 0.1);
   --info: #4db1ff;
   --diff-add: rgba(151, 221, 64, 0.12);
   --diff-add-strong: rgba(151, 221, 64, 0.26);
@@ -227,6 +231,7 @@
 /* ── warm dark (higher specificity than horizon dark) ── */
 @media (prefers-color-scheme: dark) {
   :root[data-brand='warm']:not([data-theme='light']) {
+    --field-border: #46433d;
     --chrome: #1e1d1b;
     --bg: #1e1d1b;
     --surface: #292826;
@@ -273,6 +278,7 @@
   }
 }
 :root[data-brand='warm'][data-theme='dark'] {
+  --field-border: #46433d;
   --chrome: #1e1d1b;
   --bg: #1e1d1b;
   --surface: #292826;
