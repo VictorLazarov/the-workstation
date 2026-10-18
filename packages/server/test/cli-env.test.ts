@@ -82,8 +82,8 @@ describe('isolated CLAUDE_CONFIG_DIR', () => {
   });
   it('ConfigStore.cliEnv isolates only with a custom endpoint', () => {
     const { home } = userDir();
-    const prev = { HOME: process.env.HOME, CCD: process.env.CLAUDE_CONFIG_DIR };
-    process.env.HOME = home; delete process.env.CLAUDE_CONFIG_DIR;
+    const prev = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, CCD: process.env.CLAUDE_CONFIG_DIR };
+    process.env.HOME = home; process.env.USERPROFILE = home; delete process.env.CLAUDE_CONFIG_DIR;
     try {
       const store = new ConfigStore(path.join(home, 'ws'));
       expect(store.cliEnv({ PATH: '/bin', ANTHROPIC_API_KEY: 'inh' }).CLAUDE_CONFIG_DIR).toBeUndefined();
@@ -94,6 +94,7 @@ describe('isolated CLAUDE_CONFIG_DIR', () => {
       expect(fs.existsSync(path.join(home, 'ws', 'cli-home', 'skills'))).toBe(true);
     } finally {
       process.env.HOME = prev.HOME;
+      if (prev.USERPROFILE === undefined) delete process.env.USERPROFILE; else process.env.USERPROFILE = prev.USERPROFILE; // os.homedir() reads USERPROFILE on Windows
       if (prev.CCD) process.env.CLAUDE_CONFIG_DIR = prev.CCD;
     }
   });

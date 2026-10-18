@@ -59,7 +59,8 @@ describe('revert: literal paths only', () => {
     expect(read('keep.txt')).toBe('precious edit\n');
   });
 
-  it('an untracked file literally named * is deleted alone', async () => {
+  // '*' is not a valid file name on Windows, so the case cannot exist there
+  it.skipIf(process.platform === 'win32')('an untracked file literally named * is deleted alone', async () => {
     fs.writeFileSync(path.join(repo, '*'), 'star\n');
     expect(await post('/api/git/revert', { cwd: repo, path: '*' })).toMatchObject({ status: 200, body: { action: 'deleted' } });
     expect(exists('*')).toBe(false);

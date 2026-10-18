@@ -30,7 +30,7 @@ describe('paths with spaces / unicode / CRLF', () => {
     const st = await gitStatus(repo);
     expect(st.files.map((f) => f.path).sort()).toEqual(['new ünï.txt', 'src/deep dir/a file.ts']);
     expect(st.root).not.toContain('\\');
-    expect(path.resolve(st.root!)).toBe(fs.realpathSync(repo));
+    expect(path.resolve(st.root!)).toBe(fs.realpathSync.native(repo));
   });
   it('resolveInRepo accepts absolute and cwd-relative spellings', async () => {
     const abs = path.join(repo, 'src', 'deep dir', 'a file.ts');
@@ -57,7 +57,7 @@ describe('paths with spaces / unicode / CRLF', () => {
     expect(wt.path).toContain(path.join('.claude', 'worktrees', 'abc12345'));
     expect(wt.path.endsWith('src')).toBe(true); // sub-directory preserved
     const dir = wt.path.slice(0, wt.path.lastIndexOf(path.sep + 'src'));
-    const rec = { sessionId: 'x', root: fs.realpathSync(repo), dir, branch: wt.branch, baseSha: git('rev-parse', 'HEAD').trim(), createdAt: 1 };
+    const rec = { sessionId: 'x', root: fs.realpathSync.native(repo), dir, branch: wt.branch, baseSha: git('rev-parse', 'HEAD').trim(), createdAt: 1 };
     const again = await createWorktree(path.join(repo, 'src'), 'abc12345');
     expect(again.path).toBe(wt.path);
     expect(await removeWorktree({ ...rec, dir: path.join(rec.root, 'elsewhere') }, true)).toMatchObject({ removed: false });

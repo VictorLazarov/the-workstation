@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { isolatedBaseEnv, linkEntry, prepareCliHome } from '../src/cli-env.js';
 import {
@@ -74,7 +75,8 @@ describe('path conversion', () => {
     for (const p of ['C:\\x', '\\\\srv\\share', '/home/x']) expect(isWindowsDevicePath(p)).toBe(false);
   });
   it('moduleDir returns a native directory', () => {
-    expect(moduleDir(new URL('file:///tmp/a/b.js').href)).toBe(path.dirname('/tmp/a/b.js'));
+    const file = path.resolve('a', 'b.js'); // absolute on every platform ('file:///tmp/..' is not a valid file URL on Windows)
+    expect(moduleDir(pathToFileURL(file).href)).toBe(path.dirname(file));
   });
 });
 

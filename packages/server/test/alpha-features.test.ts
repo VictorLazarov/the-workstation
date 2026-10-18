@@ -20,9 +20,9 @@ describe('worktree sessions are filed under their project', () => {
     const c = await connect(s);
     const sid = await startSession(c, repo, { worktree: true });
     const live = s.sessions.get(sid)!;
-    expect(live.worktree).toMatchObject({ branch: expect.stringMatching(/^workstation\//), root: fs.realpathSync(repo) });
+    expect(live.worktree).toMatchObject({ branch: expect.stringMatching(/^workstation\//), root: fs.realpathSync.native(repo) });
     const list = await (await api(s, `/api/sessions?cwd=${encodeURIComponent(live.cwd)}`)).json() as any[];
-    expect(list.find((x) => x.sessionId === sid)?.worktree).toMatchObject({ root: fs.realpathSync(repo), branch: live.worktree!.branch });
+    expect(list.find((x) => x.sessionId === sid)?.worktree).toMatchObject({ root: fs.realpathSync.native(repo), branch: live.worktree!.branch });
     // a plain session has no worktree field
     const plain = await startSession(c, repo);
     const all = await (await api(s, `/api/sessions?cwd=${encodeURIComponent(repo)}`)).json() as any[];
@@ -32,7 +32,7 @@ describe('worktree sessions are filed under their project', () => {
     await new Promise((r) => setTimeout(r, 200));
     const again = await startSession(c, live.cwd, { resume: sid });
     expect(again).toBe(sid);
-    expect(s.sessions.get(sid)!.worktree).toMatchObject({ branch: live.worktree!.branch, root: fs.realpathSync(repo) });
+    expect(s.sessions.get(sid)!.worktree).toMatchObject({ branch: live.worktree!.branch, root: fs.realpathSync.native(repo) });
     c.close();
   });
 });
@@ -93,14 +93,14 @@ describe('remembered permission rules', () => {
   });
 
   it('rules belong to the main checkout: a sub-directory or a linked worktree resolves to the repository root', async () => {
-    const repo = fs.realpathSync(tmp('proj'));
+    const repo = fs.realpathSync.native(tmp('proj'));
     execSync('git init -q -b main && git -c user.email=a@b -c user.name=n commit -q --allow-empty -m init', { cwd: repo });
     fs.mkdirSync(path.join(repo, 'sub'));
     execSync(`git worktree add -q -b wt ${path.join(repo, '.claude', 'worktrees', 'w1')}`, { cwd: repo });
     expect(await settingsProjectDir(repo)).toBe(repo);
     expect(await settingsProjectDir(path.join(repo, 'sub'))).toBe(repo);
     expect(await settingsProjectDir(path.join(repo, '.claude', 'worktrees', 'w1'))).toBe(repo);
-    const plain = fs.realpathSync(tmp('nogit'));
+    const plain = fs.realpathSync.native(tmp('nogit'));
     expect(await settingsProjectDir(plain)).toBe(plain);
   });
 
