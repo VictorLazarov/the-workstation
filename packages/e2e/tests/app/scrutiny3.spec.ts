@@ -111,7 +111,13 @@ test.describe('N2: only project files are changes; plan files are separate', () 
 test.describe('N3: toasts', () => {
   test('repeats coalesce into one toast with a count', async ({ page }) => {
     await openApp(page);
-    for (let i = 0; i < 5; i++) await toast(page, { kind: 'success', tag: 'coalesce-s1', title: 'Coalesce finished', body: 'bash please: Ready for your review', ttl: 0 });
+    // Parallel workers share one mock server: their sessions can raise toasts here, and only the first two are on screen
+    // (the rest queue). Start from a clean slate and raise all five repeats in ONE task so ours is first in the queue.
+    while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
+    await page.evaluate(() => {
+      const t = (window as unknown as { __ws: { toast: (t: unknown) => string } }).__ws.toast;
+      for (let i = 0; i < 5; i++) t({ kind: 'success', tag: 'coalesce-s1', title: 'Coalesce finished', body: 'bash please: Ready for your review', ttl: 0 });
+    });
     const mine = page.locator('.toast', { hasText: 'Coalesce finished' });
     await expect(mine).toHaveCount(1);
     await expect(mine.locator('.toast-count')).toHaveText('×5');

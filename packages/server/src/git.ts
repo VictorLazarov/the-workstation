@@ -154,6 +154,12 @@ export async function resolveInRepo(cwd: string, input: unknown): Promise<{ root
   return { root, rel: toPosix(rel) };
 }
 
+/** The sub-directory of `cwd` inside the repo root. `git rev-parse --show-toplevel` reports the resolved path, so a cwd spelled
+ * through a symlink (macOS /var -> /private/var, Windows 8.3 short names) only matches after resolving it too. */
+function subDirOf(root: string, cwd: string): string | null {
+  return relativeInside(root, cwd) ?? relativeInside(root, realpathLoose(cwd));
+}
+
 /** Create a git worktree on a fresh branch for an isolated session. */
 export async function createWorktree(cwd: string, name: string): Promise<{ path: string; branch: string }> {
   const root = await gitRoot(cwd);
@@ -166,7 +172,7 @@ export async function createWorktree(cwd: string, name: string): Promise<{ path:
   const existing = list.stdout.split('\0\0').map((b) => b.split('\0')).find((l) => l.includes(`branch refs/heads/${branch}`));
   const wtPath = existing?.find((l) => l.startsWith('worktree '))?.slice('worktree '.length);
   if (wtPath && fs.existsSync(fromGitPath(wtPath))) {
-    const sub = relativeInside(root, cwd);
+    const sub = subDirOf(root, cwd);
     return { path: sub ? path.join(fromGitPath(wtPath), sub) : fromGitPath(wtPath), branch };
   }
   if (wtPath) await git(root, ['worktree', 'prune']);
@@ -181,7 +187,7 @@ export async function createWorktree(cwd: string, name: string): Promise<{ path:
     if (!cur.includes('.claude/worktrees/')) fs.appendFileSync(abs, `${cur.endsWith('\n') || !cur ? '' : '\n'}.claude/worktrees/\n`);
   } catch { /* best effort */ }
   // preserve the sub-directory the user started in
-  const sub = relativeInside(root, cwd);
+  const sub = subDirOf(root, cwd);
   return { path: sub ? path.join(dir, sub) : dir, branch };
 }
 

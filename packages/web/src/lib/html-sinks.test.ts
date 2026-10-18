@@ -21,7 +21,7 @@ describe('dangerouslySetInnerHTML only receives Shiki output', () => {
       const src = fs.readFileSync(f, 'utf8');
       const uses = [...src.matchAll(/dangerouslySetInnerHTML=\{\{\s*__html:\s*([^}]*)\}\}/g)];
       if (!uses.length) continue;
-      sinks.push(path.relative(SRC, f));
+      sinks.push(path.relative(SRC, f).split(path.sep).join('/')); // posix spelling on Windows too
       expect(src, `${f} must get its HTML from lib/shiki`).toMatch(/from '(\.\.\/)+lib\/shiki'|from '\.\/shiki'/);
       for (const u of uses) expect(u[1]!.trim(), `${f}: unexpected __html source`).toMatch(/^(html|hl\[i\])( \|\| ' ')?$/);
     }

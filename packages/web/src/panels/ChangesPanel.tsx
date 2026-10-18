@@ -107,8 +107,8 @@ function ReviewBar({ sessionId }: { sessionId: string }) {
   };
   return (
     <div className="review-bar" role="group" aria-label="Review comments">
-      <span><b>{comments.length}</b> comment{comments.length === 1 ? '' : 's'}</span>
-      <span className="muted small">{busy ? 'Queued until the agent is idle' : 'Sent as one message'}</span>
+      <span className="review-count" title="All comments go to the agent as one message"><b>{comments.length}</b> comment{comments.length === 1 ? '' : 's'}</span>
+      {busy && <span className="muted small review-note">Sent when the agent is idle</span>}
       <span className="cfile-spacer" />
       <button type="button" className="btn ghost" onClick={() => useReview.getState().clear(sessionId)}>Discard</button>
       <button type="button" className="btn primary" onClick={send}><Icon name="arrow-up" size={13} /> Send to agent</button>
@@ -120,6 +120,7 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
   useGitSync(sessionId, cwd);
   const { files: all, git, commitFiles } = useProjectChanges(sessionId, cwd);
   const branch = useBranch(sessionId);
+  const gone = useSessions((x) => !!x.sessions[sessionId]?.wtRemoved);
   const [mode, setMode] = useState<Mode>(() => (ls.get('ws.diffMode') as Mode) || 'unified');
   // Split needs room for two readable panes; in a narrow inspector it falls back to unified (the preference is kept).
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
@@ -163,6 +164,7 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
     await refreshGit(sessionId, cwd);
   };
 
+  if (gone) return <div className="panel-empty"><Icon name="file-edit" size={22} /><b>Worktree removed</b><span>Its changes are gone with it.</span></div>;
   if (!git.loaded && !all.length) return <div className="panel-empty"><Spinner size={18} /><span>Checking for changes…</span></div>;
 
   return (

@@ -103,12 +103,10 @@ test('parallel: five sessions at once keep their own status, no cross-talk, atte
   await expect(page.locator('.sess.attn')).toHaveCount(0, { timeout: 60_000 });
   // every thread holds only its own marker
   const markers = prompts.map((p) => p[0]);
-  const n = await page.locator('.sess').count();
-  expect(n).toBeGreaterThanOrEqual(5);
-  for (let i = 0; i < n; i++) {
-    await page.locator('.sess').nth(i).click();
+  const titles = ['word ALPHA', 'echo BRAVO', 'Count from', 'word DELTA', 'echo ECHO'];
+  for (let i = 0; i < prompts.length; i++) {
+    await page.locator('.sess', { hasText: titles[i]! }).click();
     const txt = await page.locator('.conv').innerText();
-    const own = markers.filter((m) => txt.includes(m));
-    expect(own, `thread ${i}`).toHaveLength(1);
+    expect(markers.filter((m) => txt.includes(m)), `thread ${markers[i]}`).toEqual([markers[i]]);
   }
 });

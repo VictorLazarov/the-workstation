@@ -41,6 +41,9 @@ socket, so the access error copy never appears.
 
 ## BUG-002: the model chip shows the raw alias after choosing a model
 
+> **FIXED.** `ModelChip` now names the chosen model by its entry in the server's model list (`Opus`, `Sonnet`, `Default`), falling back to
+> `modelLabel()` for ids not in the list. The `test.fail()` was removed; the test is a normal regression test. Original report below.
+
 - **Severity:** low (cosmetic, but visibly inconsistent)
 - **Test:** `tests/app/features.spec.ts`, "BUG-002: the model chip shows the friendly name of the chosen model"
 

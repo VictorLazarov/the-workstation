@@ -1,5 +1,20 @@
 import { composer, expect, expectIdle, newSessionInProject, openApp, PNG_1PX, sendPrompt, test } from '../../support/app.ts';
 
+/**
+ * Dispatches a paste carrying one image. Firefox's ClipboardEvent constructor ignores the `clipboardData` init member
+ * (event.clipboardData stays null), so the DataTransfer is attached to a plain event instead; this works in every engine.
+ */
+async function pasteImage(page: import('@playwright/test').Page, name: string) {
+  await page.evaluate(([b64, fileName]) => {
+    const bytes = Uint8Array.from(atob(b64!), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], fileName!, { type: 'image/png' }));
+    const ev = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'clipboardData', { value: dt });
+    document.querySelector('textarea[aria-label="Message Claude"]')!.dispatchEvent(ev);
+  }, [PNG_1PX, name]);
+}
+
 test.describe('composer', () => {
   test.beforeEach(async ({ page }) => {
     await openApp(page);
@@ -36,14 +51,7 @@ test.describe('composer', () => {
 
   test('pasting an image attaches it and the image is sent with the prompt', async ({ page }) => {
     await composer(page).focus();
-    await page.evaluate(async (b64) => {
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const file = new File([bytes], 'shot.png', { type: 'image/png' });
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      const ev = new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true });
-      document.querySelector('textarea[aria-label="Message Claude"]')!.dispatchEvent(ev);
-    }, PNG_1PX);
+    await pasteImage(page, 'shot.png');
     await expect(page.locator('.attachments img[alt="shot.png"]')).toBeVisible();
     await composer(page).fill('what is in this picture');
     await composer(page).press('Enter');
@@ -53,12 +61,7 @@ test.describe('composer', () => {
   });
 
   test('an attachment can be removed before sending', async ({ page }) => {
-    await page.evaluate(async (b64) => {
-      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-      const dt = new DataTransfer();
-      dt.items.add(new File([bytes], 'drop.png', { type: 'image/png' }));
-      document.querySelector('textarea[aria-label="Message Claude"]')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-    }, PNG_1PX);
+    await pasteImage(page, 'drop.png');
     await expect(page.locator('.attachments img')).toHaveCount(1);
     await page.getByRole('button', { name: 'Remove image' }).click();
     await expect(page.locator('.attachments img')).toHaveCount(0);

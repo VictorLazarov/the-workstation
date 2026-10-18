@@ -41,7 +41,7 @@ export function ModelChip({ session }: { session: SessionData }) {
   const cur = currentModel(session, def);
   const items: MenuEntry[] = [{ heading: 'Model' }, ...list.map((m) => ({ id: m.id, label: m.label, description: m.description, checked: m.id === cur, onSelect: () => setModel(session.id, m.id) }))];
   // an alias the user picked ("sonnet") is named by the server's model list, not shown as the raw id
-  const label = list.find((m) => m.id === cur)?.label.replace(/\s*\(recommended\)$/i, '') ?? modelLabel(cur);
+  const label = !cur || cur === 'default' ? modelLabel(cur) : list.find((m) => m.id === cur)?.label ?? modelLabel(cur);
   return <Dropdown title="Model" items={items} trigger={() => <><span>{label}</span><Icon name="chevron-down" size={12} /></>} />;
 }
 

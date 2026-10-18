@@ -103,6 +103,8 @@ test.describe('settings dialog', () => {
 
   test('a non-http base URL is rejected with an error toast', async ({ page }) => {
     await openApp(page);
+    // toasts from other workers' sessions (shared mock server) can fill the two visible slots: our error would only queue
+    while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
     await page.keyboard.press('ControlOrMeta+,');
     const dialog = settingsDialog(page);
     await dialog.getByLabel('Anthropic base URL').fill('ftp://not-http.example.test');

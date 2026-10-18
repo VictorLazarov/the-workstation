@@ -229,6 +229,8 @@ function OutputsCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
 function ChangesCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   // the same selector as the Changes tab, the tab badge and the Commit box: the count here is what Commit will stage
   const { files, added, removed, git } = useProjectChanges(sessionId, cwd);
+  const gone = useSessions((x) => !!x.sessions[sessionId]?.wtRemoved);
+  if (gone) return <OvCard id="changes" title="Changes" icon="file-edit"><p className="ov-note">The worktree was removed, so its changes are gone with it.</p></OvCard>;
   return (
     <OvCard id="changes" title="Changes" icon="file-edit" aside={files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : undefined}>
       {files.length === 0 ? <p className="ov-note">{git.loaded && git.isRepo ? 'Working tree is clean.' : 'No changes yet.'}</p> : (

@@ -80,7 +80,6 @@ test.describe('session features', () => {
   });
 
   test('BUG-002: the model chip shows the friendly name of the chosen model', async ({ page }) => {
-    test.fail(true, 'BUG-002: chip shows the raw alias "opus" while the menu says "Opus"; see BUGS.md');
     await sendPrompt(page, 'hello model label');
     await expectIdle(page);
     const chips = page.locator('.composer-chips');

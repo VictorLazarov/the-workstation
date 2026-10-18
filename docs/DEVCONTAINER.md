@@ -139,6 +139,7 @@ Linux, `python3 make g++` (it prints the install command if the build fails beca
 | `workstation-url` says "URL not available yet" | The server is not running: `cat $WORKSTATION_HOME/server.log`; start it with `workstation-autostart`. |
 | First start of a `source=local` container is slow / "building checkout" | `npm ci && npm run build` runs once inside the mount; follow `$WORKSTATION_HOME/server.log`. `WORKSTATION_START_TIMEOUT` (seconds, default 900) bounds the wait. |
 | `EACCES` writing config in the compose setup | The container user cannot write the volume or project: set `WORKSTATION_UID`/`WORKSTATION_GID` as above. |
+| `Permission denied` on `/usr/local/share/workstation-config/server.log` at start (feature) | The devcontainer tooling renumbered the remote user to your host uid (`updateRemoteUserUID`) after the feature chowned the config volume. The launcher and `workstation-autostart` take the volume over with `sudo -n chown` automatically; without sudo run `sudo chown -R $(id -u) /usr/local/share/workstation-config` once. |
 | `fatal: detected dubious ownership` in the terminal of the **feature** container | Bind-mounted workspace owned by another uid: `git config --global --add safe.directory '*'` (the standalone image sets this system-wide). |
 | Terminal says "No pseudo-terminal backend" | node-pty did not build and `python3` is missing: install `python3 make g++`, `npm rebuild node-pty` in the app directory. |
 

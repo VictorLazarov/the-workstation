@@ -26,14 +26,9 @@ test.afterAll(async () => { await srv?.stop(); });
 test('MCP: connected / failed with the real error, a tool call renders as a card, permission prompt + Always allow', async ({ page }) => {
   await openReal(page, srv);
   await newRealSession(page);
-  // before any message the panel already knows the servers (it asks the server, not the first prompt)
+  // a draft has not started a session yet, so it does not pretend to know its servers
   await page.locator('.itab[data-panel="context"]').click();
-  const list = page.locator('.mcp-list');
-  await expect(list.locator('.mcp', { hasText: 'mini' })).toContainText('connected');
-  await expect(list.locator('.mcp', { hasText: 'broken' })).toContainText(/failed: .*closed/i);
-  await expect(list.locator('.mcp', { hasText: 'missing' })).toContainText(/failed: ENOENT/);
-  await expect(list.locator('.mcp.tone-ok, .mcp.tone-good').first()).toBeVisible().catch(() => {});
-  await shot(page, 'mcp-panel');
+  await expect(page.locator('.ctxp')).toContainText('MCP servers connect when the session starts');
   // the tool call: permission card, then a proper tool card with the result
   const box = page.getByRole('textbox', { name: 'Message Claude' });
   await box.fill('Call the ping tool of the mini MCP server and tell me its output.');
@@ -48,6 +43,12 @@ test('MCP: connected / failed with the real error, a tool call renders as a card
   await card.locator('.tool-head').click();
   await expect(card).toContainText('pong-42');
   await expect(page.locator('.msg-assistant').last()).toContainText('pong-42');
+  // once started, the panel shows each server's real state
+  const list = page.locator('.mcp-list');
+  await expect(list.locator('.mcp', { hasText: 'mini' })).toContainText('connected');
+  await expect(list.locator('.mcp', { hasText: 'broken' })).toContainText(/failed: .*closed/i);
+  await expect(list.locator('.mcp', { hasText: 'missing' })).toContainText(/failed: ENOENT/);
+  await shot(page, 'mcp-panel');
   // second call: remembered, no prompt
   const prompts = await realTurn(page, 'Call the ping tool of the mini MCP server again and tell me its output.');
   expect(prompts).toBe(0);
@@ -56,17 +57,22 @@ test('MCP: connected / failed with the real error, a tool call renders as a card
 });
 
 test('subagent: Task card, Tasks panel (running -> nested progress), Stop ends it and the main agent carries on', async ({ page }) => {
+  // its own server in bypass mode: the subagent's Bash would otherwise ask for permission and this test is about the task UI
+  const srv2 = await startRealServer(makeRepo('task'), { defaultPermissionMode: 'bypassPermissions' });
+  try { await subagentFlow(page, srv2); } finally { await srv2.stop(); }
+});
+
+async function subagentFlow(page: import('@playwright/test').Page, srv: RealServer) {
   await openReal(page, srv);
   await newRealSession(page);
   await page.getByRole('textbox', { name: 'Message Claude' }).fill('Use the Task tool (subagent_type general-purpose) to spawn a subagent whose only job is to run exactly this bash command: python3 -c "import time; time.sleep(90)" and then report slept. Wait for it.');
   await page.getByRole('button', { name: 'Send message' }).click();
-  for (let i = 0; i < 20; i++) { if (await page.locator('[data-perm-allow]').count()) { await page.locator('[data-perm-allow]').first().click(); await page.waitForTimeout(500); } else await page.waitForTimeout(500); }
   await page.locator('.itab[data-panel="tasks"]').click();
   const agentRow = page.locator('.task-row', { hasText: 'general-purpose' });
   await expect(agentRow).toContainText('Running', { timeout: 90_000 });
   await expect(page.locator('.task-row', { hasText: 'Background task' })).toContainText('Running', { timeout: 60_000 }); // its Bash, started in the background
   // nested progress inside the conversation card
-  await page.locator('.tool').filter({ hasText: 'general-purpose' }).first().locator('.tool-head').click();
+  await page.locator('.tool').filter({ hasText: 'general-purpose' }).first().locator('.tool-head').first().click();
   await expect(page.locator('.tool').filter({ hasText: 'general-purpose' }).first()).toContainText(/Sleep|sleep/);
   await shot(page, 'subagent-running');
   await page.getByRole('button', { name: 'Stop general-purpose' }).click();
@@ -75,4 +81,4 @@ test('subagent: Task card, Tasks panel (running -> nested progress), Stop ends i
   await expect(page.locator('.result-line').first()).toBeVisible({ timeout: 90_000 }); // the main agent finished its turn
   await expect(page.locator('.banner.error')).toHaveCount(0);
   await shot(page, 'subagent-stopped');
-});
+}

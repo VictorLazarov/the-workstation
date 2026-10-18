@@ -70,18 +70,26 @@ AskUserQuestion, plan mode, interrupt, model/mode/effort, images, MCP, resume, f
 (sidebar with status, conversation, tool cards, composer with @files, slash commands, images, queueing);
 inspector panels (Plan, Changes with diff + commit + revert, Files, Tasks, Context/MCP, Terminal); settings
 incl. custom base URL/key; devcontainer feature; CI definitions.
-**Known gaps / unverified:** devcontainer feature never built in a real container; no virtualization for very
-long conversations; worktree toggle and remembered-rules UI not yet exposed; Cursor/Copilot research is from
-search snippets only; browser e2e suite and brand pass in progress; Electron shell not started.
+**Verified against the real SDK in the browser UI (REAL_SDK=1 specs under `packages/e2e/tests/live/real-*.spec.ts`, plus
+`packages/server/test/real-alpha.test.ts`):** worktree sessions (new-session toggle, Changes + commit in the worktree, sidebar/topbar
+status, remove with a discard confirm), MCP servers (connected and failing states with the real error, tool card, permission + Always
+allow), subagents (Task card, Tasks panel, nested progress, Stop), rewind (code / conversation / both, with what it cannot restore),
+image attachments, remembered-rules viewer in Settings, five parallel sessions, switching to Sonnet mid-session, line comments on diffs
+batched into one prompt.
+**Known gaps / unverified:** devcontainer feature never built in a real container; no virtualization for very long conversations;
+a rewound conversation is a new session (the original stays; its title is not persisted until the first message); "Always allow" rules
+of a worktree session are saved by the SDK in the MAIN checkout's `.claude/settings.local.json` (they outlive the worktree); line
+comments in split diffs are listed under the diff, not between its rows; Cursor/Copilot research is from search snippets only;
+Electron shell not started.
 
 ## 8. Roadmap (priority order)
 **Next (wave 3)** — drawn from `RESEARCH.md`:
-1. Worktree toggle per session with setup/cleanup and status in the sidebar.
-2. Click-a-line diff comments, batched back to the agent as one prompt.
-3. Rewind menu (code / conversation / both) that states what it cannot restore.
+1. ~~Worktree toggle per session with setup/cleanup and status in the sidebar.~~ Done (new-session chip, Overview card, remove).
+2. ~~Click-a-line diff comments, batched back to the agent as one prompt.~~ Done (Changes panel, unified and split).
+3. ~~Rewind menu (code / conversation / both) that states what it cannot restore.~~ Done.
 4. Editable plan with Approve / Build; side chat that never writes to the thread.
 5. Sidebar filters (status/project), auto-archive, notifications when a session needs input or finishes.
-6. Error banners with codes (auth/model errors link to Settings); remembered-rules viewer.
+6. Error banners with codes (auth/model errors link to Settings); ~~remembered-rules viewer~~ (done, Settings).
 7. Horizon brand pass (in progress) with a warm/horizon switch.
 8. Electron shell (`apps/desktop`, a few hundred lines): embed `startServer()` on a free port with a
    generated token, native menus, folder dialog via the `platform` adapter.
