@@ -5,13 +5,34 @@ import { TOKEN } from './env.ts';
  * Test fixture. Every page starts with the first-run settings prompt dismissed (it is a per-viewer
  * convenience flag, so localStorage is the right place for it). Tests that need the prompt clear it.
  */
-export const test = base.extend({
+export const test = base.extend<{ sessionCleanup: void }>({
   page: async ({ page }, use) => {
     await page.addInitScript(() => {
       try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* storage may be blocked */ }
     });
     await use(page);
   },
+  /**
+   * Per-test isolation on the shared mock servers: sessions a test started stay live on the server and keep emitting events
+   * (toasts, attention badges) into whichever page runs next. Close the ones this test created when it ends.
+   */
+  sessionCleanup: [async ({ baseURL }, use) => {
+    const headers = { authorization: `Bearer ${TOKEN}` };
+    const live = async (): Promise<string[]> => {
+      try {
+        const r = await fetch(`${baseURL}/api/sessions`, { headers });
+        if (!r.ok) return [];
+        return ((await r.json()) as Array<{ sessionId: string; live?: boolean }>).filter((s) => s.live).map((s) => s.sessionId);
+      } catch { return []; }
+    };
+    const before = baseURL ? new Set(await live()) : new Set<string>();
+    await use();
+    if (!baseURL) return;
+    for (const id of await live()) {
+      if (before.has(id)) continue;
+      await fetch(`${baseURL}/api/sessions/${id}`, { method: 'DELETE', headers }).catch(() => {});
+    }
+  }, { auto: true }],
 });
 export { expect };
 export { TOKEN } from './env.ts';

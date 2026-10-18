@@ -15,6 +15,8 @@ describe('session lifecycle with mock', () => {
     const sid = await startSession(c, s.cwd);
     c.send({ type: 'prompt', sessionId: sid, text: 'hi', clientMsgId: 'm1' });
     await c.waitFor(isResult);
+    // the closing 'idle' state is emitted after the result message: wait for it instead of racing it
+    await c.waitFor((m) => m.type === 'state' && (m as any).state.status === 'idle' && c.msgs.indexOf(m) > c.msgs.findIndex(isResult));
     const types = sdkMsgs(c, sid).map((m) => m.type);
     expect(types).toContain('stream_event');
     expect(types).toContain('assistant');

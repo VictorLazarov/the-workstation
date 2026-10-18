@@ -104,7 +104,10 @@ export function LogsView({ sessionId }: { sessionId?: string }) {
     // The banner/toast can appear before its log line reaches this page (two channels: the session event and the log stream):
     // keep the target pending and look again as entries arrive, for a few seconds. Without waiting, a nearer line (the 401 warning
     // instead of the message shown to the user) would win and the exact one would be left closed.
-    const exact = !focus.text || entries.some((x) => x.message === focus.text && (!focus.sessionId || x.sessionId === focus.sessionId));
+    // Without banner text the target is the error line: a nearer info/warn line must not win while the error line is still in flight.
+    const exact = focus.text
+      ? entries.some((x) => x.message === focus.text && (!focus.sessionId || x.sessionId === focus.sessionId))
+      : seq !== undefined && entries.find((x) => x.seq === seq)?.level === 'error';
     const left = (seq === undefined ? FOCUS_WAIT_MS : EXACT_WAIT_MS) - (Date.now() - focus.nonce);
     if ((seq === undefined || !exact) && left > 0) {
       const t = setTimeout(() => useLogs.setState({ focus: { ...focus, nonce: focus.nonce - FOCUS_WAIT_MS } }), left); // deadline passed: take the closest line

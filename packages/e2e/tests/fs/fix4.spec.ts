@@ -270,7 +270,6 @@ test.describe('minors', () => {
     await expect(file.locator('.cmt-text')).toHaveText('keep me across reloads');
     await page.reload();
     await expect(page.locator('.msg-user', { hasText: 'write newdir' })).toBeVisible({ timeout: 15_000 }); // the open session came back
-    await page.waitForTimeout(400);
     await openInspector(page, 'changes');
     await expect(page.getByRole('group', { name: 'Review comments' })).toContainText('1 comment', { timeout: 15_000 });
     await expect(page.locator('.cmt-text')).toHaveText('keep me across reloads');
