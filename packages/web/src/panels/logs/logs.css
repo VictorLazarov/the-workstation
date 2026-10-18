@@ -1,0 +1,50 @@
+/* Logs panel: dense, calm, no horizontal scroll at any width. Level colours reuse the danger / warn / accent tokens. */
+.logs { display: flex; flex-direction: column; height: 100%; min-height: 0; min-width: 0; }
+.logs-top { flex: none; display: grid; gap: 6px; padding: 8px 10px 8px; border-bottom: 1px solid var(--border); background: var(--bg); min-width: 0; }
+.logs-levels { display: flex; flex-wrap: wrap; gap: 4px; }
+.logs-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 99px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text-2); font-size: var(--fs-sm); font-weight: 500; white-space: nowrap; }
+.logs-chip:hover { background: var(--surface-2); }
+.logs-chip .n { font-size: var(--fs-xs); font-variant-numeric: tabular-nums; font-weight: 700; }
+.logs-chip[aria-pressed='true'] { color: var(--text); font-weight: 600; background: var(--active); }
+.logs-chip.lv-error[aria-pressed='true'] { color: var(--danger); background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); }
+.logs-chip.lv-warn[aria-pressed='true'] { color: var(--warn); background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); }
+.logs-chip.lv-info[aria-pressed='true'] { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.logs-chip[aria-pressed='false'] { background: transparent; border-style: dashed; color: var(--muted); }
+.logs-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.field.sm { height: 26px; font-size: var(--fs-sm); padding: 0 6px; min-width: 0; text-overflow: ellipsis; }
+.logs-search { display: flex; align-items: center; gap: 2px; min-width: 0; } .logs-search .field { flex: 1; min-width: 0; margin-right: 4px; height: 26px; }
+
+.logs-list { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 8px; display: grid; align-content: start; gap: 2px; outline-offset: -2px; }
+.logs-note { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; padding: 28px 12px; color: var(--muted); text-align: center; font-size: var(--fs-sm); } .logs-note.err { color: var(--danger); }
+.logs-more { justify-self: center; height: 24px; padding: 0 10px; margin-bottom: 4px; border-radius: 99px; color: var(--accent); font-size: var(--fs-sm); font-weight: 500; } .logs-more:hover { background: var(--accent-soft); }
+
+.log-row { min-width: 0; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); }
+.log-row.lv-error { border-left-color: var(--danger); } .log-row.lv-warn { border-left-color: var(--warn); } .log-row.lv-info { border-left-color: var(--accent-solid); }
+.log-head { display: grid; gap: 2px; width: 100%; min-width: 0; padding: 4px 8px 5px; text-align: left; border-radius: inherit; }
+.log-head:hover { background: var(--hover); }
+.log-meta { display: flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); font-size: var(--fs-xs); }
+.log-lvl { font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; font-size: 10px; flex: none; }
+.log-lvl.lv-error { color: var(--danger); } .log-lvl.lv-warn { color: var(--warn); } .log-lvl.lv-info { color: var(--accent); } .log-lvl.lv-debug { color: var(--muted); }
+.log-src { padding: 0 6px; border-radius: 99px; background: var(--hover); color: var(--text-2); font-weight: 500; white-space: nowrap; flex: none; }
+.log-time { font-family: var(--font-mono); white-space: nowrap; flex: none; }
+.log-sess { font-family: var(--font-mono); white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.log-chev { margin-left: auto; flex: none; transition: transform 0.12s; } .log-row.open .log-chev { transform: rotate(90deg); }
+.log-msg { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; font-size: var(--fs-sm); line-height: 1.4; color: var(--text); }
+.log-msg.full { display: block; -webkit-line-clamp: unset; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+.log-body { display: grid; gap: 6px; padding: 0 8px 8px; min-width: 0; }
+.log-facts { margin: 0; display: grid; gap: 1px; font-size: var(--fs-xs); color: var(--muted); }
+.log-facts > div { display: flex; gap: 8px; min-width: 0; } .log-facts dt { flex: none; width: 52px; } .log-facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; color: var(--text-2); -webkit-user-select: text; user-select: text; } .log-facts .mono { font-family: var(--font-mono); }
+.log-json { margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font: var(--fs-xs) / 1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; -webkit-user-select: text; user-select: text; }
+
+.logs .jump-strip { padding: 4px 0; background: var(--bg); }
+.logs-foot { flex: none; display: flex; align-items: center; gap: 10px; padding: 4px 10px; border-top: 1px solid var(--border); background: var(--bg); color: var(--muted); font-size: var(--fs-xs); min-width: 0; }
+.logs-count { flex: none; font-variant-numeric: tabular-nums; }
+.logs-file { display: inline-flex; align-items: center; gap: 4px; min-width: 0; flex: 1; justify-content: flex-end; } .logs-file .mid-ell { min-width: 0; }
+
+/* inspector tab: red badge for errors that arrived while Logs was not on screen */
+.itab-badge.danger, .itab[data-panel='logs'] .itab-badge { background: var(--danger-fill); color: #fff; }
+.itab[data-panel='logs']:not(.on) .itab-badge.danger { background: var(--danger-fill); }
+
+/* the dialog variant (no session open, so no inspector) */
+.logs-dialog .dialog-body { padding: 0; display: flex; flex-direction: column; height: min(70vh, 620px); min-height: 0; }
+.logs-dialog .logs { flex: 1; }

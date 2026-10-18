@@ -4,7 +4,7 @@ GitHub Copilot app). NOT a terminal emulator and NOT a CLI transcript in a brows
 
 - **Layout**: left sidebar = projects → sessions (grouped, status dots: running / needs-input / done / error,
   relative time, branch). Center = conversation. Right = collapsible, tabbed inspector (Changes/diff review,
-  Files, Plan/Todos, Tasks/subagents, Context, Terminal, Preview). Top bar = project, branch, model, mode.
+  Files, Plan/Todos, Tasks/subagents, Context, Terminal, Preview, Logs). Top bar = project, branch, model, mode.
 - **Parallel agents are first-class**: many sessions run at once; sidebar shows live status; notifications
   when one needs permission or finishes. Each can use its own git worktree.
 - **Rich tool rendering**: no raw JSON/ANSI. Edit/Write → inline diff cards with +/- counts, click to open in
@@ -38,6 +38,15 @@ GitHub Copilot app). NOT a terminal emulator and NOT a CLI transcript in a brows
   it never widens a dialog or scrolls the conversation sideways. Covered by layout-lint and `tests/fs/fix4.spec.ts`.
 - A session that needs input (or is running/errored) is never hidden behind "Show N more" in the sidebar. A failure is reported once.
 - Split diff needs a wide inspector (>= 620px); below that it falls back to unified.
+
+## Diagnostics (Logs)
+- **Logs** is an inspector tab, not a terminal dump: level chips with counts (Errors / Warnings / Info / Debug off by default), source and
+  session filters (the open session by default), search, newest at the bottom with auto-follow and a "Jump to latest" strip, rows that
+  wrap and expand to show their detail as JSON, Copy visible / Download / Clear. Errors that arrive while another tab is open put a small
+  red badge on the Logs tab.
+- Every error banner and error toast has **View details**: it opens Logs on that session at the entry that says the same thing (or the
+  nearest error in time). With no session open (no inspector) Logs opens as a dialog; the palette ("Open logs") and Settings ("View logs")
+  do the same. Overview → Diagnostics has **Copy debug info** (redacted, for bug reports). Covered by `tests/app/logs*.spec.ts`.
 
 ## Keyboard shortcuts
 - `Ctrl/Cmd+K` palette, `Ctrl/Cmd+B` sidebar, `Ctrl/Cmd+Alt+B` inspector, `Ctrl/Cmd+,` settings, `Ctrl/Cmd+O` open project,

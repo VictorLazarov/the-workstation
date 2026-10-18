@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { GitStatus, GitFileStatus, GitCommitResult, GitRevertResult } from '@workstation/protocol';
 import { fromGitPath, isGitDirName, realpathSyncNative, relativeInside, toPosix } from './platform.js';
+import { log } from './log.js';
 
 // GIT_LITERAL_PATHSPECS=1: every path we pass is a literal file name, never a glob (`*`, `[x]`) or magic (`:(top)`).
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', GIT_PAGER: 'cat', LC_ALL: 'C', GIT_LITERAL_PATHSPECS: '1' };
@@ -24,6 +25,7 @@ export function git(cwd: string, args: string[], opts: { timeout?: number; maxBu
       if (!err) return resolve({ code: 0, stdout, stderr });
       const e = err as NodeJS.ErrnoException & { code?: number | string };
       if (typeof e.code === 'number') return resolve({ code: e.code, stdout: stdout ?? '', stderr: stderr ?? '' });
+      log.warn('git', `git ${args[0] ?? ''} could not run: ${e.message}`, { subcommand: args[0], code: e.code });
       reject(err);
     });
   });
@@ -191,7 +193,10 @@ export async function createWorktree(cwd: string, name: string): Promise<{ path:
   if (wtPath) await git(root, ['worktree', 'prune']);
   const branchExists = (await git(root, ['rev-parse', '--verify', '-q', `refs/heads/${branch}`])).code === 0;
   const r = await git(root, ['worktree', 'add', ...(branchExists ? [dir, branch] : ['-b', branch, dir])], { timeout: 60_000 });
-  if (r.code !== 0) throw new Error(`git worktree add failed: ${r.stderr.trim() || r.stdout.trim()}`);
+  if (r.code !== 0) {
+    log.error('worktree', `git worktree add failed: ${r.stderr.trim() || r.stdout.trim()}`, { branch, root });
+    throw new Error(`git worktree add failed: ${r.stderr.trim() || r.stdout.trim()}`);
+  }
   // keep worktrees out of `git status` of the main checkout
   try {
     const exclude = path.join((await git(root, ['rev-parse', '--git-common-dir'])).stdout.trim() || '.git', 'info', 'exclude');
@@ -250,6 +255,7 @@ export async function gitCommit(cwd: string, message: unknown, files?: unknown):
   const r = await git(root, ['commit', '-m', message.trim(), '--', ...list.map((p) => `:(literal)${p}`)], { timeout: 120_000, runHooks: true });
   if (r.code !== 0) {
     const out = lastLines(`${r.stdout}\n${r.stderr}`, 20);
+    log.warn('git', 'git commit failed', { exitCode: r.code, files: list.length, gitOutput: out.slice(-1500) });
     if (/Author identity unknown|auto-detection is disabled|no (name|email) was given|unable to auto-detect email|empty ident name|Please tell me who you are/i.test(out)) {
       throw new GitError(409, 'Git needs your name and email before it can commit. Run in a terminal:\n  git config --global user.name "Your Name"\n  git config --global user.email "you@example.com"\n(drop --global to set it for this repository only), then press Commit again.');
     }
@@ -257,6 +263,7 @@ export async function gitCommit(cwd: string, message: unknown, files?: unknown):
   }
   const head = await git(root, ['rev-parse', '--short', 'HEAD']);
   const summary = r.stdout.split('\n').find((l) => /^\s*\d+ files? changed/.test(l))?.trim() ?? '';
+  log.info('git', 'Commit created', { commit: head.stdout.trim(), files: list.length, summary });
   return { ok: true, commit: head.stdout.trim(), summary };
 }
 
@@ -280,6 +287,7 @@ export async function gitRevert(cwd: string, relPath: unknown): Promise<GitRever
     const stat = fs.lstatSync(realAbs);
     if (stat.isDirectory()) throw new GitError(400, 'refusing to delete a directory');
     fs.rmSync(realAbs, { force: true });
+    log.info('git', 'Reverted a file (deleted untracked)');
     return { ok: true, action: 'deleted' };
   }
   const hasHead = (await git(root, ['rev-parse', '--verify', '-q', 'HEAD'])).code === 0;
@@ -288,9 +296,11 @@ export async function gitRevert(cwd: string, relPath: unknown): Promise<GitRever
     // added (staged) but not in HEAD: drop it from the index and the worktree
     const r = await git(root, ['rm', '-f', '-q', '--', rel]);
     if (r.code !== 0) throw new GitError(500, `git rm failed: ${firstLine(r.stderr)}`);
+    log.info('git', 'Reverted a file (removed added file)');
     return { ok: true, action: 'deleted' };
   }
   const r = await git(root, ['checkout', 'HEAD', '--', rel]);
-  if (r.code !== 0) throw new GitError(500, `git checkout failed: ${firstLine(r.stderr)}`);
+  if (r.code !== 0) { log.warn('git', `git checkout failed: ${firstLine(r.stderr)}`); throw new GitError(500, `git checkout failed: ${firstLine(r.stderr)}`); }
+  log.info('git', 'Reverted a file (restored from HEAD)');
   return { ok: true, action: 'restored' };
 }

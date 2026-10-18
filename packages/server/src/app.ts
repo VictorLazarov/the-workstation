@@ -9,7 +9,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { DEFAULT_PORT, MODEL_ALIAS_ENV, type ClientMessage, type ServerMessage, type SessionSummary } from '@workstation/protocol';
+import { DEFAULT_PORT, MODEL_ALIAS_ENV, type ClientMessage, type LogEntry, type ServerMessage, type SessionSummary } from '@workstation/protocol';
 import { Catalog } from './catalog.js';
 import { fetchGatewayModels, gatewayTarget, resolveModelAlias, testGateway } from './gateway.js';
 import { ConfigStore } from './config.js';
@@ -18,7 +18,10 @@ import { GitError, gitCommit, gitDiff, gitRevert, gitStatus } from './git.js';
 import { listPermissionRules, removeLocalPermissionRule, settingsProjectDir } from './permission-rules.js';
 import { createAdapter, type SdkAdapter } from './sdk.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, securityOptionsFromEnv, tokenMatches, type SecurityOptions } from './security.js';
-import { isInside, moduleDir, samePath } from './platform.js';
+import { isInside, logFileFor, moduleDir, samePath } from './platform.js';
+import { log, parseLogFilter } from './log.js';
+import { isSecretName } from './redact.js';
+import { debugInfoText } from './diagnostics.js';
 import { createTerminalService } from './terminal.js';
 import { SessionManager, type Subscriber } from './session-manager.js';
 
@@ -89,7 +92,31 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const security = opts.security ?? securityOptionsFromEnv(host);
   const webDist = opts.webDist === undefined ? defaultWebDist() : opts.webDist;
 
+  // ── diagnostics log: redaction knows the server's own secrets; the file lives next to config.json ──
+  const envSecrets = Object.entries(process.env).filter(([k, v]) => v && v.length >= 8 && isSecretName(k)).map(([, v]) => v!);
+  log.setSecrets(() => {
+    const a = config.app;
+    const out = [config.token, a.apiKey, a.authToken, ...envSecrets];
+    for (const [k, v] of Object.entries(a.env ?? {})) if (isSecretName(k)) out.push(v);
+    return out.filter((v): v is string => typeof v === 'string' && v.length > 0);
+  });
+  const logFile = log.attachFile(logFileFor(path.dirname(config.file)));
+
   const app = new Hono();
+  /** requests whose failure the error handler already logged in detail (so the status line below is not a duplicate) */
+  const loggedRequests = new WeakSet<Request>();
+
+  // ── log every REST failure (4xx/5xx) with route and status; never bodies, queries or headers ──
+  app.use('*', async (c, next) => {
+    const t0 = Date.now();
+    await next();
+    const status = c.res.status;
+    if (status < 400 || loggedRequests.has(c.req.raw)) return;
+    const route = new URL(c.req.url).pathname;
+    if (!route.startsWith('/api/') && status !== 403) return; // static misses are not news
+    if (!log.allow(`http ${status}`)) return;
+    log[status >= 500 ? 'error' : 'warn']('http', `${c.req.method} ${route} -> ${status}`, { method: c.req.method, route, status, ms: Date.now() - t0 });
+  });
 
   // ── Host + Origin check on everything (DNS rebinding / CSRF) ──
   app.use('*', async (c, next) => {
@@ -115,7 +142,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     // 5xx: details (paths, git stderr) stay in the server log; the client gets a generic message + request id
     const requestId = randomUUID().slice(0, 8);
     const status = (err instanceof HttpError || err instanceof GitError) ? err.status : 500;
-    console.error(`[workstation] ${requestId} ${c.req.method} ${new URL(c.req.url).pathname} -> ${status}:`, err instanceof Error ? err.stack ?? err.message : err);
+    loggedRequests.add(c.req.raw);
+    log.error('http', `${c.req.method} ${new URL(c.req.url).pathname} -> ${status}: ${err instanceof Error ? err.message : String(err)}`, { requestId, method: c.req.method, route: new URL(c.req.url).pathname, status, error: err });
     return c.json({ error: `internal error (request id ${requestId}; details in the server log)`, requestId }, status as 500);
   });
 
@@ -272,7 +300,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (b.aliasEnv && typeof b.aliasEnv === 'object' && !Array.isArray(b.aliasEnv)) {
       for (const k of MODEL_ALIAS_ENV.map((x) => x.env)) { const v = (b.aliasEnv as Record<string, unknown>)[k]; if (typeof v === 'string') { if (v.trim()) env[k] = v.trim(); else delete env[k]; } }
     }
-    const asked = str(b.model, 300) || config.app.defaultModel || '';
+    const asked = 'model' in b ? str(b.model, 300) : config.app.defaultModel ?? ''; // a blank field means "no model chosen", not the saved one
     const model = resolveModelAlias(asked, env);
     if (!model) {
       const models = await fetchGatewayModels(target);
@@ -287,6 +315,36 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   // ── remembered permission rules ("Always allow" writes to <project>/.claude/settings.local.json) ──
   app.get('/api/permission-rules', async (c) => { const dir = await settingsProjectDir(await cwdParam(c)); return c.json({ dir, rules: listPermissionRules(dir) }); });
   app.delete('/api/permission-rules', async (c) => { const b = await jsonBody(c); return c.json(removeLocalPermissionRule(await settingsProjectDir(await requireDir(b.cwd)), b.behavior, b.rule)); });
+
+  // ── diagnostics log (token-gated like every /api route) ──
+  app.get('/api/logs', (c) => c.json(log.query(parseLogFilter(new URL(c.req.url).searchParams))));
+  app.get('/api/logs/download', (c) => {
+    const f = parseLogFilter(new URL(c.req.url).searchParams);
+    const header = [`# The Workstation ${VERSION} server log (redacted)`, `# exported ${new Date().toISOString()}`, `# ${log.size} entries in memory${logFile ? `; the full rotating log is on disk: ${logFile}` : ''}`].join('\n');
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*/, '').replace('T', '-');
+    c.header('Content-Type', 'text/plain; charset=utf-8');
+    c.header('Content-Disposition', `attachment; filename="workstation-logs-${stamp}.log"`);
+    return c.body(log.text(f, header));
+  });
+  app.post('/api/logs/clear', (c) => {
+    const cleared = log.clear();
+    log.info('server', 'Log cleared from the browser (the log file keeps its history)', { cleared });
+    return c.json({ ok: true, cleared });
+  });
+  app.get('/api/logs/debug-info', (c) => {
+    const id = c.req.query('sessionId');
+    if (id !== undefined && !uuidish(id)) throw new HttpError(400, 'invalid session id');
+    const live = id ? sessions.get(id) : undefined;
+    const str = (k: string) => { const v = c.req.query(k); return v && v.length <= 100 ? v : undefined; };
+    return c.json({
+      text: debugInfoText({
+        appVersion: VERSION, mock: adapter.mock, baseUrl: config.app.anthropicBaseUrl, sessionId: id, live: id ? !!live : undefined,
+        model: live?.model ?? str('model'), permissionMode: live?.permissionMode ?? str('permissionMode'),
+        claudeCodeVersion: (live?.init as { claude_code_version?: string } | undefined)?.claude_code_version,
+        logger: log, secrets: () => [config.token, config.app.apiKey ?? '', config.app.authToken ?? '', ...envSecrets],
+      }),
+    });
+  });
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
   app.get('/ws', (c) => c.text('WebSocket endpoint', 426));
@@ -335,6 +393,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   // 16 MB per frame: a prompt with ~10 MB of images (base64) fits; anything bigger closes only that socket (1009).
   const wss = new WebSocketServer({ noServer: true, maxPayload: Math.max(1, Number(process.env.WORKSTATION_WS_MAX_MB) || 16) * 1024 * 1024 });
   const reject = (socket: Duplex, code: number, text: string) => {
+    if (log.allow('ws refused')) log.warn('http', `WebSocket refused: ${code} ${text}`, { status: code });
     socket.write(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
     socket.destroy();
   };
@@ -347,13 +406,25 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (!isOriginAllowed(req.headers.origin, req.headers.host, security)) return reject(socket, 403, 'Forbidden');
     const token = url.searchParams.get('token') ?? extractBearer(req.headers.authorization);
     if (!tokenMatches(token, config.token)) return reject(socket, 401, 'Unauthorized');
-    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws));
+    wss.handleUpgrade(req, socket, head, (ws) => onConnection(ws, req));
   });
 
-  function onConnection(ws: WebSocket) {
+  function onConnection(ws: WebSocket, req: IncomingMessage) {
     const sub: Subscriber = {
       id: randomUUID(),
       send(msg: ServerMessage) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); },
+    };
+    const openedAt = Date.now();
+    log.info('http', 'WebSocket connected', { client: sub.id.slice(0, 8), remote: req.socket.remoteAddress });
+    // Live log stream: only for sockets that asked (the Logs panel), in small batches
+    let stopLogs: (() => void) | null = null;
+    const startLogs = () => {
+      if (stopLogs) return;
+      let batch: LogEntry[] = [];
+      let timer: NodeJS.Timeout | undefined;
+      const flush = () => { timer = undefined; if (batch.length) { const entries = batch; batch = []; sub.send({ type: 'log.entries', entries }); } };
+      const off = log.subscribe((e) => { batch.push(e); if (batch.length >= 100) flush(); else timer ??= setTimeout(flush, 120); });
+      stopLogs = () => { off(); if (timer) clearTimeout(timer); stopLogs = null; };
     };
     sub.send({ type: 'hello', version: VERSION, serverCwd, mock: adapter.mock, bypass: sessions.bypass() });
     // Serialise per-connection so ordering of client messages is preserved.
@@ -362,22 +433,31 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       let msg: ClientMessage;
       try { msg = JSON.parse(data.toString()) as ClientMessage; } catch { sub.send({ type: 'error', message: 'invalid JSON' }); return; }
       if (!msg || typeof msg !== 'object' || typeof (msg as { type?: unknown }).type !== 'string') { sub.send({ type: 'error', message: 'invalid message' }); return; }
+      if (msg.type === 'logs.subscribe') { startLogs(); return; }
+      if (msg.type === 'logs.unsubscribe') { stopLogs?.(); return; }
       // permission responses and interrupts must not queue behind slow operations
       if (msg.type === 'permission.respond' || msg.type === 'interrupt' || msg.type === 'ping') void sessions.handle(sub, msg);
       else chain = chain.then(() => sessions.handle(sub, msg)).catch(() => {});
     });
-    const cleanup = () => sessions.detach(sub);
+    const cleanup = () => { stopLogs?.(); sessions.detach(sub); };
+    ws.on('close', (code, reason) => log.info('http', 'WebSocket disconnected', { client: sub.id.slice(0, 8), code, ...(reason.length ? { reason: reason.toString().slice(0, 100) } : {}), openSeconds: Math.round((Date.now() - openedAt) / 1000) }));
+    ws.on('error', (e) => log.warn('http', `WebSocket error: ${e.message}`, { client: sub.id.slice(0, 8) }));
     ws.on('close', cleanup);
     ws.on('error', cleanup);
     const ka = setInterval(() => { if (ws.readyState === ws.OPEN) ws.ping(); }, 30_000);
     ws.on('close', () => clearInterval(ka));
   }
 
+  log.info('server', `Server listening on ${host}:${port}`, {
+    version: VERSION, node: process.version, platform: `${process.platform} ${process.arch}`, mock: adapter.mock, cwd: serverCwd, logFile,
+    web: webDist ? 'served' : 'not built', allowedOrigins: security.allowedOrigins?.length ?? 0,
+  });
   const shownHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host.includes(':') ? `[${host}]` : host;
   return {
     server, host, port, config, sessions,
     url: `http://${shownHost}:${port}/?token=${config.token}`,
     close: async () => {
+      log.info('server', 'Server stopping', { sessions: sessions.list().length });
       sessions.closeAll();
       terminals.closeAll();
       for (const c of wss.clients) c.terminate();

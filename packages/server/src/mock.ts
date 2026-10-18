@@ -20,6 +20,10 @@
  *   (so Changes / untracked-folder flows are exercised), "Always allow" is persisted to <cwd>/.claude/settings.local.json and applied
  *   on the next matching tool call. "newdir" in a prompt makes the Write create a new folder (src/lib/util.ts). Off by default so
  *   demos and shared fixtures are never modified.
+ * WORKSTATION_MOCK_GATEWAY=1: "gateway" scenario. When the session env has ANTHROPIC_BASE_URL the mock sends one real max_tokens-1 request to
+ *   <base>/v1/messages with the model the real CLI would use (alias -> ANTHROPIC_DEFAULT_*_MODEL, else a built-in Anthropic id) and the same
+ *   credentials; a 404 becomes the CLI's model_not_found failure naming that model, a 401 the authentication failure. Used with the fake
+ *   gateway in packages/e2e/support/fake-gateway.ts. Off by default: mock sessions never touch the network.
  * Set WORKSTATION_MOCK_SPEED=0 for no delays (tests), 2 for double speed, default 1.
  */
 import { randomUUID } from 'node:crypto';
@@ -302,6 +306,11 @@ class MockQuery implements QueryHandle {
     const t = text.toLowerCase();
     const has = (...w: string[]) => w.some((x) => new RegExp(`\\b${x}`).test(t));
     let final = '';
+    if (process.env.WORKSTATION_MOCK_GATEWAY === '1') {
+      const bad = await this.gatewayProbe();
+      if (bad?.kind === 'auth') { yield* this.authFailureScenario(); return ''; }
+      if (bad?.kind === 'model') { yield* this.modelNotFoundScenario(bad.model); return ''; }
+    }
     if (has('demo', 'everything')) {
       yield* this.demo();
       final = 'Demo complete.';
@@ -451,6 +460,47 @@ class MockQuery implements QueryHandle {
     yield this.m({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 577, error_status: 401, error: 'authentication_failed' });
     // the real CLI also writes a synthetic assistant message carrying the failure (error: authentication_failed) with the CLI's own wording
     yield { type: 'assistant', message: { id: randomUUID(), type: 'message', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'Invalid API key \u00b7 Fix external API key' }], stop_reason: 'stop_sequence', stop_sequence: '', usage: { input_tokens: 0, output_tokens: 0 } }, error: 'authentication_failed', parent_tool_use_id: null, uuid: randomUUID(), session_id: this.sessionId };
+    await Promise.race([this.wake.wait(), sleep(5000)]);
+  }
+
+  /** The model id the real CLI would put on the wire: aliases go through ANTHROPIC_DEFAULT_*_MODEL, else its built-in Anthropic ids. */
+  private wireModel(env: Record<string, string | undefined>): string {
+    const m = this.model;
+    const builtin: Record<string, [string, string]> = { sonnet: ['ANTHROPIC_DEFAULT_SONNET_MODEL', 'claude-sonnet-4-5'], opus: ['ANTHROPIC_DEFAULT_OPUS_MODEL', 'claude-opus-4-1'], haiku: ['ANTHROPIC_DEFAULT_HAIKU_MODEL', 'claude-haiku-4-5'] };
+    const hit = builtin[m.toLowerCase()];
+    if (hit) return env[hit[0]] || hit[1];
+    if (m === 'default' || !m) return env.ANTHROPIC_MODEL || env[builtin.sonnet![0]] || builtin.sonnet![1];
+    return m;
+  }
+
+  /** One real request to the configured gateway (see the header comment). undefined = fine, or the gateway is not reachable (then the mock just answers). */
+  private async gatewayProbe(): Promise<{ kind: 'model'; model: string } | { kind: 'auth' } | undefined> {
+    const env = (this.params.options.env ?? {}) as Record<string, string | undefined>;
+    const base = env.ANTHROPIC_BASE_URL;
+    if (!base) return undefined;
+    const model = this.wireModel(env);
+    try {
+      const res = await fetch(base.replace(/\/+$/, '') + '/v1/messages', {
+        method: 'POST', redirect: 'manual', signal: AbortSignal.timeout(5000),
+        headers: {
+          'content-type': 'application/json', 'anthropic-version': '2023-06-01',
+          ...(env.ANTHROPIC_API_KEY ? { 'x-api-key': env.ANTHROPIC_API_KEY } : {}),
+          ...(env.ANTHROPIC_AUTH_TOKEN ? { authorization: `Bearer ${env.ANTHROPIC_AUTH_TOKEN}` } : {}),
+        },
+        body: JSON.stringify({ model, max_tokens: 1, messages: [{ role: 'user', content: 'ping' }] }),
+      });
+      await res.body?.cancel().catch(() => {});
+      if (res.status === 404) return { kind: 'model', model };
+      if (res.status === 401 || res.status === 403) return { kind: 'auth' };
+    } catch { /* unreachable: behave like the plain mock */ }
+    return undefined;
+  }
+
+  /** model_not_found as the real CLI reports it: an api_retry (404), then its synthetic assistant message naming the model. */
+  private async *modelNotFoundScenario(model: string): AsyncGenerator<unknown, void> {
+    yield this.m({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 577, error_status: 404, error: 'model_not_found' });
+    const text = `There's an issue with the selected model (${model}). It may not exist or you may not have access to it. Run /model to pick a different model.`;
+    yield { type: 'assistant', message: { id: randomUUID(), type: 'message', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text }], stop_reason: 'stop_sequence', stop_sequence: '', usage: { input_tokens: 0, output_tokens: 0 } }, error: 'model_not_found', parent_tool_use_id: null, uuid: randomUUID(), session_id: this.sessionId };
     await Promise.race([this.wake.wait(), sleep(5000)]);
   }
 

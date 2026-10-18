@@ -98,7 +98,7 @@ describe('N1: real API error (401 from a bad base URL, real stream)', () => {
   it('error codes map to the right action', async () => {
     const { errorAction } = await import('./reducer');
     expect(errorAction('authentication_failed')).toBe('settings');
-    expect(errorAction('model_not_found')).toBe('settings');
+    expect(errorAction('model_not_found')).toBe('pick-model'); // a model picker in the banner, plus Settings on the Model field
     expect(errorAction('process_exited')).toBe('retry');
     expect(errorAction(undefined)).toBe('retry');
   });

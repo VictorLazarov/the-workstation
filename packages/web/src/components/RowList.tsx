@@ -10,7 +10,9 @@ import { Icon } from './Icon';
 import { Markdown } from './Markdown';
 import { ExploreGroup, ToolCard } from './ToolCards';
 import { RewindMenu } from './Rewind';
+import { ModelFixAction } from './Chips';
 import { CopyButton } from './ui';
+import { LogsLink } from './LogsLink';
 
 export const Thinking = memo(function Thinking({ block, streaming }: { block: ThinkingBlock; streaming: boolean }) {
   const [isOpen, setOpen] = useExpanded(false);
@@ -51,7 +53,8 @@ function Img({ im }: { im: ImageRef }) {
   return src ? <img className="msg-img" src={src} alt={im.name ?? 'attached image'} /> : null;
 }
 
-function ErrorAction({ action, sessionId }: { action?: 'settings' | 'retry' | 'close-idle'; sessionId: string }) {
+function ErrorAction({ action, sessionId, model }: { action?: 'settings' | 'retry' | 'close-idle' | 'pick-model'; sessionId: string; model?: string }) {
+  if (action === 'pick-model') return <ModelFixAction sessionId={sessionId} rejected={model} />;
   if (action === 'settings') return <button type="button" className="link-btn banner-action" onClick={() => useUi.getState().set({ settingsOpen: true })}>Open Settings</button>;
   if (action === 'close-idle') return <button type="button" className="link-btn banner-action" onClick={() => useSessions.getState().closeIdleSessions(sessionId)}>Close idle sessions</button>;
   if (action === 'retry') return <button type="button" className="link-btn banner-action" onClick={() => useSessions.getState().retryLast(sessionId)}>Retry</button>;
@@ -65,7 +68,7 @@ function ResultFooter({ item, sessionId }: { item: ResultItem; sessionId: string
     return (
       <div className="banner error"><Icon name="alert" size={15} />
         <div><b>{item.subtype === 'error_max_turns' ? 'Reached the turn limit' : 'Something went wrong'}</b>{item.message && item.message !== 'Reached the turn limit' && <div className="banner-sub">{truncate(item.message, 300)}</div>}</div>
-        <ErrorAction action={item.action} sessionId={sessionId} />
+        <div className="banner-actions"><ErrorAction action={item.action} sessionId={sessionId} /><LogsLink sessionId={sessionId} ts={item.ts} /></div>
       </div>
     );
   }
@@ -128,10 +131,10 @@ export const RowList = memo(function RowList({ conv, laneKey, sessionId, cwd, se
         </div>,
       ); break;
       case 'notice': flush(); out.push(r.item.level === 'error'
-        ? <div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.item.text}</div><ErrorAction action={r.item.action} sessionId={sessionId} /></div>
+        ? <div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.item.text}</div><div className="banner-actions"><ErrorAction action={r.item.action} sessionId={sessionId} model={r.item.model} /><LogsLink sessionId={sessionId} ts={r.item.ts} text={r.item.text} /></div></div>
         : <div key={r.key} className={`notice notice-${r.item.level}`}><Icon name={r.item.level === 'info' ? 'info' : 'alert'} size={13} /> {r.item.text}</div>); break;
       case 'result': flush(); if (!nested) out.push(<ResultFooter key={r.key} item={r.item} sessionId={sessionId} />); break;
-      case 'error': flush(); out.push(<div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.text}</div></div>); break;
+      case 'error': flush(); out.push(<div key={r.key} className="banner error"><Icon name="alert" size={15} /><div>{r.text}</div><div className="banner-actions"><LogsLink sessionId={sessionId} /></div></div>); break;
     }
   }
   flush();

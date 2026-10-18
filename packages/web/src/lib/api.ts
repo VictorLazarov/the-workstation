@@ -1,5 +1,5 @@
 import type {
-  AppConfig, FsEntry, GitCommitResult, GitRevertResult, GitStatus, ModelOption, PermissionRuleEntry, SessionSummary, SlashCommandInfo,
+  AppConfig, FsEntry, GatewayTestRequest, GatewayTestResult, GitCommitResult, GitRevertResult, GitStatus, ModelOption, PermissionRuleEntry, SessionSummary, SlashCommandInfo,
 } from '@workstation/protocol';
 import { getServerBase, getToken, isDemo } from './storage';
 
@@ -44,6 +44,8 @@ export const api = {
   renameSession: (id: string, title: string) => request<unknown>('PATCH', `/api/sessions/${encodeURIComponent(id)}`, undefined, { title }),
   deleteSession: (id: string) => request<unknown>('DELETE', `/api/sessions/${encodeURIComponent(id)}`),
   models: () => request<ModelOption[]>('GET', '/api/models'),
+  /** One max_tokens-1 request to the custom endpoint: OK or the provider's own error text (+ the model ids it lists). */
+  gatewayTest: (b: GatewayTestRequest) => request<GatewayTestResult>('POST', '/api/gateway/test', undefined, b),
   fsList: async (path?: string): Promise<FsEntry[]> => {
     const r = await request<FsEntry[] | { entries: FsEntry[] }>('GET', '/api/fs/list', { path });
     return Array.isArray(r) ? r : r?.entries ?? [];

@@ -63,6 +63,21 @@ capture server).
   path. The agent's own tools can still read files of the user (a third-party model drives a shell): isolation stops
   *automatic* credential forwarding, it does not sandbox the agent.
 
+## Using a gateway (LiteLLM/OpenRouter-style)
+A custom `ANTHROPIC_BASE_URL` means the endpoint decides which model ids exist, so nothing may silently fall back to an Anthropic alias.
+- **Session start**: `session.start` passes `model ?? defaultModel` to the SDK verbatim; with neither set nothing is passed (never `default`).
+  The alias mapping lives in `AppConfig.env` and reaches the CLI through `ConfigStore.providerEnv()` (`ANTHROPIC_DEFAULT_SONNET|OPUS|HAIKU_MODEL`,
+  `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`; the SDK typings do not list them, the bundled CLI binary does).
+- **`gateway.ts`**: `GET <base>/v1/models` (`Catalog.gatewayModels`, cached 60 s, failures 15 s, silent) and `POST /api/gateway/test` (one
+  `max_tokens: 1` message). Credentials exactly as sessions send them (`x-api-key` / `Authorization: Bearer` / the no-credential sentinel; never
+  inherited ones), 4 s / 15 s timeouts, redirects followed only within the same origin, secrets scrubbed from every returned text. A saved key is
+  only reused for the saved base URL's origin. Discovered ids come first in `/api/models` (`source: 'gateway'`).
+- **model_not_found**: the server names the rejected id (from the CLI text, which may be a subagent/small-fast model, else the session's model),
+  sends it as `error.model`; the web banner offers *Choose model* (set model + resend) and *Model settings* (Settings focused on Model).
+- **Mock**: `WORKSTATION_MOCK_GATEWAY=1` makes the mock agent send one real request to the configured base URL and fail like the CLI on 404/401;
+  `packages/e2e/support/fake-gateway.ts` is the fake gateway (unit: `server/test/gateway.test.ts`, e2e: `tests/app/gateway.spec.ts`).
+  No real third-party gateway has been exercised.
+
 ## Browser client and the server origin
 - The SPA talks only to the origin it was served from, with the `?token=` it was opened with (sessionStorage). `?server=`
   is ignored. A different server can only be set in Settings after a confirm dialog that names it and states that the token,
@@ -73,6 +88,29 @@ capture server).
   `object-src 'none'`), `X-Frame-Options: DENY`, `nosniff`. REST bodies are capped at 2 MB, WS frames at 16 MB, 5xx
   responses are generic with a request id (details in the server log).
 - `dangerouslySetInnerHTML` only ever receives Shiki output (escaped); pinned by `web/src/lib/html-sinks.test.ts`.
+
+## Diagnostics log
+Code: `packages/server/src/log.ts` (logger, ring buffer, rotating file), `redact.ts`, `sdk-log.ts` (SDK/CLI mapping), `diagnostics.ts`
+(debug info); web: `panels/LogsPanel.tsx`, `panels/logs/LogsView.tsx`, `store/logs.ts`, `lib/logs.ts`.
+- Entry = `{seq, ts, level debug|info|warn|error, source server|session|sdk|cli-stderr|permission|git|worktree|mcp|terminal|config|http, sessionId?, message, detail?}`.
+  5000 entries in memory; `info`+ also appended to `<config dir>/logs/server.log` (0600, rotated at ~5 MB, 3 copies; `platform.logFileFor`).
+- **Redaction happens when an entry is created**, so the buffer, file, REST answers and WebSocket stream are clean by construction:
+  exact secret values the server knows (access token, `apiKey`, `authToken`, secret-named env values, also URL-encoded / JSON-escaped),
+  credential shapes (`sk-ant-…`, `ghp_…`, JWT, AWS ids, private keys), `Authorization` / `x-api-key` / cookie headers, `?token=`-style
+  query values, URL userinfo, `NAME=value` with a secret-looking name, and any detail field with a secret-looking name. Prompt/file
+  content fields are replaced by their length. A session id taken from a client message must be a plain id that survives redaction.
+  The download redacts once more. Tested in `test/log.test.ts` and `tests/app/logs.spec.ts` (fake key configured, secrets echoed).
+- What is logged: server start/stop, config load/update (field names only), each WebSocket connect/disconnect (no token), session
+  start/resume/fork/close, SDK errors (`api_retry`, error assistant messages, error results: code, HTTP status, provider message,
+  `req_…` ids), CLI stderr lines, permission request/decision (tool name only), MCP status changes, git commit/revert and worktree
+  create/remove (and failures), terminal start/exit, every REST 4xx/5xx (method, path, status; no query, body or headers), uncaught
+  exceptions / unhandled rejections (then the process stops, as Node does by default).
+- API (token-gated like all `/api`): `GET /api/logs` (since, level, source, sessionId, q, limit), `GET /api/logs/download`,
+  `POST /api/logs/clear` (memory only), `GET /api/logs/debug-info`. Live stream: a socket sends `logs.subscribe`, then receives
+  batched `log.entries`; nothing is sent to sockets that did not subscribe.
+- UI: inspector **Logs** tab (red badge for errors that arrived while it was not on screen), a dialog when no session is open,
+  palette "Open logs", Settings "View logs", "View details" on error banners and error toasts (opens Logs on that session at the
+  entry nearest in time), Overview → Diagnostics → "Copy debug info".
 
 ## Terminal
 The integrated terminal is the user's own shell: it keeps the user's dev credentials (`GH_TOKEN`, `SSH_AUTH_SOCK`…) and

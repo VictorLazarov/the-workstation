@@ -393,6 +393,7 @@ export async function demoRest<T>(method: string, path: string, q: Record<string
     return ok({ rules: demoRules });
   }
   if (path === '/api/models') return ok(demoModels);
+  if (path === '/api/gateway/test') return ok({ ok: false, message: 'Not available in the demo', models: [] });
   if (path === '/api/commands') return ok(demoCommands);
   if (path === '/api/sessions' && method === 'GET') {
     return ok(b.summaries.filter((s) => !q.cwd || s.cwd === q.cwd).map((s) => ({ ...s, title: b.titles.get(s.sessionId) ?? s.title })));

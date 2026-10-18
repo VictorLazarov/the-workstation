@@ -7,6 +7,7 @@ import { contextWindowFor } from '../lib/utils';
 import { projectName, sessionProject, sessionWorktree, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
 import { useContextUsage } from '../store/context';
+import { copyDebugInfo, useLogs, useUnseenErrors } from '../store/logs';
 import { registerPanel, type PanelProps } from './registry';
 import { mcpEnabled, mcpTone } from './context/derive';
 import { pctLabel, tone, usageView } from './context/usage';
@@ -306,6 +307,20 @@ function TasksCard({ sessionId }: { sessionId: string }) {
   );
 }
 
+/* ───────── Diagnostics ───────── */
+function DiagnosticsCard({ sessionId }: { sessionId: string }) {
+  const errors = useUnseenErrors();
+  return (
+    <OvCard id="diagnostics" title="Diagnostics" icon="logs" aside={errors ? `${errors} new error${errors === 1 ? '' : 's'}` : undefined}>
+      <p className="ov-note">Something wrong? The log has the details; the debug info is safe to paste into a bug report (keys and tokens are removed).</p>
+      <div className="ov-actions">
+        <button type="button" className="btn" onClick={() => void copyDebugInfo(sessionId)}><Icon name="copy" size={13} /> Copy debug info</button>
+        <button type="button" className="btn" onClick={() => useLogs.getState().openLogs({ sessionId })}><Icon name="logs" size={13} /> View logs</button>
+      </div>
+    </OvCard>
+  );
+}
+
 function OverviewPanel({ sessionId, cwd }: PanelProps) {
   useGitSync(sessionId, cwd);
   return (
@@ -316,6 +331,7 @@ function OverviewPanel({ sessionId, cwd }: PanelProps) {
       <OutputsCard sessionId={sessionId} cwd={cwd} />
       <ChangesCard sessionId={sessionId} cwd={cwd} />
       <TasksCard sessionId={sessionId} />
+      <DiagnosticsCard sessionId={sessionId} />
     </div>
   );
 }

@@ -295,3 +295,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .access-actions { margin: 6px 0; }
 
 .chip-wt.on .chip-btn { color: var(--info); }
+.settings .hint { padding: 4px 8px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--text); overflow-wrap: anywhere; }
+.gw-test { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; } .gw-test .muted { min-width: 0; overflow-wrap: anywhere; }
+.gw-result { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; font-size: var(--fs-sm); } .gw-result:empty { display: none; }
+.gw-result.ok { color: var(--ok); } .gw-result.bad { color: var(--danger); }

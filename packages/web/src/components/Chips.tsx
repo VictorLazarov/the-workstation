@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import type { EffortLevel, PermissionMode } from '@workstation/protocol';
 import { modelLabel } from '../lib/utils';
 import { useSessions, type SessionData } from '../store/sessions';
+import { useUi } from '../store/ui';
 import { Icon } from './Icon';
 import { Dropdown, type MenuEntry } from './ui';
 
@@ -37,6 +38,30 @@ export function useModelList(session: SessionData) {
   }, [models, config?.customModels, session.runtime.model, session.conv.init?.model]);
 }
 
+/** Open Settings with the Model field focused (gateway users fix their model id there). */
+export const openModelSettings = () => useUi.getState().set({ settingsOpen: true, settingsFocus: 'model' });
+
+/**
+ * The banner action for model_not_found: pick another model from the list (gateway models first) and the failed message is sent
+ * again with it, or open Settings on the Model field. `rejected` is the id the provider refused; it is not offered again.
+ */
+export function ModelFixAction({ sessionId, rejected }: { sessionId: string; rejected?: string }) {
+  const session = useSessions((s) => s.sessions[sessionId]);
+  if (!session) return null;
+  return <ModelFixInner session={session} rejected={rejected} />;
+}
+function ModelFixInner({ session, rejected }: { session: SessionData; rejected?: string }) {
+  const list = useModelList(session).filter((m) => m.id !== rejected);
+  const fix = (id: string) => { useSessions.getState().setModel(session.id, id); useSessions.getState().retryLast(session.id); };
+  const items: MenuEntry[] = [{ heading: 'Use this model and retry' }, ...list.map((m) => ({ id: m.id, label: m.label, description: m.description, onSelect: () => fix(m.id) }))];
+  return (
+    <span className="banner-actions">
+      <Dropdown className="link-btn banner-action" title="Choose another model and send the message again" items={items} trigger={() => <><span>Choose model</span><Icon name="chevron-down" size={12} /></>} />
+      <button type="button" className="link-btn banner-action" onClick={openModelSettings}>Model settings</button>
+    </span>
+  );
+}
+
 export function currentModel(session: SessionData, defaultModel?: string) {
   return session.runtime.model ?? session.conv.init?.model ?? defaultModel;
 }
@@ -46,7 +71,8 @@ export function ModelChip({ session }: { session: SessionData }) {
   const def = useSessions((s) => s.config?.defaultModel);
   const list = useModelList(session);
   const cur = currentModel(session, def);
-  const items: MenuEntry[] = [{ heading: 'Model' }, ...list.map((m) => ({ id: m.id, label: m.label, description: m.description, checked: m.id === cur, onSelect: () => setModel(session.id, m.id) }))];
+  const items: MenuEntry[] = [{ heading: 'Model' }, ...list.map((m) => ({ id: m.id, label: m.label, description: m.description, checked: m.id === cur, onSelect: () => setModel(session.id, m.id) })),
+    'sep', { id: 'model-settings', label: 'Model settings…', description: 'Default model, custom ids, gateway aliases', icon: 'settings' as const, onSelect: openModelSettings }];
   // an alias the user picked ("sonnet") is named by the server's model list, not shown as the raw id
   const label = !cur || cur === 'default' ? modelLabel(cur) : list.find((m) => m.id === cur)?.label ?? modelLabel(cur);
   return <Dropdown title="Model" items={items} trigger={() => <><span>{label}</span><Icon name="chevron-down" size={12} /></>} />;

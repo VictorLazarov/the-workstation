@@ -104,6 +104,18 @@ The feature sets `WORKSTATION_HOME=/usr/local/share/workstation-config` and moun
 `devcontainer up --remove-existing-container`). For non-root remote users, `~/.config/workstation` is symlinked to it.
 Delete the volume (`docker volume rm workstation-config-...`) to rotate the token.
 
+## Logs
+Diagnostics (session start/stop, API errors with status and request id, the agent CLI's stderr, permission decisions, git and
+worktree failures, REST errors) are written to `$WORKSTATION_HOME/logs/server.log`, i.e.
+`/usr/local/share/workstation-config/logs/server.log` with the feature. It rotates at ~5 MB and keeps 3 older copies, and it is on the persisted volume, so it survives rebuilds:
+
+```bash
+tail -f "${WORKSTATION_HOME:-$HOME/.config/workstation}/logs/server.log"
+docker exec <container> tail -f /usr/local/share/workstation-config/logs/server.log   # from the host
+```
+`$WORKSTATION_HOME/server.log` (next to it, not inside `logs/`) is only the launcher's stdout/stderr (build progress, crashes
+before the server starts). The same entries are in the app: inspector → **Logs**. Secrets are redacted before they are written.
+
 ## Running as root: Bypass permissions
 Claude Code refuses `--dangerously-skip-permissions` when it runs as root/sudo unless it is inside a deliberate sandbox. Many
 devcontainers and plain Docker images run as root, so The Workstation only enables **Bypass permissions** when the server is
@@ -120,6 +132,12 @@ disposable, set `"containerEnv": { "IS_SANDBOX": "1" }` (or `IS_SANDBOX=1 workst
 mode off everywhere. (Verified against the real SDK as root: sessions run without `IS_SANDBOX`; with it bypass is offered.)
 
 ## Credentials / custom endpoints
+**Gateway (LiteLLM/OpenRouter-style) in a container**: set `ANTHROPIC_BASE_URL` (and the key) via `remoteEnv`/`containerEnv`, or in Settings. From
+inside a container `localhost` is the container: use `host.docker.internal` (Docker Desktop) or the gateway's service name on the compose network.
+Then in Settings choose an explicit **Model** id (the list is filled from `GET <base>/v1/models`), press **Test connection**, and map the
+Sonnet/Opus/Haiku/small-fast/subagent aliases if the gateway serves them under other ids (they land in `ANTHROPIC_DEFAULT_*_MODEL`,
+`ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL`). Full steps: README "Using a gateway".
+
 Pass `ANTHROPIC_API_KEY` and optionally `ANTHROPIC_BASE_URL` via `remoteEnv` as above (or `containerEnv`). Only
 Anthropic-API-compatible endpoints serving Claude models work with the Agent SDK. You can also set them in the UI
 settings. Note `remoteEnv` is applied to processes started by the tool, so the autostart server sees it in recent
@@ -159,7 +177,7 @@ Linux, `python3 make g++` (it prints the install command if the build fails beca
 | `Failed to download package for ghcr.io/...` | The registry/package is unreachable or private. After the first publish make the package public (see Release). Behind a TLS-inspecting proxy the proxy CA must be trusted by Docker and the CLI. |
 | Browser shows a blank/403 page through Codespaces/remote forwarding | Host header not allowed: set `WORKSTATION_ALLOWED_HOSTS` / `WORKSTATION_ALLOWED_ORIGINS` (`containerEnv`) to the forwarded host. |
 | Port published with `-p` / `appPort` is reset or empty | The server is bound to `127.0.0.1` inside the container: set the feature option `"host": "0.0.0.0"` (and publish as `127.0.0.1:7777:7777`). |
-| `workstation-url` says "URL not available yet" | The server is not running: `cat $WORKSTATION_HOME/server.log`; start it with `workstation-autostart`. |
+| `workstation-url` says "URL not available yet" | The server is not running: `cat $WORKSTATION_HOME/server.log`; start it with `workstation-autostart`. Once it runs, details are in `$WORKSTATION_HOME/logs/server.log` and the Logs tab (see [Logs](#logs)). |
 | First start of a `source=local` container is slow / "building checkout" | `npm ci && npm run build` runs once inside the mount; follow `$WORKSTATION_HOME/server.log`. `WORKSTATION_START_TIMEOUT` (seconds, default 900) bounds the wait. |
 | `EACCES` writing config in the compose setup | The container user cannot write the volume or project: set `WORKSTATION_UID`/`WORKSTATION_GID` as above. |
 | `Permission denied` on `/usr/local/share/workstation-config/server.log` at start (feature) | The devcontainer tooling renumbered the remote user to your host uid (`updateRemoteUserUID`) after the feature chowned the config volume. The launcher and `workstation-autostart` take the volume over with `sudo -n chown` automatically; without sudo run `sudo chown -R $(id -u) /usr/local/share/workstation-config` once. |

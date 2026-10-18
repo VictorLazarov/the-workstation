@@ -21,5 +21,5 @@ export async function startPrivateServer(opts: { cwd: string; env?: Record<strin
   });
   const base = `http://127.0.0.1:${port}`;
   await expect.poll(async () => fetch(`${base}/api/health`, { headers: { authorization: `Bearer ${TOKEN}` } }).then((r) => r.ok).catch(() => false), { timeout: 20_000 }).toBe(true);
-  return { base, stop: () => { child.kill(); fs.rmSync(home, { recursive: true, force: true }); } };
+  return { base, stop: () => { child.kill(); fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } };
 }

@@ -5,6 +5,8 @@ import path from 'node:path';
 import type { AppConfig } from '@workstation/protocol';
 import { buildCliEnv, hasCustomEndpoint, prepareCliHome } from './cli-env.js';
 import { configDirFor, writeFileAtomic } from './platform.js';
+import { log } from './log.js';
+import { hostOnly } from './redact.js';
 
 export const MASK = '********';
 const SECRET_KEY_RE = /key|token|secret|password|passwd|credential|auth/i;
@@ -31,14 +33,18 @@ export class ConfigStore {
     try { fs.chmodSync(dir, 0o700); } catch { /* not ours / read-only: best effort */ }
     try { if (fs.existsSync(this.file)) fs.chmodSync(this.file, 0o600); } catch { /* best effort */ }
     this.data = this.load();
+    const a = this.data.app;
+    log.info('config', 'Config loaded', { file: this.file, hasApiKey: !!a.apiKey, hasAuthToken: !!a.authToken, baseUrlHost: hostOnly(a.anthropicBaseUrl), defaultModel: a.defaultModel, customEnvNames: a.env ? Object.keys(a.env) : undefined });
   }
 
   private load(): StoredConfig {
     let parsed: Partial<StoredConfig> = {};
     try {
       parsed = JSON.parse(fs.readFileSync(this.file, 'utf8')) as Partial<StoredConfig>;
-    } catch {
+    } catch (e) {
       /* first run or corrupt: regenerate */
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') log.info('config', 'No config file yet: created a new one with a fresh access token', { file: this.file });
+      else log.warn('config', `Config file unreadable, a fresh one is created (the access token changes): ${e instanceof Error ? e.message : String(e)}`, { file: this.file });
     }
     const data: StoredConfig = {
       token: typeof parsed.token === 'string' && parsed.token.length >= 16 ? parsed.token : randomBytes(24).toString('base64url'),
@@ -115,6 +121,7 @@ export class ConfigStore {
     delete next.hasAuthToken;
     this.data.app = next;
     this.save();
+    log.info('config', 'Config updated', { fields: Object.keys(p), baseUrlHost: hostOnly(next.anthropicBaseUrl) });
     return next;
   }
 

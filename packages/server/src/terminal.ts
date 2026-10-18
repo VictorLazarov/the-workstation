@@ -16,6 +16,7 @@ import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { defaultShell, killProcessTree, shellArgs } from './platform.js';
+import { log } from './log.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, tokenMatches, type SecurityOptions } from './security.js';
 
 export type TerminalBackend = 'node-pty' | 'python-pty';
@@ -240,6 +241,7 @@ export function createTerminalService(opts: { security: SecurityOptions; token: 
   const terms = new Map<string, Term>();
   const wss = new WebSocketServer({ noServer: true, maxPayload: 1024 * 1024 });
   const refuse = (socket: Duplex, code: number, text: string) => {
+    log.warn('terminal', `Terminal connection refused: ${code} ${text}`, { status: code });
     socket.write(`HTTP/1.1 ${code} ${text}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
     socket.destroy();
   };
@@ -275,15 +277,17 @@ export function createTerminalService(opts: { security: SecurityOptions; token: 
       if (!t.alive && !terms.has(id)) return;
       t.alive = false;
       t.exitCode = code;
+      log.info('terminal', `Terminal exited${code === null ? '' : ` (code ${code})`}`, { id, code });
       broadcast(t, { type: 'exit', code });
     });
     terms.set(id, t);
+    log.info('terminal', 'Terminal started', { id, backend: sp.backend, shell: path.basename(shell), cols, rows });
     return t;
   }
 
   async function attach(ws: WebSocket, url: URL) {
     const sp = await getSpawner();
-    if ('error' in sp) { send(ws, { type: 'unavailable', message: sp.error }); ws.close(1011, 'unavailable'); return; }
+    if ('error' in sp) { log.warn('terminal', `Terminal unavailable: ${sp.error}`); send(ws, { type: 'unavailable', message: sp.error }); ws.close(1011, 'unavailable'); return; }
     const id = url.searchParams.get('id') ?? '';
     if (!ID_RE.test(id)) { send(ws, { type: 'error', message: 'invalid terminal id' }); ws.close(1008); return; }
     const cols = clampDim(Number(url.searchParams.get('cols')), 80, 500);
@@ -295,7 +299,7 @@ export function createTerminalService(opts: { security: SecurityOptions; token: 
       let dir = opts.defaultCwd;
       try { if (fs.statSync(cwd).isDirectory()) dir = cwd; } catch { /* fall back to default */ }
       try { t = await create(id, dir, cols, rows, sp); }
-      catch (e) { send(ws, { type: 'unavailable', message: `Failed to start shell: ${e instanceof Error ? e.message : String(e)}` }); ws.close(1011); return; }
+      catch (e) { log.error('terminal', `Failed to start shell: ${e instanceof Error ? e.message : String(e)}`, { error: e }); send(ws, { type: 'unavailable', message: `Failed to start shell: ${e instanceof Error ? e.message : String(e)}` }); ws.close(1011); return; }
     }
     const term = t;
     if (ws.readyState !== ws.OPEN) { armReap(term); return; }

@@ -53,8 +53,8 @@ Runs as a non-root user; on Linux with a host uid other than 1000 first `export 
    `http://127.0.0.1:7777/?token=...` (also in `~/.config/workstation/config.json`). Treat the URL like a password.
 2. **Open the URL** (it opens itself unless `--no-open`). The first run shows Settings.
 3. **Provider**: the app does not log you in. Either you are already signed in with Claude Code on this machine (leave the
-   key empty), or put an API key in Settings. For a gateway/proxy set the **Base URL** (`ANTHROPIC_BASE_URL`); only
-   Anthropic-API-compatible endpoints serving Claude models work. Environment variables work too
+   key empty), or put an API key in Settings. For a gateway/proxy set the **Base URL** (`ANTHROPIC_BASE_URL`) and an explicit
+   model id, see [Using a gateway](#using-a-gateway-litellmopenrouter-style); only Anthropic-API-compatible endpoints work. Environment variables work too
    (`ANTHROPIC_API_KEY=... npm start`).
 4. **Open a project**: *Open project* (`Ctrl/Cmd O`) and pick a folder (a git repo gives you Changes, commit and worktrees).
 5. **First session**: type a task in the composer. `@` mentions a file, `/` lists commands and skills (Enter runs one that
@@ -69,6 +69,26 @@ Runs as a non-root user; on Linux with a host uid other than 1000 first `export 
 Running as root (typical in Docker/devcontainers)? Everything works except *Bypass permissions*, which Claude Code refuses as
 root unless `IS_SANDBOX=1` is set; the mode is shown disabled with the reason. See [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md#running-as-root-bypass-permissions).
 
+## Using a gateway (LiteLLM/OpenRouter-style)
+1. Settings > **Provider**: set **Anthropic base URL** to the gateway root, i.e. what the SDK extends with `/v1/messages`
+   (LiteLLM: `http://localhost:4000`; an OpenRouter-style Anthropic endpoint: the base it documents, without `/v1/messages`).
+   Put the gateway's key in **API key** (sent as `x-api-key`) or **Auth token** (sent as `Authorization: Bearer`).
+2. **Model**: type the model id your gateway serves (verbatim: it is sent exactly as typed). With a base URL set, The Workstation
+   calls `GET <base>/v1/models` (Anthropic and OpenAI-style listings) and offers what it finds in this field's list and in the
+   composer's model menu, marked *from gateway*. If the gateway has no listing, type the id (or add it under *Custom model ids*).
+3. **Test connection** (under the key fields): sends one 1-token message to that model with the values in the form (nothing needs
+   to be saved first) and shows *Works* or the provider's own error text (`404 not_found_error: model: ...`, `401 invalid x-api-key`).
+   A saved key is only reused for the saved base URL's origin; for a new URL type the key again.
+4. **Gateway model aliases** (shown once a base URL is set): Claude Code also asks for its own names (Sonnet, Opus, Haiku, a
+   small/fast helper for titles and summaries, subagents). Map the ones your gateway serves under another id. They are saved in the
+   env the agent gets: `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`,
+   `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` (names read from the bundled Claude Code CLI). Blank = Claude Code's default.
+5. **Save**, start a session. If the gateway rejects a model, the banner names the id it rejected ("The provider does not know the
+   model "..."") and offers *Choose model* (pick one: the message is sent again with it) or *Model settings* (Settings on the Model field).
+
+Inherited credentials are never sent to the gateway (see Credential isolation): without a key, it sees `x-api-key: workstation-no-credential`.
+Only gateways that speak the Anthropic Messages API work; a gateway that only speaks the OpenAI chat API needs an Anthropic-compatible front (LiteLLM provides one).
+
 ## Configuration
 Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HOME`; the dev container feature persists it in a volume).
 
@@ -76,12 +96,26 @@ Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HO
 |---|---|
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` | credentials passed to the Agent SDK |
 | `ANTHROPIC_BASE_URL` | custom endpoint (gateway/proxy) |
-| `WORKSTATION_HOME` | config directory |
+| `WORKSTATION_HOME` | config directory (the log file is `<dir>/logs/server.log`, see below) |
+| `WORKSTATION_LOG_LEVEL` | lowest level written to the log file: `debug`, `info` (default), `warn`, `error`. The Logs tab keeps debug entries in memory regardless |
+| `WORKSTATION_LOG_STDERR=0` | stop copying errors to the terminal the server runs in |
 | `IS_SANDBOX=1` | tell Claude Code it runs in a throw-away sandbox, which enables *Bypass permissions* when running as root |
 | `WORKSTATION_ALLOW_BYPASS=0` | switch *Bypass permissions* off for everyone |
 
-These can also be set in the UI settings. **Custom endpoints:** only Anthropic-API-compatible endpoints serving Claude
-models work, because the Agent SDK speaks the Anthropic Messages API. Other providers are out of scope.
+These can also be set in the UI settings. **Custom endpoints:** only Anthropic-API-compatible endpoints work (they may serve any model ids), because the Agent SDK speaks the Anthropic Messages API. Other providers are out of scope.
+
+## Where are my logs?
+Open the **Logs** tab in the inspector (or `Ctrl/Cmd+K` → "Open logs", Settings → "View logs", or "View details" on any error): levels, sources and sessions are filterable, searchable, and you can copy or download what you see. **Copy debug info** (Overview → Diagnostics) gives a redacted block for bug reports.
+
+The server also appends everything at `info` and above to a rotating file next to `config.json` (mode 0600, ~5 MB, 3 older copies kept as `server.log.1` … `.3`; set `WORKSTATION_LOG_LEVEL=debug` to write debug lines too):
+
+| OS | Log file |
+|---|---|
+| Linux, macOS | `~/.config/workstation/logs/server.log` (or `$XDG_CONFIG_HOME/workstation/logs/`) |
+| Windows | `%APPDATA%\workstation\logs\server.log` |
+| any, with `WORKSTATION_HOME` set | `$WORKSTATION_HOME/logs/server.log` (dev containers: `/usr/local/share/workstation-config/logs/server.log`) |
+
+`tail -f` it, or `npm start` prints its path on startup. Keys, tokens, `Authorization` headers and `?token=` values are removed before anything is written; prompts and file contents are never logged. Clearing the log in the UI empties only the in-memory view, not the file.
 
 ## Security model
 The server can run shell commands and edit files as its user, so access control is the whole game.

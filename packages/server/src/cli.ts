@@ -5,6 +5,7 @@ import { DEFAULT_PORT } from '@workstation/protocol';
 import { startServer, VERSION } from './app.js';
 import { ConfigStore } from './config.js';
 import { openBrowserCommand } from './platform.js';
+import { installProcessHandlers, log } from './log.js';
 
 function usage(): never {
   console.log(`workstation ${VERSION}
@@ -52,18 +53,20 @@ function openBrowser(url: string) {
 }
 
 const args = parseArgs(process.argv.slice(2));
+installProcessHandlers();
 const config = new ConfigStore();
 const running = await startServer({ host: args.host, port: args.port, cwd: args.cwd, config });
 console.log(`The Workstation ${VERSION}${process.env.WORKSTATION_MOCK === '1' ? ' [MOCK MODE]' : ''}`);
 console.log(`  project: ${args.cwd}`);
 console.log(`  config:  ${config.file}`);
+if (log.filePath) console.log(`  logs:    ${log.filePath}  (also in the app: Logs tab)`);
 console.log(`\n  ${running.url}\n`);
 if (args.host !== '127.0.0.1' && args.host !== 'localhost' && args.host !== '::1') {
   console.log(`  Listening on ${args.host}: anyone who can reach this port AND has the token can run commands as you.`);
 }
 if (args.open && !process.env.CI && process.env.WORKSTATION_NO_OPEN !== '1') openBrowser(running.url);
-const stop = async () => { await running.close(); process.exit(0); };
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
+const stop = async (signal?: string) => { log.info('server', `Shutting down${typeof signal === 'string' ? ` (${signal})` : ''}`); await running.close(); process.exit(0); };
+process.on('SIGINT', () => void stop('SIGINT'));
+process.on('SIGTERM', () => void stop('SIGTERM'));
 // Windows has no SIGTERM: Ctrl+Break and closing the console window arrive as SIGBREAK / SIGHUP
-if (process.platform === 'win32') { process.on('SIGBREAK', stop); process.on('SIGHUP', stop); }
+if (process.platform === 'win32') { process.on('SIGBREAK', () => void stop('SIGBREAK')); process.on('SIGHUP', () => void stop('SIGHUP')); }

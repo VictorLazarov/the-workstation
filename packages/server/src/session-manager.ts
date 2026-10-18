@@ -15,6 +15,8 @@ import { buildCliEnv } from './cli-env.js';
 import { headSha, removeWorktree, worktreeRemovalBlock, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
 import { normalizeContextUsage } from './context-usage.js';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
+import { log } from './log.js';
+import { createStderrLogger, forgetMcp, logMcpStatus, logSdkMessage } from './sdk-log.js';
 
 export interface Subscriber {
   id: string;
@@ -85,6 +87,8 @@ export interface LiveSession {
   fatalInterrupted: boolean;
   /** an `error` event was already sent for the running turn: one failure is reported once (cleared by the result) */
   turnErrorSent?: boolean;
+  /** model_not_found from an api_retry waits briefly for the CLI's own message, which names the rejected model */
+  modelErrorTimer?: NodeJS.Timeout;
   model?: string;
   permissionMode: PermissionMode;
   effort?: EffortLevel;
@@ -229,13 +233,16 @@ export class SessionManager {
           sub.send({ type: 'error', message: `unknown message type: ${(msg as { type?: string }).type}` });
       }
     } catch (e) {
+      log.warn('session', `Request "${msg.type}" failed: ${e instanceof Error ? e.message : String(e)}`, { type: msg.type, ...(e instanceof CodedError ? { code: e.code } : {}) }, sessionId);
       sub.send({ type: 'error', reqId, sessionId, message: e instanceof Error ? e.message : String(e), ...(e instanceof CodedError ? { code: e.code } : {}) });
     }
   }
 
   /** Push the MCP server states (name, status, error) to every browser attached to the session. The SDK's own status carries each server's launch config (args, URLs): that stays on the server. */
   private async broadcastMcp(s: LiveSession) {
-    this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: publicMcpStatus(await s.query.mcpServerStatus()) } });
+    const servers = publicMcpStatus(await s.query.mcpServerStatus());
+    logMcpStatus(s.id, servers);
+    this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: servers } });
   }
 
   /** uuid of the last main-conversation entry before the user message `userUuid` (where a rewound conversation branches off). */
@@ -311,6 +318,7 @@ export class SessionManager {
       }
       worktree = { ...worktree, ...(root ? { root } : {}) };
       cwd = worktree.path;
+      log.info('worktree', 'Worktree ready for the session', { branch: worktree.branch, root }, id);
     } else if (msg.resume && !msg.fork) {
       // resuming a session that runs in a worktree we created: it is still a worktree session (sidebar, cleanup)
       const rec = this.worktrees.get(id);
@@ -339,6 +347,7 @@ export class SessionManager {
       query: undefined as unknown as QueryHandle,
     };
 
+    const cliStderr = createStderrLogger(id);
     const options: Options = {
       cwd,
       abortController: abort,
@@ -352,7 +361,7 @@ export class SessionManager {
       canUseTool: (toolName, input, o) => this.canUseTool(s, toolName, input, o),
       env: this.config.cliEnv(), // credential isolation for custom endpoints (cli-env.ts)
       ...claudeExecutableOption(),
-      stderr: (d) => { if (process.env.WORKSTATION_DEBUG) process.stderr.write(`[claude ${id.slice(0, 8)}] ${d}`); },
+      stderr: (d) => { cliStderr(d); if (process.env.WORKSTATION_DEBUG) process.stderr.write(`[claude ${id.slice(0, 8)}] ${d}`); },
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(msg.resume ? { resume: msg.resume } : {}),
@@ -377,6 +386,7 @@ export class SessionManager {
       clearTimeout(initTimer);
       // A session that cannot initialize (bad resume id, bad cwd, CLI missing, ...) is useless: tear it down and report.
       const why = e instanceof Error ? e.message : String(e);
+      log.error('session', `Session failed to start: ${why}`, { cwd, resume: msg.resume, fork: msg.fork, worktree: !!worktree }, id);
       this.close(s, `failed to start: ${why}`, true);
       if (msg.worktree && worktree && !msg.resume) void this.removeSessionWorktree(id, false).catch(() => {});
       if (/cannot be used with root\/sudo/i.test(why)) throw new CodedError(BYPASS_ROOT_REASON.replace('Bypass permissions is unavailable', 'Claude Code refused to start in bypass mode'), 'bypass_unavailable');
@@ -390,6 +400,9 @@ export class SessionManager {
       claude_code_version: boot.claude_code_version, worktree: worktree ?? null, mock: this.adapter.mock,
     };
     s.lastStatus = 'idle';
+    log.info('session', msg.resume && msg.fork ? 'Session forked' : msg.resume ? 'Session resumed' : 'Session started', {
+      cwd, model: model ?? 'default', permissionMode: current ?? permissionMode, effort, worktree: worktree?.branch, ...(msg.resume ? { from: msg.resume } : {}), claudeCodeVersion: boot.claude_code_version,
+    }, id);
     sub.send({ type: 'session.started', reqId: msg.reqId, sessionId: id, cwd, init: s.init });
     s.subs.add(sub);
     this.clearOrphanTimer(s);
@@ -442,7 +455,10 @@ export class SessionManager {
   close(s: LiveSession, reason: string, quiet = false) {
     if (s.closed) return;
     s.closed = true;
+    forgetMcp(s.id);
+    if (!quiet) log.info('session', `Session closed (${reason})`, { reason }, s.id);
     this.clearOrphanTimer(s);
+    if (s.modelErrorTimer) { clearTimeout(s.modelErrorTimer); s.modelErrorTimer = undefined; }
     this.cancelAllPending(s, 'Session closed');
     s.queue.end();
     try { s.query.close(); } catch { /* ignore */ }
@@ -472,6 +488,7 @@ export class SessionManager {
     if (live) this.close(live, 'worktree removed');
     const res = await removeWorktree(rec, force);
     if (res.removed) this.worktrees.markRemoved(sessionId);
+    log[res.removed ? 'info' : 'warn']('worktree', res.removed ? 'Worktree removed' : `Worktree not removed: ${res.reason ?? 'unknown reason'}`, { branch: rec.branch, force, branchDeleted: res.branchDeleted }, sessionId);
     return res;
   }
 
@@ -500,6 +517,7 @@ export class SessionManager {
   }
 
   async interrupt(s: LiveSession) {
+    log.info('session', 'Interrupt requested', undefined, s.id);
     this.cancelAllPending(s, 'Interrupted by user', true);
     await s.query.interrupt();
   }
@@ -544,6 +562,7 @@ export class SessionManager {
 
   /** One failed turn, one `error` event (the CLI reports the same failure as a synthetic message AND as retries). */
   private emitTurnError(s: LiveSession, code: string, raw?: string) {
+    if (s.modelErrorTimer) { clearTimeout(s.modelErrorTimer); s.modelErrorTimer = undefined; }
     if (s.turnErrorSent) return;
     s.turnErrorSent = true;
     // model_not_found names the id the provider actually rejected: the CLI's own text has it (it may be a subagent / small-fast
@@ -553,6 +572,7 @@ export class SessionManager {
   }
 
   private emitError(s: LiveSession, message: string, code?: string, model?: string) {
+    log.error('session', message, { shownToUser: true, ...(code ? { code } : {}), ...(model ? { model } : {}) }, s.id);
     this.broadcast(s, { type: 'error', sessionId: s.id, message, ...(code ? { code } : {}), ...(model ? { model } : {}) });
   }
 
@@ -566,6 +586,7 @@ export class SessionManager {
           error?: string; error_status?: number; attempt?: number; max_retries?: number; is_error?: boolean;
           message?: { content?: Array<{ type?: string; text?: string }> };
         };
+        logSdkMessage(s.id, raw);
         if (msg.type === 'system' && msg.subtype === 'init') {
           if (msg.model) s.model = msg.model;
           if (msg.permissionMode) s.permissionMode = msg.permissionMode;
@@ -603,9 +624,13 @@ export class SessionManager {
         if (msg.type === 'system' && msg.subtype === 'api_retry' && typeof msg.error === 'string' && FATAL_API_ERRORS.has(msg.error) && !s.fatalInterrupted) {
           // Retrying a 401/402/404-class error cannot succeed (the CLI would loop ~10 times with growing delays): stop the turn now.
           s.fatalInterrupted = true;
-          this.emitTurnError(s, msg.error);
+          // the api_retry event carries no text; the synthetic assistant message that follows names the model the provider rejected
+          // (it can be a subagent / small-fast model, not the session's), so wait a moment for it before explaining
+          if (msg.error === 'model_not_found') s.modelErrorTimer ??= setTimeout(() => { s.modelErrorTimer = undefined; if (!s.closed) this.emitTurnError(s, 'model_not_found'); }, 400);
+          else this.emitTurnError(s, msg.error);
           void s.query.interrupt().catch(() => {});
         }
+        if (msg.type === 'result' && s.modelErrorTimer) this.emitTurnError(s, 'model_not_found');
         this.emitSdk(s, msg);
         if (msg.type === 'result') {
           s.fatalInterrupted = false;
@@ -619,6 +644,7 @@ export class SessionManager {
       }
     } catch (e) {
       reason = `error: ${e instanceof Error ? e.message : String(e)}`;
+      log.error('sdk', `Agent process failed: ${e instanceof Error ? e.message : String(e)}`, { error: e }, s.id);
       if (!s.closed) this.emitError(s, reason, 'process_exited');
     }
     if (!s.closed) this.close(s, reason);
@@ -642,6 +668,7 @@ export class SessionManager {
       const onAbort = () => this.cancelPending(s, requestId, 'Cancelled');
       if (o.signal.aborted) { onAbort(); return; }
       o.signal.addEventListener('abort', onAbort, { once: true });
+      log.info('permission', `Permission requested: ${toolName}`, { tool: toolName, requestId: requestId.slice(0, 8), ...(o.agentID ? { subagent: true } : {}) }, s.id);
       this.broadcast(s, request);
       this.emitState(s);
       if (s.subs.size === 0) this.armOrphanTimer(s);
@@ -654,6 +681,9 @@ export class SessionManager {
     if (!d || (d.behavior !== 'allow' && d.behavior !== 'deny')) throw new Error('invalid decision');
     if (d.behavior === 'allow' && d.setMode !== undefined && !MODES.has(d.setMode)) throw new Error('invalid permission mode');
     s.pending.delete(requestId);
+    log.info('permission', `Permission ${d.behavior === 'allow' ? 'allowed' : 'denied'}: ${p.toolName}`, {
+      tool: p.toolName, requestId: requestId.slice(0, 8), ...(d.behavior === 'allow' && d.remember ? { remember: d.remember } : {}), ...(d.behavior === 'allow' && d.setMode ? { setMode: d.setMode } : {}),
+    }, s.id);
     if (d.behavior === 'allow') {
       const updatedInput = d.updatedInput && typeof d.updatedInput === 'object' ? d.updatedInput : p.input;
       const updates: PermissionUpdate[] = [];
@@ -682,6 +712,7 @@ export class SessionManager {
     const p = s.pending.get(requestId);
     if (!p) return;
     s.pending.delete(requestId);
+    log.info('permission', `Permission cancelled: ${p.toolName}`, { tool: p.toolName, requestId: requestId.slice(0, 8), reason: message }, s.id);
     p.resolve({ behavior: 'deny', message, interrupt, toolUseID: p.toolUseID });
     this.broadcast(s, { type: 'permission.cancelled', sessionId: s.id, requestId });
     if (!s.closed) this.emitState(s);

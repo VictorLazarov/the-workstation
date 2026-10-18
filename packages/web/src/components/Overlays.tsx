@@ -8,6 +8,7 @@ import { Dialog, IconButton, Kbd, Spinner } from './ui';
 import { usableModes } from './Chips';
 import { newSessionShortcut } from '../lib/shortcuts';
 import { usePanels } from '../panels/registry';
+import { copyDebugInfo, useLogs } from '../store/logs';
 
 /* ───────── toasts ───────── */
 function ToastView({ t, more }: { t: Toast; more?: number }) {
@@ -24,6 +25,7 @@ function ToastView({ t, more }: { t: Toast; more?: number }) {
       <Icon name={t.kind === 'error' ? 'alert' : t.kind === 'success' ? 'check' : t.kind === 'attention' ? 'shield' : 'info'} size={16} />
       <div className="toast-text"><b>{t.title}{t.count > 1 && <span className="toast-count" aria-label={`${t.count} times`}>×{t.count}</span>}{!!more && <span className="toast-more">+{more} more</span>}</b>{t.body && <span>{t.body}</span>}</div>
       {t.action && <button type="button" className="link-btn" onClick={() => { t.action!.run(); dismiss(t.id); }}>{t.action.label}</button>}
+      {(t.kind === 'error' || t.logs) && <button type="button" className="link-btn" onClick={() => { useLogs.getState().openLogs({ sessionId: t.logs?.sessionId, ts: t.since }); dismiss(t.id); }}>View details</button>}
       <IconButton icon="x" label="Dismiss" size={13} onClick={() => dismiss(t.id)} />
     </div>
   );
@@ -169,12 +171,14 @@ export function CommandPalette() {
       { id: 'inspector', label: 'Toggle inspector', icon: 'panel-right', group: 'View', run: () => U.set({ inspectorOpen: !U.inspectorOpen }) },
       { id: 'settings', label: 'Settings', icon: 'settings', group: 'Actions', run: () => U.set({ settingsOpen: true }) },
       { id: 'keys', label: 'Keyboard shortcuts', icon: 'command', group: 'Actions', run: () => U.set({ shortcutsOpen: true }) },
+      { id: 'logs', label: 'Open logs', icon: 'logs', group: 'View', keywords: 'diagnostics errors log server', run: () => useLogs.getState().openLogs() },
       ...(['light', 'dark', 'system'] as const).map((t): Cmd => ({ id: 'theme-' + t, label: `Theme: ${t[0].toUpperCase() + t.slice(1)}`, icon: t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'monitor', group: 'View', hint: theme === t ? 'current' : undefined, run: () => U.setTheme(t) })),
     ];
     if (active) {
       for (const m of usableModes(S.hello?.bypass ?? { available: true })) out.push({ id: 'mode-' + m.id, label: `Mode: ${m.label}`, icon: m.icon, group: 'Session', keywords: 'permission', hint: active.runtime.permissionMode === m.id ? 'current' : undefined, run: () => S.setMode(active.id, m.id) });
       for (const m of models) out.push({ id: 'model-' + m.id, label: `Model: ${m.label}`, icon: 'sparkles', group: 'Session', hint: active.runtime.model === m.id ? 'current' : undefined, run: () => S.setModel(active.id, m.id) });
-      for (const p of panels) out.push({ id: 'panel-' + p.id, label: p.id === 'terminal' ? 'Open terminal' : `Open ${p.title}`, icon: p.icon, group: 'View', keywords: `panel inspector tab ${p.title}`, run: () => U.openInspector(p.id) });
+      out.push({ id: 'debug-info', label: 'Copy debug info', icon: 'copy', group: 'Session', keywords: 'bug report diagnostics version', run: () => void copyDebugInfo(active.id) });
+      for (const p of panels.filter((x) => x.id !== 'logs')) out.push({ id: 'panel-' + p.id, label: p.id === 'terminal' ? 'Open terminal' : `Open ${p.title}`, icon: p.icon, group: 'View', keywords: `panel inspector tab ${p.title}`, run: () => U.openInspector(p.id) });
       out.push({ id: 'fork', label: 'Fork this session', icon: 'fork', group: 'Session', run: () => S.forkSession(active.id) });
       if (active.runtime.status === 'running') out.push({ id: 'stop', label: 'Stop the agent', icon: 'stop', group: 'Session', run: () => S.interrupt(active.id) });
     }

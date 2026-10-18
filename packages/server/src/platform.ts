@@ -169,6 +169,11 @@ export function configDirFor(env: Record<string, string | undefined> = process.e
   return p.join(xdg && p.isAbsolute(xdg) ? xdg : p.join(home, '.config'), 'workstation');
 }
 
+/** Diagnostics log: `<config dir>/logs/server.log` (rotated to server.log.1 … .3). Same place on every OS, next to config.json. */
+export function logFileFor(configDir: string, platform: NodeJS.Platform = process.platform): string {
+  return pathFor(platform).join(configDir, 'logs', 'server.log');
+}
+
 /** Directory of an ES module as a native path (`new URL(..).pathname` yields `/C:/x` on Windows). */
 export const moduleDir = (importMetaUrl: string): string => path.dirname(fileURLToPath(importMetaUrl));
 

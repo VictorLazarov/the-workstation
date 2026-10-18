@@ -6,6 +6,7 @@ import { Inspector } from './components/Inspector';
 import { CommandPalette, ConfirmHost, ConnectionBanner, ShortcutsDialog, Toasts } from './components/Overlays';
 import { ProjectPicker } from './components/ProjectPicker';
 import { SettingsDialog } from './components/SettingsDialog';
+import { LogsDialog } from './panels/LogsPanel';
 import { Sidebar } from './components/Sidebar';
 import { TopBar } from './components/TopBar';
 import { Resizer } from './components/ui';
@@ -118,6 +119,7 @@ export function App() {
       </div>
       <CommandPalette />
       <SettingsDialog />
+      <LogsDialog />
       <ProjectPicker />
       <ShortcutsDialog />
       <ConfirmHost />

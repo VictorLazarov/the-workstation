@@ -31,8 +31,9 @@ export interface UserItem {
   failed?: boolean;
   ts: number;
 }
-export type NoticeAction = 'settings' | 'retry' | 'close-idle';
-export interface NoticeItem { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; ts: number; code?: string; action?: NoticeAction }
+export type NoticeAction = 'settings' | 'retry' | 'close-idle' | 'pick-model';
+/** `model`: for model_not_found, the id the provider rejected (the banner offers a picker that excludes it) */
+export interface NoticeItem { kind: 'notice'; id: string; level: 'info' | 'warn' | 'error'; text: string; ts: number; code?: string; action?: NoticeAction; model?: string }
 /**
  * How a turn ended, from structural signals only (never from error text):
  * ok; stopped (the user interrupted: our own interrupt request, or the SDK's aborted_* terminal reason with no error reported);
@@ -50,6 +51,7 @@ export interface ResultItem {
   /** the human-readable failure for outcome 'error' (SDK diagnostics removed; those go to the console) */
   message?: string;
   action?: NoticeAction;
+  model?: string;
   costUsd: number;
   turnCostUsd: number;
   durationMs: number;

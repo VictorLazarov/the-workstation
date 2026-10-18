@@ -15,6 +15,7 @@ import { getServerBase, getToken, isDemo, ls } from '../lib/storage';
 import { probeAccess } from '../lib/access';
 import { applyTheme, useUi } from './ui';
 import { platform } from '../platform';
+import { useLogs } from './logs';
 
 export type { QueuedPrompt };
 
@@ -138,6 +139,9 @@ function makeSession(id: string, cwd: string, patch: Partial<SessionData> = {}):
   };
 }
 
+/** Sends a message that has no reply to wait for (e.g. the log subscription); false when not connected. */
+export const sendClient = (msg: ClientMessage): boolean => transport?.send(msg) ?? false;
+
 function request(msg: ClientMessage & { reqId: string }, timeoutMs = 30_000): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => { waiters.delete(msg.reqId); reject(new Error('Request timed out')); }, timeoutMs);
@@ -156,11 +160,11 @@ export const useSessions = create<Store>((set, get) => {
   };
   const toast = useUi.getState().toast;
 
-  const notifyUser = (id: string, title: string, body: string, kind: 'attention' | 'success') => {
+  const notifyUser = (id: string, title: string, body: string, kind: 'attention' | 'success', failure = false) => {
     const s = get().sessions[id];
     const isActive = get().activeId === id && !document.hidden;
     if (isActive) return;
-    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title.replace(/(?:\.{2,}|…)+$/, '').trim(), 40) + ': ' : ''}${body.replace(/(?:\.{2,}|…)+$/, '…')}`, action: { label: 'Open', run: () => get().setActive(id) }, });
+    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title.replace(/(?:\.{2,}|…)+$/, '').trim(), 40) + ': ' : ''}${body.replace(/(?:\.{2,}|…)+$/, '…')}`, action: { label: 'Open', run: () => get().setActive(id) }, ...(failure ? { logs: { sessionId: id } } : {}) });
     if (document.hidden) platform.notify({ title, body: s?.title ?? body, tag: id, onClick: () => get().setActive(id) });
   };
 
@@ -271,7 +275,7 @@ export const useSessions = create<Store>((set, get) => {
           const lid = pendingStarts.get(m.reqId)!;
           pendingStarts.delete(m.reqId);
           const live = Object.values(get().sessions).filter((x) => x.live).length;
-          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', friendlyError(m.message, m.code, live), { code: m.code, action: errorAction(m.code) }) }));
+          patch(lid, (s) => ({ starting: false, failed: true, runtime: { ...s.runtime, status: 'idle' }, queue: markAllFailed(s.queue), conv: addNotice(s.conv, 'error', friendlyError(m.message, m.code, live), { code: m.code, action: errorAction(m.code), ...(m.model ? { model: m.model } : {}) }) }));
         } else if (m.sessionId && get().sessions[m.sessionId]) {
           // a turn failure: one actionable notice (Settings for provider/model problems, Retry otherwise); the result that follows is not shown again
           patch(m.sessionId, (s) => ({ conv: applyServer(s.conv, m), failed: true, runtime: { ...s.runtime, status: s.runtime.status === 'closed' ? 'closed' : 'idle' } }));
@@ -335,7 +339,7 @@ export const useSessions = create<Store>((set, get) => {
           patch(m.sessionId, () => ({ conv, failed: isErr, unread: unread && !stopped, lastActivity: Date.now() }));
           if (!stopped) {
             const why = done?.kind === 'result' ? (done.message ?? s.conv.turnError ?? 'Error') : 'Error';
-            notifyUser(m.sessionId, isErr ? 'Session hit an error' : 'Session finished', isErr ? truncate(s.conv.turnError ?? why, 80) : 'Ready for your review', isErr ? 'attention' : 'success');
+            notifyUser(m.sessionId, isErr ? 'Session hit an error' : 'Session finished', isErr ? truncate(s.conv.turnError ?? why, 80) : 'Ready for your review', isErr ? 'attention' : 'success', isErr);
           }
           void get().refreshSummaries();
         } else if (conv !== s.conv) {
@@ -369,6 +373,7 @@ export const useSessions = create<Store>((set, get) => {
         if (m.state.status === 'idle') flushQueue(m.sessionId);
         return;
       }
+      case 'log.entries': useLogs.getState().ingest(m.entries); return;
       case 'pong': return;
     }
   };
@@ -465,6 +470,8 @@ export const useSessions = create<Store>((set, get) => {
       try {
         const config = await api.putConfig(p);
         set({ config, projects: config.recentProjects ?? get().projects });
+        // a new base URL / key / custom ids change which models exist (gateway discovery)
+        void api.models().then((models) => set({ models })).catch(() => {});
         return true;
       } catch (e) {
         toast({ kind: 'error', title: 'Could not save settings', body: (e as Error).message });

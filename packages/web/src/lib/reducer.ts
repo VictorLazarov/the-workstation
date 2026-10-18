@@ -6,6 +6,7 @@
 import type {
   AssistantItem, Block, Conversation, UsageTotals, ImageRef, Item, Lane, NoticeAction, NoticeItem, ResultOutcome, ToolResult, ToolUseBlock, Todo, UserItem,
 } from './types';
+import { modelNotFoundText, rejectedModelFromText } from '@workstation/protocol';
 import { MAIN_LANE } from './types';
 
 const emptyLane = (): Lane => ({ items: [], live: null });
@@ -193,8 +194,9 @@ function onAssistant(c: Conversation, msg: AnyMsg) {
   if (errText) {
     if (!c.turnError) {
       const raw = incoming.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join(' ').trim();
-      const text = providerErrorText(errText, raw);
-      pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level: 'error', text, ts: Date.now(), code: errText, action: errorAction(errText) });
+      const model = errText === 'model_not_found' ? rejectedModelFromText(raw) ?? (c.init?.model && c.init.model !== 'default' ? c.init.model : undefined) : undefined;
+      const text = providerErrorText(errText, raw, model);
+      pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level: 'error', text, ts: Date.now(), code: errText, action: errorAction(errText), ...(model ? { model } : {}) });
       c.turnError = text;
     }
     c.statusText = null;
@@ -300,10 +302,11 @@ export function resultOutcome(c: Pick<Conversation, 'interruptRequested' | 'turn
   return 'error';
 }
 
-const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error', 'bypass_unavailable']);
+const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'cloud_credential_error', 'bypass_unavailable']);
 /** The action that fits an error event: provider/model problems go to Settings, anything else can be retried. */
 export function errorAction(code?: string): NoticeAction {
   if (code === 'session_limit') return 'close-idle';
+  if (code === 'model_not_found') return 'pick-model';
   return code && SETTINGS_CODES.has(code) ? 'settings' : 'retry';
 }
 
@@ -314,10 +317,10 @@ export function friendlyError(message: string, code?: string, liveCount?: number
 }
 
 /** Plain words for a provider failure. The key lives in Settings here, so the CLI's "Fix external API key" wording is replaced. */
-export function providerErrorText(code: string, raw = ''): string {
+export function providerErrorText(code: string, raw = '', model?: string): string {
   if (code === 'authentication_failed') return 'The API key was rejected (401). Check the key and base URL in Settings.';
   if (code === 'billing_error') return 'The API account has a billing problem. Check the account behind your API key.';
-  if (code === 'model_not_found') return 'The provider does not know this model. Pick another model or check the base URL in Settings.';
+  if (code === 'model_not_found') return modelNotFoundText(model ?? rejectedModelFromText(raw));
   return raw.replace(/\s*[·-]\s*Fix external API key\.?/i, '').trim() || `API error: ${code}`;
 }
 
@@ -341,7 +344,7 @@ function onResult(c: Conversation, msg: AnyMsg) {
   const item = {
     kind: 'result' as const, id: nid(c, 'r'), ok: outcome === 'ok', outcome, subtype: String(msg.subtype ?? ''),
     text, errors: errors?.filter((e) => !isDiagnostic(e)), message,
-    action: outcome === 'error' ? (/\b(401|403|authentication|api key|credential|model[ _]not[ _]found)\b/i.test(message ?? '') ? 'settings' as const : 'retry' as const) : undefined,
+    action: outcome === 'error' ? (/\bmodel[ _]not[ _]found\b/i.test(message ?? '') ? 'pick-model' as const : /\b(401|403|authentication|api key|credential)\b/i.test(message ?? '') ? 'settings' as const : 'retry' as const) : undefined,
     costUsd: total, turnCostUsd: turnCost, durationMs: Number(msg.duration_ms ?? 0), turns: Number(msg.num_turns ?? 0), ts: Date.now(),
   };
   c.usage = { ...c.usage, costUsd: total || c.usage.costUsd, turns: c.usage.turns + 1, durationMs: c.usage.durationMs + item.durationMs, known: true };
@@ -480,7 +483,7 @@ export function applyServer(c: Conversation, m: { type: string; message?: unknow
   switch (m.type) {
     case 'sdk': return applySdk(c, m.message);
     // a turn failure the server already explained (401, model_not_found, ...): one actionable notice
-    case 'error': return m.sessionId ? addTurnError(c, String((m as { message?: unknown }).message ?? 'Error'), m.code) : c;
+    case 'error': return m.sessionId ? addTurnError(c, String((m as { message?: unknown }).message ?? 'Error'), m.code, (m as { model?: string }).model) : c;
     // the server cancels open prompts when a turn is interrupted (from this tab or another): the error result that follows is a stop
     case 'permission.cancelled': return c.turnError ? c : { ...c, interruptRequested: true };
     default: return c;
@@ -509,16 +512,16 @@ export function addLocalUser(prev: Conversation, id: string, text: string, image
   return c;
 }
 
-export function addNotice(prev: Conversation, level: NoticeItem['level'], text: string, extra: { code?: string; action?: NoticeAction } = {}): Conversation {
+export function addNotice(prev: Conversation, level: NoticeItem['level'], text: string, extra: { code?: string; action?: NoticeAction; model?: string } = {}): Conversation {
   const c = { ...prev };
   pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level, text, ts: Date.now(), ...extra });
   return c;
 }
 
 /** The server reported why the running turn failed (an `error` event): one actionable notice, remembered so the result does not repeat it. */
-export function addTurnError(prev: Conversation, text: string, code?: string): Conversation {
+export function addTurnError(prev: Conversation, text: string, code?: string, model?: string): Conversation {
   if (prev.turnError) return finishStreaming(prev); // the same failure arrives as a synthetic message AND an error event: one notice
-  const c = addNotice(finishStreaming(prev), 'error', text, { code, action: errorAction(code) });
+  const c = addNotice(finishStreaming(prev), 'error', text, { code, action: errorAction(code), ...(model ? { model } : {}) });
   c.turnError = text;
   return c;
 }

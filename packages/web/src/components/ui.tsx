@@ -134,15 +134,15 @@ export function Popover({ anchor, open, onClose, children, align = 'start', widt
   return createPortal(<div ref={ref} className={`popover ${className}`} style={style}>{children}</div>, document.body);
 }
 
-export function Dropdown({ trigger, items, align = 'start', disabled, title }: {
-  trigger: (open: boolean) => ReactNode; items: MenuEntry[]; align?: 'start' | 'end'; disabled?: boolean; title?: string;
+export function Dropdown({ trigger, items, align = 'start', disabled, title, className = 'chip-btn' }: {
+  trigger: (open: boolean) => ReactNode; items: MenuEntry[]; align?: 'start' | 'end'; disabled?: boolean; title?: string; className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const close = () => { setOpen(false); ref.current?.focus(); };
   return (
     <>
-      <button ref={ref} type="button" className="chip-btn" disabled={disabled} title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+      <button ref={ref} type="button" className={className} disabled={disabled} title={title} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
         {trigger(open)}
       </button>
       <Popover anchor={ref} open={open} onClose={close} align={align}>

@@ -11,6 +11,8 @@ export interface Toast {
   action?: { label: string; run: () => void }; ttl: number;
   /** groups toasts about the same thing (a session id): opening it dismisses them, and repeats of the same kind coalesce into one */
   tag?: string;
+  /** the toast reports a failure that has log entries: shows "View details" (Logs on this session; error toasts always have it) */
+  logs?: { sessionId?: string };
   /** how many identical events this toast stands for (1 = just one) */
   count: number;
   /** bumped when a repeat refreshes the toast, so its auto-dismiss timer restarts */
@@ -42,7 +44,7 @@ interface UiState {
   density: Density;
   sidebarOpen: boolean; sidebarWidth: number;
   inspectorOpen: boolean; inspectorWidth: number; inspectorTab: string; inspectorFocus?: string;
-  paletteOpen: boolean; settingsOpen: boolean; pickerOpen: boolean; shortcutsOpen: boolean;
+  paletteOpen: boolean; settingsOpen: boolean; /** open Settings with this field focused */ settingsFocus?: 'model'; pickerOpen: boolean; shortcutsOpen: boolean;
   sidebarQuery: string;
   toasts: Toast[];
   confirm: (ConfirmOpts & { resolve: (ok: boolean) => void }) | null;

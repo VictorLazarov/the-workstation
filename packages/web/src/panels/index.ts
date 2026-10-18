@@ -13,3 +13,4 @@ import './FilesPanel';
 import './TasksPanel';
 import './ContextPanel';
 import './terminal/TerminalPanel';
+import './LogsPanel';

@@ -93,7 +93,7 @@ that the sandbox could not reach (Alpine, `git-debian`, base-image `apt` steps).
 - Windows, macOS, Firefox and Safari have had no real-world use beyond CI; Electron/Tauri shell not started.
 - The Dev Container Feature is not published to GHCR and the release tag `v0.1.0` does not exist: both are the owner's action
   (`DEVCONTAINER.md` "Release"). Until then installer/Feature must name a branch or full commit SHA; the README says so. `source=npm` is unpublished.
-- A third-party Anthropic-compatible gateway has never been tested end to end (only the base-URL/credential-isolation logic and a fake 401 endpoint).
+- A third-party Anthropic-compatible gateway has never been tested end to end. Gateway support (model discovery, Test connection, alias mapping, a banner that names the rejected model and offers a picker) is built and verified only against a local fake gateway (`packages/e2e/support/fake-gateway.ts`); real LiteLLM/OpenRouter behaviour (listing shapes, small-fast/subagent models) is unverified.
 - The access token travels in the `?token=` query string of the first URL (it lands in history/referrers if pasted; the SPA strips it after load).
 - GitHub Actions in `.github/workflows` are tagged, not pinned to commit SHAs.
 - The CSP keeps `connect-src` open (`http: https: ws: wss:`) because the user can confirm another server in Settings; a stricter policy needs a server-side allow-list.

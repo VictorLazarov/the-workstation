@@ -13,6 +13,7 @@
 .banner > .icon, .banner > .spinner { margin-top: 3px; } .banner-sub { color: var(--text-2); font-size: var(--fs-sm); margin-top: 1px; overflow-wrap: anywhere; }
 .banner.error { background: var(--danger-soft); border-color: color-mix(in srgb, var(--danger) 35%, var(--border)); color: var(--text); } .banner.error > .icon { color: var(--danger); }
 .banner.error .banner-action { color: var(--text); font-weight: 600; border: 1px solid var(--border-strong); background: var(--surface); } .banner.error .banner-action:hover { background: var(--hover); }
+.banner-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; margin-left: auto; align-self: center; min-width: 0; } .banner-actions .banner-action { margin-left: 0; gap: 4px; }
 .banner-action { flex-shrink: 0; margin-left: auto; align-self: center; min-height: 24px; min-width: 24px; padding: 3px 8px; white-space: nowrap; }
 .result-line.stopped { color: var(--muted); }
 .banner.warn { background: var(--warn-soft); border-color: color-mix(in srgb, var(--warn) 35%, var(--border)); }
