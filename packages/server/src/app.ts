@@ -9,8 +9,9 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { DEFAULT_PORT, type ClientMessage, type ServerMessage, type SessionSummary } from '@workstation/protocol';
+import { DEFAULT_PORT, MODEL_ALIAS_ENV, type ClientMessage, type ServerMessage, type SessionSummary } from '@workstation/protocol';
 import { Catalog } from './catalog.js';
+import { fetchGatewayModels, gatewayTarget, resolveModelAlias, testGateway } from './gateway.js';
 import { ConfigStore } from './config.js';
 import { HttpError, listDir, readFile, requireDir, resolveUserPath, searchFiles } from './files.js';
 import { GitError, gitCommit, gitDiff, gitRevert, gitStatus } from './git.js';
@@ -251,6 +252,35 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (!b || typeof b !== 'object' || Array.isArray(b)) throw new HttpError(400, 'JSON object body required');
     return b as Record<string, unknown>;
   };
+  // ── custom endpoint ("gateway"): one tiny request that proves base URL + credential + model together ──
+  app.post('/api/gateway/test', async (c) => {
+    const b = await jsonBody(c);
+    const str = (v: unknown, max = 2000): string => { if (v == null || v === '') return ''; if (typeof v !== 'string' || v.length > max) throw new HttpError(400, 'invalid request'); return v.trim(); };
+    const stored = config.providerEnv();
+    const saved = gatewayTarget(stored);
+    const baseUrl = str(b.baseUrl) || saved?.baseUrl || '';
+    if (!/^https?:\/\//i.test(baseUrl)) throw new HttpError(400, 'Set a base URL (http:// or https://) first');
+    let sameOrigin = false;
+    try { sameOrigin = !!saved && new URL(saved.baseUrl).origin === new URL(baseUrl).origin; } catch { throw new HttpError(400, 'invalid base URL'); }
+    // a saved key is only ever sent to the origin it was saved for; a new base URL needs the key typed again
+    const target = {
+      baseUrl,
+      ...(str(b.apiKey) || (sameOrigin && saved?.apiKey) ? { apiKey: str(b.apiKey) || saved!.apiKey! } : {}),
+      ...(str(b.authToken) || (sameOrigin && saved?.authToken) ? { authToken: str(b.authToken) || saved!.authToken! } : {}),
+    };
+    const env: Record<string, string> = { ...stored };
+    if (b.aliasEnv && typeof b.aliasEnv === 'object' && !Array.isArray(b.aliasEnv)) {
+      for (const k of MODEL_ALIAS_ENV.map((x) => x.env)) { const v = (b.aliasEnv as Record<string, unknown>)[k]; if (typeof v === 'string') { if (v.trim()) env[k] = v.trim(); else delete env[k]; } }
+    }
+    const asked = str(b.model, 300) || config.app.defaultModel || '';
+    const model = resolveModelAlias(asked, env);
+    if (!model) {
+      const models = await fetchGatewayModels(target);
+      const alias = asked && asked !== 'default' ? `"${asked}" is a Claude Code alias and no gateway id is mapped to it` : 'No model is chosen';
+      return c.json({ ok: false, models, message: `${alias}. Gateways usually need an explicit model id: ${models.length ? 'pick one of the models the gateway lists' : 'type the id your gateway serves'}, or map the alias below.` });
+    }
+    return c.json(await testGateway(target, model));
+  });
   app.post('/api/git/commit', async (c) => { const b = await jsonBody(c); return c.json(await gitCommit(await requireDir(b.cwd), b.message, b.files)); });
   app.post('/api/git/revert', async (c) => { const b = await jsonBody(c); return c.json(await gitRevert(await requireDir(b.cwd), b.path)); });
 

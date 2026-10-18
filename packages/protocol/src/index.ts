@@ -38,6 +38,9 @@ export type ClientMessage =
   /** Stop one running subagent / background task by its SDK task id (`task_started.task_id`). Acks `{ stopped: true }`. */
   | { type: 'task.stop'; reqId: string; sessionId: SessionId; taskId: string }
   | { type: 'context.usage'; reqId: string; sessionId: SessionId; detail?: 'summary' | 'full' }
+  /** start / stop receiving live diagnostics log entries (`log.entries`) on this socket; nothing is sent unless subscribed */
+  | { type: 'logs.subscribe' }
+  | { type: 'logs.unsubscribe' }
   | { type: 'ping' };
 
 export type PermissionDecision =
@@ -54,7 +57,7 @@ export type ServerMessage =
   | { type: 'hello'; version: string; serverCwd: string; mock: boolean; /** can "Bypass permissions" work on this server? (not as root outside a sandbox) */ bypass?: { available: boolean; reason?: string } }
   | { type: 'ack'; reqId: string; ok: true; data?: unknown }
   /** `code` is set for API/runtime failures surfaced from the SDK (e.g. `authentication_failed`, `rate_limit`, `process_exited`). */
-  | { type: 'error'; reqId?: string; sessionId?: SessionId; message: string; code?: string }
+  | { type: 'error'; reqId?: string; sessionId?: SessionId; message: string; code?: string; /** model_not_found: the id the provider rejected */ model?: string }
   | { type: 'session.started'; reqId: string; sessionId: SessionId; cwd: string; init: unknown /* SDK system/init msg */ }
   | { type: 'session.ended'; sessionId: SessionId; reason: string }
   | { type: 'sdk'; sessionId: SessionId; seq: number; message: unknown /* SDKMessage */ }
@@ -65,6 +68,8 @@ export type ServerMessage =
       suggestions?: unknown[] }
   | { type: 'permission.cancelled'; sessionId: SessionId; requestId: string }
   | { type: 'state'; sessionId: SessionId; state: SessionRuntimeState }
+  /** new diagnostics log entries (redacted), only to sockets that sent `logs.subscribe` */
+  | { type: 'log.entries'; entries: LogEntry[] }
   | { type: 'pong' };
 
 export interface SessionRuntimeState {
@@ -105,6 +110,37 @@ export interface ContextUsage {
   apiUsage: { input_tokens: number; output_tokens: number; cache_creation_input_tokens: number; cache_read_input_tokens: number } | null;
   /** epoch ms when the server produced this snapshot */
   at: number;
+}
+
+// ───────────── Diagnostics log ─────────────
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export const LOG_LEVELS: readonly LogLevel[] = ['debug', 'info', 'warn', 'error'];
+export type LogSource = 'server' | 'session' | 'sdk' | 'cli-stderr' | 'permission' | 'git' | 'worktree' | 'mcp' | 'terminal' | 'config' | 'http';
+export const LOG_SOURCES: readonly LogSource[] = ['server', 'session', 'sdk', 'cli-stderr', 'permission', 'git', 'worktree', 'mcp', 'terminal', 'config', 'http'];
+/** One entry of the server's diagnostics log. Always redacted: never holds keys, tokens, prompts or file contents. */
+export interface LogEntry {
+  /** monotonically increasing per server run; use as the `since` cursor */
+  seq: number;
+  /** epoch ms */
+  ts: number;
+  level: LogLevel;
+  source: LogSource;
+  sessionId?: SessionId;
+  message: string;
+  detail?: Record<string, unknown>;
+}
+/** `GET /api/logs` answer. `entries` are the newest matches (oldest first). */
+export interface LogsResponse {
+  entries: LogEntry[];
+  /** highest seq the server has issued (the next poll's `since`) */
+  lastSeq: number;
+  /** matches before `limit` was applied */
+  total: number;
+  /** entries the in-memory buffer holds / may hold */
+  buffered: number;
+  capacity: number;
+  /** the log file on the server's disk (rotating, kept across restarts); undefined when it could not be opened */
+  file?: string;
 }
 
 // ───────────── REST (/api) ─────────────
@@ -161,9 +197,54 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *                                       equal one status entry literally: no globs, no pathspec magic, inside the repo)
  *  GET  /api/git/diff?path=             only serves files inside the repository (tracked or untracked-not-ignored)
  *  GET  /api/commands?cwd=     -> SlashCommandInfo[]
+ *  GET  /api/logs?since=<seq>&level=error,warn&source=sdk,git&sessionId=&q=&limit= -> LogsResponse  (diagnostics log, redacted)
+ *  GET  /api/logs/download     -> text/plain attachment (same filters; redacted)
+ *  POST /api/logs/clear        -> { ok, cleared }   (empties the in-memory buffer; the log file is kept)
+ *  GET  /api/logs/debug-info?sessionId=&model=&permissionMode= -> { text }  (version/platform/SDK/base URL host + last 50 log lines of the session)
  *  WS   /ws
  */
-export interface ModelOption { id: string; label: string; description?: string; supportsEffort?: boolean; supportedEffortLevels?: EffortLevel[] }
+export interface ModelOption {
+  id: string; label: string; description?: string; supportsEffort?: boolean; supportedEffortLevels?: EffortLevel[];
+  /** `gateway`: discovered from the configured base URL (GET /v1/models), not from the SDK or the custom list */
+  source?: 'gateway';
+}
+/** POST /api/gateway/test. Blank fields mean "the saved value" (a saved key is only reused for the saved base URL's origin). */
+export interface GatewayTestRequest { baseUrl?: string; apiKey?: string; authToken?: string; model?: string; aliasEnv?: Record<string, string> }
+export interface GatewayTestResult {
+  ok: boolean;
+  /** what was tested: the model id actually sent (aliases resolved through the alias mapping) */
+  model?: string;
+  status?: number;
+  /** "OK ..." or the provider's own error text (never contains a credential) */
+  message: string;
+  ms?: number;
+  /** model ids the gateway lists on GET /v1/models (empty when it does not list them) */
+  models: string[];
+}
+
+/** Env names Claude Code reads to map its model aliases onto gateway ids (checked in the bundled CLI). */
+export const MODEL_ALIAS_ENV = [
+  { env: 'ANTHROPIC_DEFAULT_SONNET_MODEL', label: 'Sonnet' },
+  { env: 'ANTHROPIC_DEFAULT_OPUS_MODEL', label: 'Opus' },
+  { env: 'ANTHROPIC_DEFAULT_HAIKU_MODEL', label: 'Haiku' },
+  { env: 'ANTHROPIC_SMALL_FAST_MODEL', label: 'Small / fast' },
+  { env: 'CLAUDE_CODE_SUBAGENT_MODEL', label: 'Subagents' },
+] as const;
+
+/** The model id a provider rejected, from the CLI's own wording ("There's an issue with the selected model (X)." / "API Error (X): ..."). */
+export function rejectedModelFromText(raw?: string): string | undefined {
+  if (!raw) return undefined;
+  const m = /selected model \(([^)\s]{1,200})\)/i.exec(raw) ?? /^API Error \(([^)\s]{1,200})\)/i.exec(raw.trim()) ?? /The model ([^\s]{1,200}) is not available/i.exec(raw);
+  return m?.[1];
+}
+/** Plain words for model_not_found that name the id the provider rejected. */
+export function modelNotFoundText(model?: string): string {
+  const id = model && model !== 'default' ? model : undefined;
+  return id
+    ? `The provider does not know the model "${id}". Pick a model it serves, or check the base URL in Settings.`
+    : 'The provider does not know the model this session asked for. Pick a model it serves, or check the base URL in Settings.';
+}
+
 export interface SlashCommandInfo { name: string; description: string; argumentHint?: string }
 
 export const DEFAULT_PORT = 7777;

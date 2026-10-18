@@ -1,6 +1,7 @@
 import { titleFromPrompt } from './title.js';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
+import { modelNotFoundText, rejectedModelFromText } from '@workstation/protocol';
 import type { Options, PermissionResult, PermissionUpdate, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type {
   ClientMessage, EffortLevel, ImageAttachment, PermissionDecision, PermissionMode, ServerMessage, SessionId, SessionRule, SessionRuntimeState,
@@ -534,10 +535,10 @@ export class SessionManager {
   }
 
   /** Plain words for a provider failure; the key lives in Settings here, so the CLI's "Fix external API key" is dropped. */
-  private providerError(code: string, raw?: string): string {
+  private providerError(code: string, raw?: string, model?: string): string {
     if (code === 'authentication_failed') return 'The API key was rejected (401). Check the key and base URL in Settings.';
     if (code === 'billing_error') return 'The API account has a billing problem. Check the account behind your API key.';
-    if (code === 'model_not_found') return 'The provider does not know this model. Pick another model or check the base URL in Settings.';
+    if (code === 'model_not_found') return modelNotFoundText(model);
     return (raw ?? '').replace(/\s*[·-]\s*Fix external API key\.?/i, '').trim() || `API error: ${code}`;
   }
 
@@ -545,11 +546,14 @@ export class SessionManager {
   private emitTurnError(s: LiveSession, code: string, raw?: string) {
     if (s.turnErrorSent) return;
     s.turnErrorSent = true;
-    this.emitError(s, this.providerError(code, raw), code);
+    // model_not_found names the id the provider actually rejected: the CLI's own text has it (it may be a subagent / small-fast
+    // model, not the session's), else the model this session was configured with
+    const model = code === 'model_not_found' ? rejectedModelFromText(raw) ?? (s.model && s.model !== 'default' ? s.model : undefined) : undefined;
+    this.emitError(s, this.providerError(code, raw, model), code, model);
   }
 
-  private emitError(s: LiveSession, message: string, code?: string) {
-    this.broadcast(s, { type: 'error', sessionId: s.id, message, ...(code ? { code } : {}) });
+  private emitError(s: LiveSession, message: string, code?: string, model?: string) {
+    this.broadcast(s, { type: 'error', sessionId: s.id, message, ...(code ? { code } : {}), ...(model ? { model } : {}) });
   }
 
   private async consume(s: LiveSession) {
