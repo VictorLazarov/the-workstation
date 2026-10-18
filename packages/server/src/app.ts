@@ -149,7 +149,9 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const softDir = (input: string) => requireDir(input).catch((e) => { if (e instanceof HttpError && e.status === 404) return undefined; throw e; });
   app.get('/api/sessions', async (c) => {
     const cwdQ = c.req.query('cwd');
-    const dir = cwdQ ? await requireDir(cwdQ) : undefined;
+    // canonical form: git (and so our worktree records and the worktree paths) report the real path (macOS /var -> /private/var)
+    const given = cwdQ ? await requireDir(cwdQ) : undefined;
+    const dir = given ? await fsp.realpath(given).catch(() => given) : undefined;
     const stored = await adapter.listSessions({ ...(dir ? { dir } : {}), limit: 500 }).catch(() => []);
     const out = new Map<string, SessionSummary>();
     for (const s of stored) {

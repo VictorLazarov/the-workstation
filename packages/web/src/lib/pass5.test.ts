@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { applySdk, emptyConversation, foldMessages, replayOnto } from './reducer';
 import { rankSlash, slashRunsOnEnter, type SlashOption } from './slash';
 import { truncate } from './utils';
@@ -19,6 +19,9 @@ describe('replayOnto: turn footers follow their own turn (pass 5, minor 1)', () 
     expect(kinds(naive)).toBe('UAUARR');
     expect(kinds(replayOnto(foldMessages(transcript), buffer))).toBe('UARUAR');
   });
+  // items are stamped with Date.now(): freeze it so two folds of the same transcript compare equal even across a clock tick
+  beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(1_700_000_000_000); });
+  afterEach(() => { vi.useRealTimers(); });
   it('a turn that only exists in the buffer stays in order, and no events is a no-op', () => {
     const c = replayOnto(foldMessages(transcript.slice(0, 2)), buffer);
     expect(kinds(c)).toBe('UARUAR');
