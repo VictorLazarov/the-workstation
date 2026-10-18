@@ -178,8 +178,9 @@ test.describe('layout lint: every state at sampled combinations', () => {
       await lint.check('shortcuts');
       await page.keyboard.press('Escape');
       await page.locator('.msg-user').first().hover();
-      await page.getByRole('button', { name: 'Rewind files to here' }).first().click();
-      await expect(page.getByRole('dialog', { name: 'Rewind files to this message?' })).toBeVisible();
+      await page.getByRole('button', { name: 'Rewind…' }).first().click();
+      await page.getByRole('menuitem', { name: /^Restore code(?! and)/ }).click();
+      await expect(page.getByRole('dialog', { name: 'Restore files to before this message?' })).toBeVisible();
       await lint.check('rewind dialog');
       await page.keyboard.press('Escape');
       await openSidebar(page);

@@ -31,8 +31,9 @@ test.describe('M3: rewind dialog is honest', () => {
     await page.locator('[data-perm-allow]').click();
     await expectIdle(page);
     await page.locator('.msg-user').first().hover();
-    await page.getByRole('button', { name: 'Rewind files to here' }).first().click();
-    const dlg = page.getByRole('dialog', { name: 'Rewind files to this message?' });
+    await page.getByRole('button', { name: 'Rewind…' }).first().click();
+    await page.getByRole('menuitem', { name: /^Restore code(?! and)/ }).click();
+    const dlg = page.getByRole('dialog', { name: 'Restore files to before this message?' });
     await expect(dlg).toBeVisible();
     await expect(dlg).toContainText(/not restored/i);
     await expect(dlg).toContainText(/Bash/);
