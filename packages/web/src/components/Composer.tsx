@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 import { IconButton } from './ui';
 import { useContextSummary } from '../panels/OverviewPanel';
 import { useUi } from '../store/ui';
-import { EffortChip, MODES, ModeChip, ModelChip } from './Chips';
+import { EffortChip, MODES, ModeChip, ModelChip, WorktreeChip } from './Chips';
 import { basename, dirname } from '../lib/utils';
 
 interface Popup { kind: 'mention' | 'slash'; query: string; start: number; end: number }
@@ -147,7 +147,7 @@ export function Composer({ session }: { session: SessionData }) {
 
   const { used: ctxTokens, max: ctxWin, pct: rawPct, tone: ctxTone } = useContextSummary(id);
   const ctxPct = ctxTokens ? Math.min(100, Math.max(1, Math.round(rawPct))) : 0;
-  const canSend = (text.trim().length > 0 || images.length > 0);
+  const canSend = (text.trim().length > 0 || images.length > 0) && !session.wtRemoved;
 
   return (
     <div className="composer-wrap">
@@ -198,8 +198,8 @@ export function Composer({ session }: { session: SessionData }) {
           <input ref={fileInput} type="file" accept="image/*" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
           <textarea
             ref={ta} rows={1} value={text} spellCheck
-            aria-label="Message Claude"
-            placeholder={session.perms.length ? 'Waiting for your decision above…' : running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
+            aria-label="Message Claude" disabled={session.wtRemoved}
+            placeholder={session.wtRemoved ? 'This session\'s worktree was removed. Its history is read-only.' : session.perms.length ? 'Waiting for your decision above…' : running ? 'Claude is working. Type to queue a follow-up…' : session.isDraft ? 'Describe a task, ask a question, or type / for commands' : 'Reply to Claude, or type / for commands, @ for files'}
             onChange={(e) => { setText(e.target.value); setPopup(detect(e.target.value, e.target.selectionStart)); }}
             onKeyDown={onKeyDown}
             onKeyUp={(e) => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) setPopup(detect(text, e.currentTarget.selectionStart)); }}
@@ -220,6 +220,7 @@ export function Composer({ session }: { session: SessionData }) {
           <ModeChip session={session} />
           <ModelChip session={session} />
           <EffortChip session={session} />
+          <WorktreeChip session={session} />
         </div>
         {ctxTokens ? (
           <button type="button" className={`ctx ${ctxTone}`} title={`Context: ${formatTokens(ctxTokens)} of ${formatTokens(ctxWin)} tokens (${ctxPct}%). Click for the breakdown`} aria-label={`Context ${ctxPct}% used`} onClick={() => useUi.getState().openInspector('overview')}>

@@ -15,7 +15,9 @@ export interface ImageAttachment { mediaType: string; dataBase64: string; name?:
 // ───────────── Client → Server (WebSocket) ─────────────
 export type ClientMessage =
   | { type: 'session.start'; reqId: string; cwd: string; resume?: SessionId; fork?: boolean;
-      model?: string; effort?: EffortLevel; permissionMode?: PermissionMode; worktree?: boolean }
+      model?: string; effort?: EffortLevel; permissionMode?: PermissionMode; worktree?: boolean;
+      /** with `resume` + `fork`: branch from just BEFORE this user message (its uuid), i.e. the conversation as it was when it was sent */
+      rewindBefore?: string }
   // re-subscribe to a live session after reconnect; replays buffered `sdk` events with seq > fromSeq (all buffered if omitted)
   | { type: 'session.attach'; reqId: string; sessionId: SessionId; fromSeq?: number }
   | { type: 'session.close'; sessionId: SessionId }
@@ -28,6 +30,8 @@ export type ClientMessage =
   | { type: 'rewind'; sessionId: SessionId; reqId: string; userMessageId: string; dryRun?: boolean }
   | { type: 'mcp.toggle'; sessionId: SessionId; server: string; enabled: boolean }
   | { type: 'mcp.reconnect'; sessionId: SessionId; server: string }
+  /** ask for the current MCP server states (with errors); answered by an `ack` with reqId `mcp:<sessionId>` */
+  | { type: 'mcp.status'; sessionId: SessionId }
   /** Remove the git worktree this server created for the session (acks with { removed, branchDeleted, reason? }). Refuses a dirty worktree unless `force`. */
   | { type: 'worktree.remove'; reqId: string; sessionId: SessionId; force?: boolean }
   /** Ask the live session's SDK query for its real context-window breakdown (acks with `ContextUsage`). `detail` defaults to 'full' ('summary' skips the per-category token-count calls). */
@@ -107,6 +111,8 @@ export interface ContextUsage {
 export interface SessionSummary {
   sessionId: SessionId; title: string; cwd?: string; gitBranch?: string;
   lastModified: number; createdAt?: number; live: boolean; tag?: string;
+  /** set when the session runs in a git worktree this server created: `root` is the main checkout (the project it belongs to) */
+  worktree?: { root: string; branch: string; path: string };
 }
 export interface AppConfig {
   anthropicBaseUrl?: string;
@@ -127,6 +133,8 @@ export interface FsEntry { name: string; path: string; kind: 'file' | 'dir' | 's
 export interface GitFileStatus { path: string; index: string; worktree: string }
 /** `files[].path` is relative to the repository `root` (git porcelain semantics), not to the requested cwd. */
 export interface GitStatus { branch?: string; ahead?: number; behind?: number; files: GitFileStatus[]; isRepo: boolean; root?: string }
+/** A permission rule from Claude Code settings. `local` rules (.claude/settings.local.json) are the ones "Always allow" writes and can be removed. */
+export interface PermissionRuleEntry { source: 'local' | 'project' | 'user'; behavior: 'allow' | 'deny' | 'ask'; rule: string; removable: boolean }
 export interface GitCommitResult { ok: true; commit: string; summary: string }
 export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
 
@@ -144,6 +152,7 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *  GET  /api/files/search?cwd=&q= -> string[]      (@mention fuzzy search)
  *  GET  /api/git/status?cwd=   -> GitStatus
  *  GET  /api/git/diff?cwd=&path= -> { diff: string }
+ *  GET  /api/permission-rules?cwd= -> { dir, rules: PermissionRuleEntry[] }  (dir: the main checkout whose .claude/ holds them)   DELETE /api/permission-rules {cwd, behavior, rule} -> { removed }
  *  POST /api/git/commit {cwd, message, files[]} -> GitCommitResult (stages and commits exactly `files`, each a current
  *                                       git status entry; repository hooks run, a hook failure is a 409 with its output)
  *  POST /api/git/revert {cwd, path}     -> GitRevertResult   (restore tracked file to HEAD / delete untracked; `path` must

@@ -24,9 +24,12 @@ export const isActive = (s: TaskStatus) => s === 'running' || s === 'pending';
 
 /**
  * Subagents (Task/Agent tool calls enriched with task_* system events) and background shell commands.
- * `sessionRunning=false` turns unfinished work into `stopped` rather than a spinner that never ends.
+ * A task the CLI announced (`task_started`) is running until it says otherwise (`task_notification`: completed, failed or
+ * stopped, also after a Stop or an interrupt): background subagents and commands keep running after the main turn is over,
+ * so an idle session does not mean a stopped task. Only when the session itself is gone (`live=false`) is unfinished work
+ * shown as `stopped` rather than a spinner that never ends. Work with no task events falls back to the turn state.
  */
-export function deriveTasks(conv: Conversation, sessionRunning: boolean): TaskRow[] {
+export function deriveTasks(conv: Conversation, sessionRunning: boolean, live: boolean = sessionRunning): TaskRow[] {
   const rows: TaskRow[] = [];
   const seen = new Set<string>();
   for (const b of allToolUses(conv)) {
@@ -37,7 +40,7 @@ export function deriveTasks(conv: Conversation, sessionRunning: boolean): TaskRo
     const res = conv.toolResults[b.id];
     seen.add(b.id);
     let status: TaskStatus;
-    if (info) status = info.status === 'running' && !sessionRunning ? 'stopped' : info.status;
+    if (info) status = info.status === 'running' && !live ? 'stopped' : info.status;
     else if (bg) status = res ? (res.isError ? 'failed' : 'started') : sessionRunning ? 'pending' : 'stopped';
     else status = res ? (res.isError ? 'failed' : 'completed') : sessionRunning ? 'running' : 'stopped';
     const lane = conv.lanes[b.id];
@@ -54,7 +57,7 @@ export function deriveTasks(conv: Conversation, sessionRunning: boolean): TaskRo
     if (seen.has(key) || (info.toolUseId && seen.has(info.toolUseId))) continue;
     rows.push({
       id: key, toolUseId: info.toolUseId, taskId: info.taskId, kind: info.subagentType ? 'subagent' : 'background', title: info.subagentType || 'Background task',
-      description: info.description, status: info.status === 'running' && !sessionRunning ? 'stopped' : info.status, tools: info.toolUses,
+      description: info.description, status: info.status === 'running' && !live ? 'stopped' : info.status, tools: info.toolUses,
       tokens: info.totalTokens, durationMs: info.durationMs, lastTool: info.lastToolName, summary: info.summary,
     });
   }

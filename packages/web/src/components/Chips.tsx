@@ -40,7 +40,9 @@ export function ModelChip({ session }: { session: SessionData }) {
   const list = useModelList(session);
   const cur = currentModel(session, def);
   const items: MenuEntry[] = [{ heading: 'Model' }, ...list.map((m) => ({ id: m.id, label: m.label, description: m.description, checked: m.id === cur, onSelect: () => setModel(session.id, m.id) }))];
-  return <Dropdown title="Model" items={items} trigger={() => <><span>{modelLabel(cur)}</span><Icon name="chevron-down" size={12} /></>} />;
+  // an alias the user picked ("sonnet") is named by the server's model list, not shown as the raw id
+  const label = list.find((m) => m.id === cur)?.label.replace(/\s*\(recommended\)$/i, '') ?? modelLabel(cur);
+  return <Dropdown title="Model" items={items} trigger={() => <><span>{label}</span><Icon name="chevron-down" size={12} /></>} />;
 }
 
 export function ModeChip({ session }: { session: SessionData }) {
@@ -59,4 +61,21 @@ export function EffortChip({ session }: { session: SessionData }) {
   const effort = EFFORTS.find((x) => x.id === session.runtime.effort) ?? EFFORTS[1];
   const items: MenuEntry[] = [{ heading: 'Thinking effort' }, ...EFFORTS.map((x) => ({ id: x.id, label: x.label, checked: x.id === effort.id, onSelect: () => setEffort(session.id, x.id) }))];
   return <Dropdown title="Thinking effort" items={items} trigger={() => <><Icon name="brain" size={13} /><span>{effort.label}</span><Icon name="chevron-down" size={12} /></>} />;
+}
+
+/** New-session only: run in the project folder, or in a fresh git worktree (own branch, own checkout) so parallel agents never collide. */
+export function WorktreeChip({ session }: { session: SessionData }) {
+  const set = useSessions((s) => s.setDraftWorktree);
+  if (!session.isDraft || !session.isRepo) return null;
+  const on = !!session.worktree;
+  const items: MenuEntry[] = [
+    { heading: 'Where the agent works' },
+    { id: 'folder', label: 'Project folder', description: 'Edit the checkout you have open', icon: 'folder', checked: !on, onSelect: () => set(session.id, false) },
+    { id: 'worktree', label: 'New git worktree', description: 'Own branch and checkout under .claude/worktrees. Your working tree is untouched', icon: 'layers', checked: on, onSelect: () => set(session.id, true) },
+  ];
+  return (
+    <span className={on ? 'chip-wt on' : 'chip-wt'}>
+      <Dropdown title="Where the agent works: project folder or a new git worktree" items={items} trigger={() => <><Icon name="layers" size={13} /><span>{on ? 'New worktree' : 'Project folder'}</span><Icon name="chevron-down" size={12} /></>} />
+    </span>
+  );
 }

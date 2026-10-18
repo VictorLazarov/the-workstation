@@ -7,6 +7,7 @@ import { useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { modelLabel } from '../lib/utils';
 import { EFFORTS, MODES } from './Chips';
 import { Dialog, Segmented } from './ui';
+import { RememberedRules } from './RememberedRules';
 
 export function SettingsDialog() {
   const open = useUi((s) => s.settingsOpen);
@@ -85,6 +86,7 @@ export function SettingsDialog() {
           <label className="lbl">Permission mode<select className="field" value={f.mode} onChange={set('mode')}>{MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
           <label className="lbl">Custom model ids<input className="field" value={f.custom} onChange={set('custom')} placeholder="comma separated, e.g. my-gateway/claude-sonnet" spellCheck={false} /></label>
         </section>
+        <RememberedRules active={open} />
         <section>
           <h3>Appearance</h3>
           <div className="row-between"><span>Theme</span><Segmented<Theme> value={theme} onChange={(t) => useUi.getState().setTheme(t)} options={[{ id: 'system', label: 'System', icon: 'monitor' }, { id: 'light', label: 'Light', icon: 'sun' }, { id: 'dark', label: 'Dark', icon: 'moon' }]} /></div>

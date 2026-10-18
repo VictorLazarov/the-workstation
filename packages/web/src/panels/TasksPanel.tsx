@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { formatDuration, formatTokens } from '../lib/utils';
 import { Icon } from '../components/Icon';
-import { Spinner } from '../components/ui';
+import { IconButton, Spinner } from '../components/ui';
+import { useUi } from '../store/ui';
 import { useSessions } from '../store/sessions';
 import { registerPanel, type PanelProps } from './registry';
 import { deriveTasks, isActive, sortTasks, type TaskRow, type TaskStatus } from './tasks/derive';
@@ -31,10 +32,12 @@ function StatusIcon({ s }: { s: TaskStatus }) {
   return <Icon name="stop" size={13} className="st-dim" />;
 }
 
-function Row({ t }: { t: TaskRow }) {
+function Row({ t, sessionId }: { t: TaskRow; sessionId: string }) {
   const canJump = !!t.toolUseId;
+  const canStop = isActive(t.status) && !!t.taskId;
+  const stop = () => { void useSessions.getState().stopTask(sessionId, t.taskId!).catch((e: Error) => useUi.getState().toast({ kind: 'error', title: 'Could not stop the task', body: e.message })); };
   return (
-    <li>
+    <li className="task-li">
       <button type="button" className={`task-row st-${t.status}`} disabled={!canJump} onClick={() => t.toolUseId && scrollToToolCall(t.toolUseId)}
         title={canJump ? 'Show in conversation' : undefined}>
         <span className="task-ico"><StatusIcon s={t.status} /></span>
@@ -56,6 +59,7 @@ function Row({ t }: { t: TaskRow }) {
         </span>
         {canJump && <Icon name="chevron-right" size={13} className="task-go" />}
       </button>
+      {canStop && <IconButton icon="stop" label={`Stop ${t.title}`} size={12} className="task-stop" onClick={stop} />}
     </li>
   );
 }
@@ -63,7 +67,8 @@ function Row({ t }: { t: TaskRow }) {
 function useTasks(id: string): TaskRow[] {
   const conv = useSessions((s) => s.sessions[id]?.conv);
   const running = useSessions((s) => { const r = s.sessions[id]?.runtime.status; return r === 'running' || r === 'waiting_permission'; });
-  return useMemo(() => (conv ? sortTasks(deriveTasks(conv, running)) : []), [conv, running]);
+  const live = useSessions((s) => !!s.sessions[id]?.live);
+  return useMemo(() => (conv ? sortTasks(deriveTasks(conv, running, live)) : []), [conv, running, live]);
 }
 
 function TasksPanel({ sessionId }: PanelProps) {
@@ -81,8 +86,8 @@ function TasksPanel({ sessionId }: PanelProps) {
   const rest = rows.filter((r) => !isActive(r.status));
   return (
     <div className="tasks">
-      {active.length > 0 && (<section><div className="panel-title"><span>Running</span><span className="muted">{active.length}</span></div><ul className="task-list">{active.map((t) => <Row key={t.id} t={t} />)}</ul></section>)}
-      {rest.length > 0 && (<section><div className="panel-title"><span>{active.length ? 'Finished' : 'Tasks'}</span><span className="muted">{rest.length}</span></div><ul className="task-list">{rest.map((t) => <Row key={t.id} t={t} />)}</ul></section>)}
+      {active.length > 0 && (<section><div className="panel-title"><span>Running</span><span className="muted">{active.length}</span></div><ul className="task-list">{active.map((t) => <Row key={t.id} t={t} sessionId={sessionId} />)}</ul></section>)}
+      {rest.length > 0 && (<section><div className="panel-title"><span>{active.length ? 'Finished' : 'Tasks'}</span><span className="muted">{rest.length}</span></div><ul className="task-list">{rest.map((t) => <Row key={t.id} t={t} sessionId={sessionId} />)}</ul></section>)}
     </div>
   );
 }

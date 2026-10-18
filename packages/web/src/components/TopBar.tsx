@@ -1,5 +1,5 @@
 import { formatCost } from '../lib/utils';
-import { projectName, sessionStatus, useSessions, type SessionData } from '../store/sessions';
+import { projectName, sessionProject, sessionStatus, sessionWorktree, type SessionData } from '../store/sessions';
 import { useSidebarDrawer, useUi } from '../store/ui';
 import { isMac } from '../lib/utils';
 import { Icon } from './Icon';
@@ -14,6 +14,7 @@ function useSessionBranch(session?: SessionData): string | undefined {
 
 export function TopBar({ session }: { session?: SessionData }) {
   const branch = useSessionBranch(session);
+  const wt = sessionWorktree(session);
   const sidebarOpen = useUi((s) => s.sidebarOpen);
   const drawer = useSidebarDrawer();
   const inspectorOpen = useUi((s) => s.inspectorOpen);
@@ -27,8 +28,8 @@ export function TopBar({ session }: { session?: SessionData }) {
       {session ? (
         <>
           <div className="topbar-title">
-            <span className="crumb" title={session.cwd}><Icon name="folder" size={13} /><span className="crumb-name">{projectName(session.cwd)}</span></span>
-            {branch && <span className="crumb branch" title={`Branch ${branch}`}><Icon name="branch" size={13} /><span className="crumb-name">{branch}</span></span>}
+            <span className="crumb" title={sessionProject(session)}><Icon name="folder" size={13} /><span className="crumb-name">{projectName(sessionProject(session))}</span></span>
+            {branch && <span className="crumb branch" title={wt ? `Worktree ${wt.path}\nBranch ${branch}` : `Branch ${branch}`}><Icon name={wt ? 'layers' : 'branch'} size={13} /><span className="crumb-name">{branch}</span></span>}
             <span className="topbar-session" title={session.title}>{session.title}</span>
           </div>
           <div className="topbar-spacer" />

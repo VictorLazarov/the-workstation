@@ -18,6 +18,18 @@ export function emptyConversation(): Conversation {
   };
 }
 
+/**
+ * The conversation as it was before the user message `uuid`: everything the main thread held up to (excluding) it.
+ * Usage totals and plan/todos are those of the cut thread, which the reducer cannot recompute, so they are reset rather than shown wrong.
+ */
+export function conversationBefore(c: Conversation, uuid: string): Conversation | null {
+  const lane = c.lanes[MAIN_LANE];
+  const i = lane ? lane.items.findIndex((it) => it.kind === 'user' && it.uuid === uuid) : -1;
+  if (i < 0) return null;
+  const e = emptyConversation();
+  return { ...e, lanes: { ...c.lanes, [MAIN_LANE]: { items: lane!.items.slice(0, i), live: null } }, toolResults: c.toolResults, tasks: c.tasks, init: c.init, seq: c.seq, usage: { ...e.usage, known: false } };
+}
+
 type AnyMsg = Record<string, any>;
 
 function nid(c: Conversation, p: string): string {
@@ -323,7 +335,7 @@ function onSystem(c: Conversation, msg: AnyMsg) {
       c.init = {
         model: msg.model, cwd: msg.cwd, tools: msg.tools ?? [], slashCommands: msg.slash_commands ?? [],
         skills: msg.skills ?? [], agents: msg.agents ?? [], mcpServers: (msg.mcp_servers ?? []).map((s: AnyMsg) => ({ name: s.name, status: s.status })),
-        permissionMode: msg.permissionMode, version: msg.claude_code_version, worktree: msg.worktree ?? null,
+        permissionMode: msg.permissionMode, version: msg.claude_code_version, worktree: msg.worktree ?? c.init?.worktree ?? null,
       };
       return;
     case 'api_retry':

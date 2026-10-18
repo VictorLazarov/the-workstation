@@ -76,7 +76,9 @@ class MockQuery implements QueryHandle {
     this.model = o.model ?? 'default';
     this.sessionId = o.sessionId ?? (o.resume && !o.forkSession ? o.resume : randomUUID());
     const prior = o.resume ? store.get(o.resume) : undefined;
-    const existing = store.get(this.sessionId) ?? (prior ? { ...prior, id: this.sessionId, messages: [...prior.messages] } : undefined);
+    // a fork may branch at an earlier point (resumeSessionAt): keep the messages up to and including that uuid
+    const cut = prior && o.resumeSessionAt ? prior.messages.findIndex((m) => m.uuid === o.resumeSessionAt) : -1;
+    const existing = store.get(this.sessionId) ?? (prior ? { ...prior, id: this.sessionId, messages: cut >= 0 ? prior.messages.slice(0, cut + 1) : [...prior.messages] } : undefined);
     this.session = existing ?? { id: this.sessionId, cwd: o.cwd ?? process.cwd(), title: '', created: Date.now(), modified: Date.now(), messages: [] };
     if (!this.session.cwd) this.session.cwd = o.cwd ?? process.cwd();
     this.gen = this.run();

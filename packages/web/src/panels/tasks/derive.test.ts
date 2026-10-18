@@ -29,6 +29,10 @@ describe('deriveTasks', () => {
   it('does not spin forever when the session stopped', () => {
     expect(deriveTasks(conv(), false)[0].status).toBe('stopped');
   });
+  it('a running background task stays running while the session is idle but live (the main turn ended, the subagent did not)', () => {
+    expect(deriveTasks(conv(), false, true)[0].status).toBe('running');
+    expect(deriveTasks(conv(), false, false)[0].status).toBe('stopped');
+  });
   it('sorts running first', () => {
     expect(sortTasks(deriveTasks(conv(), true)).map((r) => r.id)).toEqual(['k1', 'orphan', 'b1', 'k2']);
   });

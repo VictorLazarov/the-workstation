@@ -5,7 +5,7 @@ import type {
 } from '@workstation/protocol';
 import { api } from '../lib/api';
 import {
-  addLocalUser, addNotice, applySdk, applyServer, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, lastItem, markInterruptRequested, withKnownUsage,
+  addLocalUser, addNotice, applySdk, applyServer, conversationBefore, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, lastItem, markInterruptRequested, withKnownUsage,
 } from '../lib/reducer';
 import type { Conversation, ImageRef, PermissionRequest, UsageTotals } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
@@ -40,7 +40,14 @@ export interface SessionData {
   turnStartedAt?: number;
   failed?: boolean;
   isDraft?: boolean;
+  /** draft only: start this session in a new git worktree */
   worktree?: boolean;
+  /** the project (main checkout) this session belongs to; differs from `cwd` for worktree sessions */
+  projectRoot?: string;
+  /** draft only: whether `cwd` is inside a git repository (the worktree option needs one) */
+  isRepo?: boolean;
+  /** its worktree was removed: the history stays readable, but the session cannot continue */
+  wtRemoved?: boolean;
 }
 
 export type SessionStatus = 'running' | 'needs-input' | 'error' | 'done' | 'idle' | 'starting';
@@ -75,6 +82,9 @@ interface Store {
   saveConfig: (patch: Partial<AppConfig>) => Promise<boolean>;
   addProject: (cwd: string) => void;
   newSession: (cwd: string, opts?: { worktree?: boolean }) => string;
+  setDraftWorktree: (id: string, on: boolean) => void;
+  /** remove the git worktree of a session (asks again with force when it has uncommitted changes) */
+  removeWorktree: (id: string) => Promise<void>;
   openSession: (idOrSummary: string | SessionSummary) => void;
   setActive: (id: string | null) => void;
   send: (id: string, text: string, images?: ImageAttachment[]) => void;
@@ -93,6 +103,8 @@ interface Store {
   renameSession: (id: string, title: string) => Promise<void>;
   deleteSession: (id: string) => Promise<void>;
   forkSession: (id: string) => void;
+  /** new session continuing from the conversation as it was before the user message `userMessageId` (the original stays) */
+  rewindConversation: (id: string, userMessageId: string) => void;
   closeSession: (id: string) => void;
   rewind: (id: string, userMessageId: string, dryRun: boolean) => Promise<unknown>;
   /** Real context-window breakdown from the live SDK query (rejects when the session is not live). */
@@ -176,14 +188,14 @@ export const useSessions = create<Store>((set, get) => {
     sendNow(id, next.text, next.images, next.id);
   };
 
-  const startServerSession = (localId: string, opts: { resume?: string; fork?: boolean } = {}) => {
+  const startServerSession = (localId: string, opts: { resume?: string; fork?: boolean; rewindBefore?: string } = {}) => {
     const s = get().sessions[localId];
     if (!s) return;
     const reqId = uid('req');
     pendingStarts.set(reqId, localId);
     const cfg = get().config;
     const ok = transport?.send({
-      type: 'session.start', reqId, cwd: s.cwd, resume: opts.resume, fork: opts.fork,
+      type: 'session.start', reqId, cwd: s.cwd, resume: opts.resume, fork: opts.fork, rewindBefore: opts.rewindBefore,
       model: s.runtime.model ?? cfg?.defaultModel, effort: s.runtime.effort ?? cfg?.defaultEffort,
       permissionMode: s.runtime.permissionMode, worktree: s.worktree || undefined,
     });
@@ -218,6 +230,16 @@ export const useSessions = create<Store>((set, get) => {
     }
   };
 
+  /** Asks the server for the MCP server states; repeated (bounded) while some server is still connecting. */
+  const mcpPolls = new Map<string, number>();
+  const askMcp = (id: string) => { transport?.send({ type: 'mcp.status', sessionId: id }); };
+  const pollMcp = (id: string) => {
+    const n = (mcpPolls.get(id) ?? 0) + 1;
+    if (n > 10) { mcpPolls.delete(id); return; }
+    mcpPolls.set(id, n);
+    setTimeout(() => { if (get().sessions[id]?.live) askMcp(id); }, 1000);
+  };
+
   const onServer = (m: ServerMessage) => {
     switch (m.type) {
       case 'hello':
@@ -227,9 +249,11 @@ export const useSessions = create<Store>((set, get) => {
       case 'ack': {
         if (m.reqId.startsWith('mcp:')) {
           // server pushes the fresh MCP status list after mcp.toggle / mcp.reconnect
-          const list = (m.data as { mcpServers?: { name: string; status: string; error?: string }[] } | undefined)?.mcpServers;
+          const list = (m.data as { mcpServers?: { name: string; status: string; error?: string; tools?: string[] }[] } | undefined)?.mcpServers;
           const sid = m.reqId.slice(4);
-          if (list) patch(sid, (s) => (s.conv.init ? { conv: { ...s.conv, init: { ...s.conv.init, mcpServers: list.map((x) => ({ name: x.name, status: x.status, error: x.error })) } } } : {}));
+          if (list) patch(sid, (s) => (s.conv.init ? { conv: { ...s.conv, init: { ...s.conv.init, mcpServers: list.map((x) => ({ name: x.name, status: x.status, error: x.error, tools: x.tools })) } } } : {}));
+          // servers connect in the background after the session starts: look again until none is still connecting
+          if (list?.some((x) => x.status === 'pending')) pollMcp(sid);
           return;
         }
         const w = waiters.get(m.reqId);
@@ -263,14 +287,17 @@ export const useSessions = create<Store>((set, get) => {
         if (!base) base = makeSession(m.sessionId, m.cwd);
         const conv = applySdk(base.conv, m.init);
         const draftKey = lid && lid !== m.sessionId ? lid : null;
+        const initWt = (m.init as { worktree?: { root?: string } | null } | undefined)?.worktree;
         sessions[m.sessionId] = {
-          ...base, id: m.sessionId, cwd: m.cwd || base.cwd, conv, live: true, starting: false, failed: false, isDraft: false,
+          ...base, id: m.sessionId, cwd: m.cwd || base.cwd, conv, live: true, starting: false, failed: false, isDraft: false, projectRoot: initWt?.root ?? base.projectRoot,
           runtime: { ...base.runtime, status: base.runtime.status === 'starting' ? 'idle' : base.runtime.status, model: base.runtime.model ?? (m.init as { model?: string })?.model },
         };
         set({ sessions, activeId: get().activeId === lid ? m.sessionId : get().activeId });
         if (draftKey) { const d = ls.get('ws.draft.' + draftKey); if (d) { ls.set('ws.draft.' + m.sessionId, d); ls.del('ws.draft.' + draftKey); } }
         flushQueue(m.sessionId);
         void get().refreshSummaries();
+        mcpPolls.delete(m.sessionId);
+        askMcp(m.sessionId);
         return;
       }
       case 'session.ended':
@@ -288,6 +315,8 @@ export const useSessions = create<Store>((set, get) => {
         if (histBuffer.has(m.sessionId)) { histBuffer.get(m.sessionId)!.push(m.message); return; }
         const msg = m.message as { type?: string; subtype?: string; is_error?: boolean; result?: string; errors?: string[] };
         const conv = applySdk(s.conv, m.message);
+        // the CLI's own init lists MCP servers without their errors: ask for the full state
+        if (msg?.type === 'system' && msg.subtype === 'init' && ((m.message as { mcp_servers?: unknown[] }).mcp_servers?.length ?? 0) > 0) { mcpPolls.delete(m.sessionId); askMcp(m.sessionId); }
         if (msg?.type === 'result') {
           // The outcome comes from structural signals decided in the reducer (see resultOutcome), never from error text.
           const done = lastItem(conv);
@@ -346,7 +375,7 @@ export const useSessions = create<Store>((set, get) => {
     }
     for (const sum of get().summaries) {
       if (sum.live && !get().sessions[sum.sessionId]) {
-        set({ sessions: { ...get().sessions, [sum.sessionId]: makeSession(sum.sessionId, sum.cwd ?? '', { title: sum.title, branch: sum.gitBranch, lastActivity: sum.lastModified, live: true, runtime: { status: 'idle', permissionMode: 'default' } }) } });
+        set({ sessions: { ...get().sessions, [sum.sessionId]: makeSession(sum.sessionId, sum.cwd ?? '', { title: sum.title, branch: sum.worktree?.branch ?? sum.gitBranch, projectRoot: sum.worktree?.root, lastActivity: sum.lastModified, live: true, runtime: { status: 'idle', permissionMode: 'default' } }) } });
         void reattach(sum.sessionId, true);
       }
     }
@@ -459,8 +488,38 @@ export const useSessions = create<Store>((set, get) => {
         sessions: { ...get().sessions, [id]: makeSession(id, cwd, { isDraft: true, runtime: freshRuntime(cfg), worktree: opts?.worktree }) },
         activeId: id,
       });
-      api.gitStatus(cwd).then((g) => g?.branch && patch(id, () => ({ branch: g.branch })), () => {});
+      patch(id, () => ({ projectRoot: cwd }));
+      api.gitStatus(cwd).then((g) => patch(id, () => ({ isRepo: !!g?.isRepo, ...(g?.branch ? { branch: g.branch } : {}), ...(!g?.isRepo ? { worktree: false } : {}) })), () => {});
       return id;
+    },
+    setDraftWorktree(id, on) { patch(id, (s) => (s.isDraft ? { worktree: on } : {})); },
+
+    async removeWorktree(id) {
+      const s = get().sessions[id];
+      if (!s) return;
+      const { ask, toast } = useUi.getState();
+      const wt = sessionWorktree(s);
+      const call = (force: boolean) => request({ type: 'worktree.remove', reqId: uid('req'), sessionId: id, force }, 90_000) as Promise<{ removed: boolean; branchDeleted: boolean; reason?: string }>;
+      const ok = await ask({
+        title: 'Remove this worktree?',
+        body: `The checkout${wt ? ` at ${wt.path}` : ''} is deleted and the session ends. Its history stays readable. The branch ${wt?.branch ?? ''} is deleted only if it has no commits of its own.`,
+        confirmLabel: 'Remove worktree', danger: true,
+      });
+      if (!ok) return;
+      try {
+        let r = await call(false);
+        if (!r.removed && /uncommitted/.test(r.reason ?? '')) {
+          const force = await ask({
+            title: 'Discard uncommitted changes?', body: 'This worktree has changes that are not committed. Removing it deletes them for good, together with its branch.',
+            confirmLabel: 'Discard changes and remove', danger: true,
+          });
+          if (!force) return;
+          r = await call(true);
+        }
+        if (!r.removed) { toast({ kind: 'error', title: 'Worktree not removed', body: r.reason }); return; }
+        patch(id, (x) => ({ wtRemoved: true, live: false, perms: [], queue: [], runtime: { ...x.runtime, status: 'idle' } }));
+        toast({ kind: 'success', title: 'Worktree removed', body: r.branchDeleted ? 'Its branch was deleted too.' : `Branch ${wt?.branch ?? ''} was kept: it has commits.` });
+      } catch (e) { toast({ kind: 'error', title: 'Could not remove the worktree', body: (e as Error).message }); }
     },
 
     openSession(arg) {
@@ -470,7 +529,7 @@ export const useSessions = create<Store>((set, get) => {
       if (existing) { get().setActive(id); return; }
       const cfg = get().config;
       set({
-        sessions: { ...get().sessions, [id]: makeSession(id, sum.cwd ?? '', { title: sum.title, branch: sum.gitBranch, lastActivity: sum.lastModified, live: false, runtime: freshRuntime(cfg) }) },
+        sessions: { ...get().sessions, [id]: makeSession(id, sum.cwd ?? '', { title: sum.title, branch: sum.worktree?.branch ?? sum.gitBranch, projectRoot: sum.worktree?.root, lastActivity: sum.lastModified, live: false, runtime: freshRuntime(cfg) }) },
         activeId: id,
       });
       void loadHistory(id, sum.cwd ?? '', false);
@@ -572,7 +631,11 @@ export const useSessions = create<Store>((set, get) => {
       const { [id]: _drop, ...rest } = get().sessions;
       set({ sessions: rest, summaries: get().summaries.filter((x) => x.sessionId !== id), activeId: get().activeId === id ? null : get().activeId });
       if (s?.isDraft) return;
-      try { await api.deleteSession(id); } catch (e) {
+      try {
+        const r = (await api.deleteSession(id)) as { worktree?: { removed: boolean; branchDeleted: boolean; reason?: string } } | undefined;
+        if (r?.worktree && !r.worktree.removed) toast({ kind: 'info', title: 'Session deleted, worktree kept', body: r.worktree.reason ?? 'The worktree could not be removed.' });
+        else if (r?.worktree && !r.worktree.branchDeleted) toast({ kind: 'info', title: 'Worktree removed', body: 'Its branch was kept because it has commits.' });
+      } catch (e) {
         toast({ kind: 'error', title: 'Delete failed', body: (e as Error).message });
         void get().refreshSummaries();
       }
@@ -587,6 +650,18 @@ export const useSessions = create<Store>((set, get) => {
       set({ sessions: { ...get().sessions, [lid]: makeSession(lid, cwd, { title, isDraft: true, conv: get().sessions[id]?.conv ?? emptyConversation(), runtime: freshRuntime(get().config) }) }, activeId: lid });
       startServerSession(lid, { resume: id, fork: true });
       if (!get().sessions[id]) void loadHistory(lid, cwd, false);
+    },
+
+    rewindConversation(id, userMessageId) {
+      const src = get().sessions[id] ?? get().summaries.find((x) => x.sessionId === id);
+      if (!src) return;
+      const lid = uid('new_');
+      const sess = get().sessions[id];
+      // the thread you see is the source thread cut before that message (a fork's own transcript does not exist until its first message)
+      const cut = sess ? conversationBefore(sess.conv, userMessageId) : null;
+      if (!cut) { toast({ kind: 'error', title: 'Cannot rewind', body: 'That message is not in this thread.' }); return; }
+      set({ sessions: { ...get().sessions, [lid]: makeSession(lid, src.cwd ?? '', { title: `Rewound: ${src.title}`, isDraft: true, conv: cut, projectRoot: sess?.projectRoot, runtime: freshRuntime(get().config) }) }, activeId: lid });
+      startServerSession(lid, { resume: id, fork: true, rewindBefore: userMessageId });
     },
 
     closeSession(id) {
@@ -627,5 +702,14 @@ export const useSessions = create<Store>((set, get) => {
 /* selectors / helpers */
 export const useActiveSession = () => useSessions((s) => (s.activeId ? s.sessions[s.activeId] : undefined));
 export const projectName = (cwd: string) => basename(cwd) || cwd;
+/** The git worktree a session runs in, from its init event or (for a session opened from history) from where it lives. */
+export function sessionWorktree(s: Pick<SessionData, 'cwd' | 'branch' | 'projectRoot' | 'conv'> | undefined): { path: string; branch?: string; root?: string } | undefined {
+  if (!s) return undefined;
+  const wt = s.conv.init?.worktree;
+  if (wt) return wt;
+  return s.projectRoot && s.projectRoot !== s.cwd ? { path: s.cwd, branch: s.branch, root: s.projectRoot } : undefined;
+}
+/** The project a session is filed under: the main checkout, also for worktree sessions. */
+export const sessionProject = (s: Pick<SessionData, 'cwd' | 'projectRoot' | 'conv'>) => s.projectRoot || s.conv.init?.worktree?.root || s.cwd;
 
 declare global { interface Window { __ws?: { simulateDrop?: (ms?: number) => void; toast?: (t: { kind: 'info' | 'success' | 'error' | 'attention'; title: string; body?: string; tag?: string; ttl?: number }) => string } } }

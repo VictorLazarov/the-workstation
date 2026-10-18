@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { fuzzy, isMac, modelLabel, relativeTime } from '../lib/utils';
 import { clearRemoteServer, getRemoteServer } from '../lib/storage';
-import { projectName, useActiveSession, useSessions } from '../store/sessions';
+import { projectName, sessionProject, useActiveSession, useSessions } from '../store/sessions';
 import { useSidebarDrawer, useUi, visibleToasts, type Toast } from '../store/ui';
 import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
@@ -159,8 +159,8 @@ export function CommandPalette() {
       if (active.runtime.status === 'running') out.push({ id: 'stop', label: 'Stop the agent', icon: 'stop', group: 'Session', run: () => S.interrupt(active.id) });
     }
     const seen = new Set<string>();
-    for (const s of Object.values(sessions)) { seen.add(s.id); out.push({ id: 's-' + s.id, label: s.title, icon: 'chat', group: 'Sessions', hint: projectName(s.cwd), keywords: s.branch, run: () => S.setActive(s.id) }); }
-    for (const s of [...summaries].sort((a, b) => b.lastModified - a.lastModified).slice(0, 40)) if (!seen.has(s.sessionId)) out.push({ id: 's-' + s.sessionId, label: s.title, icon: 'chat', group: 'Sessions', hint: `${s.cwd ? projectName(s.cwd) : ''} · ${relativeTime(s.lastModified)}`, run: () => S.openSession(s) });
+    for (const s of Object.values(sessions)) { seen.add(s.id); out.push({ id: 's-' + s.id, label: s.title, icon: 'chat', group: 'Sessions', hint: projectName(sessionProject(s)), keywords: s.branch, run: () => S.setActive(s.id) }); }
+    for (const s of [...summaries].sort((a, b) => b.lastModified - a.lastModified).slice(0, 40)) if (!seen.has(s.sessionId)) out.push({ id: 's-' + s.sessionId, label: s.title, icon: 'chat', group: 'Sessions', hint: `${s.worktree?.root ?? s.cwd ? projectName(s.worktree?.root ?? s.cwd!) : ''} · ${relativeTime(s.lastModified)}`, run: () => S.openSession(s) });
     for (const p of projects) out.push({ id: 'p-' + p, label: `New session in ${projectName(p)}`, icon: 'folder', group: 'Projects', hint: p, run: () => S.newSession(p) });
     return out;
   }, [open, sessions, summaries, projects, models, active, theme]);

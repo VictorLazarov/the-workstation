@@ -1,5 +1,5 @@
 import type {
-  AppConfig, FsEntry, GitCommitResult, GitRevertResult, GitStatus, ModelOption, SessionSummary, SlashCommandInfo,
+  AppConfig, FsEntry, GitCommitResult, GitRevertResult, GitStatus, ModelOption, PermissionRuleEntry, SessionSummary, SlashCommandInfo,
 } from '@workstation/protocol';
 import { getServerBase, getToken, isDemo } from './storage';
 
@@ -55,5 +55,7 @@ export const api = {
   /** Commits exactly `files` (the changed paths shown in the Changes panel); repository hooks run. */
   gitCommit: (cwd: string, message: string, files: string[]) => request<GitCommitResult>('POST', '/api/git/commit', undefined, { cwd, message, files }),
   gitRevert: (cwd: string, path: string) => request<GitRevertResult>('POST', '/api/git/revert', undefined, { cwd, path }),
+  permissionRules: (cwd: string) => request<{ rules: PermissionRuleEntry[] }>('GET', '/api/permission-rules', { cwd }),
+  removePermissionRule: (cwd: string, behavior: string, rule: string) => request<{ removed: boolean }>('DELETE', '/api/permission-rules', undefined, { cwd, behavior, rule }),
   commands: (cwd?: string) => request<SlashCommandInfo[]>('GET', '/api/commands', { cwd }),
 };

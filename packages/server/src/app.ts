@@ -14,6 +14,7 @@ import { Catalog } from './catalog.js';
 import { ConfigStore } from './config.js';
 import { HttpError, listDir, readFile, requireDir, resolveUserPath, searchFiles } from './files.js';
 import { GitError, gitCommit, gitDiff, gitRevert, gitStatus } from './git.js';
+import { listPermissionRules, removeLocalPermissionRule, settingsProjectDir } from './permission-rules.js';
 import { createAdapter, type SdkAdapter } from './sdk.js';
 import { extractBearer, isHostAllowed, isOriginAllowed, securityOptionsFromEnv, tokenMatches, type SecurityOptions } from './security.js';
 import { isInside, moduleDir, samePath } from './platform.js';
@@ -134,6 +135,11 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   });
 
   // ── sessions ──
+  /** The worktree a session runs in (only ones this server created, from its registry), so the UI files it under its project. */
+  const worktreeOf = (id: string): Pick<SessionSummary, 'worktree'> => {
+    const rec = sessions.worktrees.get(id);
+    return rec ? { worktree: { root: rec.root, branch: rec.branch, path: rec.dir } } : {};
+  };
   app.get('/api/sessions', async (c) => {
     const cwdQ = c.req.query('cwd');
     const dir = cwdQ ? await requireDir(cwdQ) : undefined;
@@ -143,11 +149,12 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       out.set(s.sessionId, {
         sessionId: s.sessionId, title: sessionTitle(s), cwd: s.cwd, gitBranch: s.gitBranch,
         lastModified: s.lastModified, createdAt: (s as { createdAt?: number }).createdAt, live: sessions.isLive(s.sessionId), tag: s.tag,
+        ...worktreeOf(s.sessionId),
       });
     }
     for (const l of sessions.list()) {
       if (out.has(l.id) || (dir && !samePath(l.cwd, dir))) continue;
-      out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true });
+      out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true, ...worktreeOf(l.id) });
     }
     return c.json([...out.values()].sort((a, b) => b.lastModified - a.lastModified));
   });
@@ -221,6 +228,10 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   };
   app.post('/api/git/commit', async (c) => { const b = await jsonBody(c); return c.json(await gitCommit(await requireDir(b.cwd), b.message, b.files)); });
   app.post('/api/git/revert', async (c) => { const b = await jsonBody(c); return c.json(await gitRevert(await requireDir(b.cwd), b.path)); });
+
+  // ── remembered permission rules ("Always allow" writes to <project>/.claude/settings.local.json) ──
+  app.get('/api/permission-rules', async (c) => { const dir = await settingsProjectDir(await cwdParam(c)); return c.json({ dir, rules: listPermissionRules(dir) }); });
+  app.delete('/api/permission-rules', async (c) => { const b = await jsonBody(c); return c.json(removeLocalPermissionRule(await settingsProjectDir(await requireDir(b.cwd)), b.behavior, b.rule)); });
 
   app.all('/api/*', (c) => c.json({ error: 'not found' }, 404));
   app.get('/ws', (c) => c.text('WebSocket endpoint', 426));

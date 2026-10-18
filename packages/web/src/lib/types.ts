@@ -96,11 +96,11 @@ export interface InitInfo {
   slashCommands: string[];
   skills: string[];
   agents: string[];
-  mcpServers: { name: string; status: string; error?: string }[];
+  mcpServers: { name: string; status: string; error?: string; tools?: string[] }[];
   permissionMode?: PermissionMode;
   version?: string;
   /** set when the server created a git worktree for this session */
-  worktree?: { path: string; branch: string } | null;
+  worktree?: { path: string; branch: string; root?: string } | null;
 }
 
 export interface UsageTotals {

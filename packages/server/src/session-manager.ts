@@ -59,7 +59,7 @@ interface BufferedEvent { seq: number; message: unknown; bytes: number }
 export interface LiveSession {
   id: SessionId;
   cwd: string;
-  worktree?: { path: string; branch: string };
+  worktree?: { path: string; branch: string; root?: string };
   query: QueryHandle;
   queue: PromptQueue;
   subs: Set<Subscriber>;
@@ -189,13 +189,17 @@ export class SessionManager {
         case 'mcp.toggle': {
           const s = this.must(msg.sessionId);
           await s.query.toggleMcpServer(String(msg.server), !!msg.enabled);
-          this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: await s.query.mcpServerStatus() } });
+          await this.broadcastMcp(s);
           return;
         }
         case 'mcp.reconnect': {
           const s = this.must(msg.sessionId);
           await s.query.reconnectMcpServer(String(msg.server));
-          this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: await s.query.mcpServerStatus() } });
+          await this.broadcastMcp(s);
+          return;
+        }
+        case 'mcp.status': {
+          await this.broadcastMcp(this.must(msg.sessionId));
           return;
         }
         case 'task.stop': {
@@ -221,6 +225,21 @@ export class SessionManager {
     } catch (e) {
       sub.send({ type: 'error', reqId, sessionId, message: e instanceof Error ? e.message : String(e), ...(e instanceof CodedError ? { code: e.code } : {}) });
     }
+  }
+
+  /** Push the MCP server states (name, status, error) to every browser attached to the session. The SDK's own status carries each server's launch config (args, URLs): that stays on the server. */
+  private async broadcastMcp(s: LiveSession) {
+    this.broadcast(s, { type: 'ack', reqId: `mcp:${s.id}`, ok: true, data: { mcpServers: publicMcpStatus(await s.query.mcpServerStatus()) } });
+  }
+
+  /** uuid of the last main-conversation entry before the user message `userUuid` (where a rewound conversation branches off). */
+  private async messageBefore(sessionId: string, userUuid: string, cwd: string): Promise<string> {
+    const all = (await this.adapter.getSessionMessages(sessionId, { dir: cwd })) as Array<{ uuid?: string; parent_tool_use_id?: string | null }>;
+    const main = all.filter((m) => typeof m.uuid === 'string' && !m.parent_tool_use_id);
+    const i = main.findIndex((m) => m.uuid === userUuid);
+    if (i < 0) throw new Error('That message is not in the saved conversation (yet). Try again in a moment.');
+    if (i === 0) throw new Error('This is the first message: there is nothing before it to rewind to. Start a new session instead.');
+    return main[i - 1]!.uuid!;
   }
 
   /** Real context-window breakdown from the SDK query (`getContextUsage`), reduced to the wire shape. */
@@ -281,7 +300,17 @@ export class SessionManager {
         const name = id.slice(0, 8).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'session';
         this.worktrees.add({ sessionId: id, root, dir: path.join(root, '.claude', 'worktrees', name), branch: worktree.branch, baseSha, createdAt: Date.now() });
       }
+      worktree = { ...worktree, ...(root ? { root } : {}) };
       cwd = worktree.path;
+    } else if (msg.resume && !msg.fork) {
+      // resuming a session that runs in a worktree we created: it is still a worktree session (sidebar, cleanup)
+      const rec = this.worktrees.get(id);
+      if (rec) worktree = { path: cwd, branch: rec.branch, root: rec.root };
+    }
+    let resumeAt: string | undefined;
+    if (msg.rewindBefore !== undefined) {
+      if (!msg.resume || !msg.fork || typeof msg.rewindBefore !== 'string') throw new Error('rewindBefore needs resume and fork');
+      resumeAt = await this.messageBefore(msg.resume, msg.rewindBefore, cwd);
     }
     const permissionMode = msg.permissionMode ?? app.defaultPermissionMode ?? 'default';
     const model = msg.model ?? app.defaultModel;
@@ -311,7 +340,7 @@ export class SessionManager {
       ...(model ? { model } : {}),
       ...(effort ? { effort } : {}),
       ...(msg.resume ? { resume: msg.resume } : {}),
-      ...(msg.resume && msg.fork ? { forkSession: true, sessionId: id } : {}),
+      ...(msg.resume && msg.fork ? { forkSession: true, sessionId: id, ...(resumeAt ? { resumeSessionAt: resumeAt } : {}) } : {}),
       ...(!msg.resume ? { sessionId: id } : {}),
     };
     s.query = this.adapter.query({ prompt: queue, options });
@@ -499,8 +528,10 @@ export class SessionManager {
         if (msg.type === 'system' && msg.subtype === 'init') {
           if (msg.model) s.model = msg.model;
           if (msg.permissionMode) s.permissionMode = msg.permissionMode;
-          s.init = { ...(msg as object), synthetic: false };
-          this.emitSdk(s, msg);
+          // the CLI's own init knows nothing about the worktree we created: carry it over so the UI keeps showing it
+          const real = s.worktree ? { ...(msg as object), worktree: s.worktree } : msg;
+          s.init = { ...(real as object), synthetic: false };
+          this.emitSdk(s, real);
           this.emitState(s, true);
           continue;
         }
@@ -627,6 +658,18 @@ function rememberable(suggestions: PermissionUpdate[] | undefined): PermissionUp
   const all = suggestions ?? [];
   const hasRule = all.some((u) => u.type === 'addRules');
   return all.filter((u) => u.type === 'addRules' || u.type === 'addDirectories' || (u.type === 'setMode' && !hasRule));
+}
+
+/** The part of the SDK's MCP server status that browsers get: no launch config (command lines, URLs and env can hold secrets). */
+export function publicMcpStatus(list: unknown): Array<{ name: string; status: string; error?: string; scope?: string; tools?: string[]; serverInfo?: { name: string; version?: string } }> {
+  if (!Array.isArray(list)) return [];
+  return list.filter((x): x is Record<string, any> => !!x && typeof x.name === 'string').map((x) => ({
+    name: x.name, status: String(x.status ?? 'unknown'),
+    ...(typeof x.error === 'string' && x.error ? { error: x.error.slice(0, 400) } : {}),
+    ...(typeof x.scope === 'string' ? { scope: x.scope } : {}),
+    ...(Array.isArray(x.tools) ? { tools: x.tools.map((t: { name?: unknown }) => String(t?.name)).slice(0, 200) } : {}),
+    ...(x.serverInfo && typeof x.serverInfo.name === 'string' ? { serverInfo: { name: x.serverInfo.name, ...(typeof x.serverInfo.version === 'string' ? { version: x.serverInfo.version } : {}) } } : {}),
+  }));
 }
 
 /** Cut gigantic tool_result text before it is buffered/forwarded (the model has already seen the full output). */

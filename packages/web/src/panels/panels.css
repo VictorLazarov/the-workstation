@@ -144,7 +144,7 @@
 .ovc-ico { color: var(--muted); flex: none; }
 .ovc-title { font-weight: 600; font-size: var(--fs-base); flex: none; }
 .ovc-aside { margin-left: auto; min-width: 0; font-size: var(--fs-sm); color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: inline-flex; align-items: center; }
-.ovc-body { padding: 2px 10px 8px; display: grid; gap: 2px; }
+.ovc-body { padding: 2px 10px 8px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; }
 .ov-note { margin: 2px 0; font-size: var(--fs-sm); color: var(--muted); display: flex; align-items: center; gap: 6px; }
 .ov-row { display: flex; align-items: center; gap: 8px; min-height: 24px; color: var(--text-2); font-size: var(--fs-base); } .ov-row > .icon { color: var(--muted); }
 .ov-val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); } .ov-sub { color: var(--muted); font-family: var(--font-mono); font-size: var(--fs-sm); margin-left: 4px; }
@@ -189,3 +189,30 @@ button.cx-line { border-radius: 4px; } button.cx-line:hover { color: var(--text)
 /* Inspector tab strip: when narrow, only the active tab keeps its label (icon + badge for the rest) */
 .inspector { container-type: inline-size; }
 @container (max-width: 520px) { .itab:not(.on) { font-size: 0; gap: 0; padding: 0 6px; position: relative; } .itab:not(.on) .itab-badge { position: absolute; top: 3px; right: 3px; width: 7px; min-width: 0; height: 7px; padding: 0; font-size: 0; border-radius: 50%; background: var(--accent-solid); } .itab[data-panel='plan']:not(.on) .itab-badge, .itab[data-panel='tasks']:not(.on) .itab-badge { background: var(--ai-fill); } }
+
+.ov-actions { display: flex; gap: 6px; margin-top: 6px; }
+.mcp-main .mcp-state { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; overflow-wrap: anywhere; }
+
+.rules-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rule-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
+.rule-kind { flex: none; font-size: var(--fs-sm); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--hover); color: var(--text-2); }
+.rule-kind.rk-allow { color: var(--ok); } .rule-kind.rk-deny { color: var(--danger); }
+.rule-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-sm); }
+.rule-src { flex: none; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rule-lock { flex: none; }
+.task-li { position: relative; } .task-stop { position: absolute; right: 6px; bottom: 6px; }
+
+/* line comments on diffs */
+.diff-no { position: relative; }
+.diff-cbtn { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: none; place-items: center; border-radius: 4px; background: var(--accent-solid, var(--accent)); color: #fff; padding: 0; }
+.diff-row:hover .diff-cbtn, .diff-cbtn:focus-visible { display: grid; }
+.diff-cmt-row > td { padding: 0; background: var(--surface); }
+.cmt-stack { display: grid; gap: 6px; padding: 6px 8px 8px 44px; white-space: normal; max-width: 100%; }
+.cmt-below { padding: 6px 8px 8px; border-top: 1px solid var(--border); }
+.cmt { position: relative; display: grid; gap: 4px; padding: 6px 28px 6px 8px; border: 1px solid var(--border); border-left: 3px solid var(--info); border-radius: var(--radius); background: var(--surface-2); font-family: var(--font-sans, inherit); font-size: var(--fs-base); color: var(--text); }
+.cmt-where { font-size: var(--fs-xs); color: var(--muted); }
+.cmt-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmt-del { position: absolute; top: 4px; right: 4px; }
+.cmt-edit { padding-right: 8px; } .cmt-edit textarea { width: 100%; resize: vertical; font: inherit; }
+.cmt-actions { display: flex; gap: 6px; }
+.review-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--surface-2); flex: none; font-size: var(--fs-base); }

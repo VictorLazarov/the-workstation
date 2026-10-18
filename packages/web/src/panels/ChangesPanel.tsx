@@ -5,6 +5,8 @@ import { basename, dirname } from '../lib/utils';
 import { Icon } from '../components/Icon';
 import { IconButton, Segmented, Spinner, Stats } from '../components/ui';
 import { useSessions } from '../store/sessions';
+import { useComments, useReview } from '../store/review';
+import { formatReview } from '../lib/review';
 import { useUi } from '../store/ui';
 import { registerPanel, type PanelProps } from './registry';
 import { matchesFocus, totals, type ChangeFile, type ChangeStatus } from './changes/derive';
@@ -18,8 +20,8 @@ export const SPLIT_MIN_WIDTH = 620;
 const LETTER: Record<ChangeStatus, string> = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', untracked: 'U' };
 const TITLE: Record<ChangeStatus, string> = { modified: 'Modified', added: 'Added', deleted: 'Deleted', renamed: 'Renamed', untracked: 'Untracked (new file)' };
 
-function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert }: {
-  f: ChangeFile; open: boolean; onToggle: () => void; mode: Mode; focused: boolean; canRevert: boolean; onRevert: () => void;
+function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert, sessionId }: {
+  sessionId: string; f: ChangeFile; open: boolean; onToggle: () => void; mode: Mode; focused: boolean; canRevert: boolean; onRevert: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
@@ -52,7 +54,7 @@ function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert }: {
       {open && (
         <div className="cfile-body">
           {f.binary ? <div className="cdiff-empty">Binary file</div>
-            : hasBody ? <FileDiff lines={f.lines!} path={f.path} mode={mode} />
+            : hasBody ? <FileDiff lines={f.lines!} path={f.path} mode={mode} review={{ sessionId, rel: f.rel, path: f.path }} />
             : f.added === undefined ? <div className="cdiff-empty"><Spinner size={12} /> Loading diff…</div>
             : <div className="cdiff-empty">{f.status === 'deleted' ? 'File deleted.' : 'No textual changes.'}</div>}
         </div>
@@ -89,6 +91,27 @@ function CommitBox({ sessionId, cwd, files }: { sessionId: string; cwd: string; 
         <span className="muted small" title="Only the files listed here are staged and committed. Your repository's git hooks run.">Stages and commits these {count} file{count === 1 ? '' : 's'}</span>
         <button type="button" className="btn primary" disabled={!can} onClick={submit}>{busy ? <Spinner size={12} /> : <Icon name="check" size={13} />} Commit</button>
       </div>
+    </div>
+  );
+}
+
+/** Comments left on diff lines: one button sends them all to the agent as a single prompt. */
+function ReviewBar({ sessionId }: { sessionId: string }) {
+  const comments = useComments(sessionId);
+  const busy = useSessions((s) => s.sessions[sessionId]?.runtime.status !== 'idle');
+  if (!comments.length) return null;
+  const send = () => {
+    useSessions.getState().send(sessionId, formatReview(comments));
+    useReview.getState().clear(sessionId);
+    useUi.getState().toast({ kind: 'success', title: 'Review sent', body: `${comments.length} comment${comments.length === 1 ? '' : 's'} went to the agent as one message.` });
+  };
+  return (
+    <div className="review-bar" role="group" aria-label="Review comments">
+      <span><b>{comments.length}</b> comment{comments.length === 1 ? '' : 's'}</span>
+      <span className="muted small">{busy ? 'Queued until the agent is idle' : 'Sent as one message'}</span>
+      <span className="cfile-spacer" />
+      <button type="button" className="btn ghost" onClick={() => useReview.getState().clear(sessionId)}>Discard</button>
+      <button type="button" className="btn primary" onClick={send}><Icon name="arrow-up" size={13} /> Send to agent</button>
     </div>
   );
 }
@@ -167,11 +190,12 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
             <span>{git.isRepo ? 'The working tree is clean. Files Claude edits will appear here for review.' : 'Files Claude edits will appear here for review.'}</span>
           </div>
         ) : files.map((f, i) => (
-          <FileCard key={f.path} f={f} mode={shownMode} open={isOpen(f, i)} focused={f.path === focusPath}
+          <FileCard key={f.path} sessionId={sessionId} f={f} mode={shownMode} open={isOpen(f, i)} focused={f.path === focusPath}
             onToggle={() => setToggled({ ...toggled, [f.path]: !isOpen(f, i) })}
             canRevert={f.source === 'git' && git.isRepo && f.status !== 'renamed'} onRevert={() => void revert(f)} />
         ))}
       </div>
+      <ReviewBar sessionId={sessionId} />
       {git.isRepo && commitFiles.length > 0 && <CommitBox sessionId={sessionId} cwd={cwd} files={commitFiles} />}
     </div>
   );

@@ -4,7 +4,7 @@ import { ls } from '../lib/storage';
 import { Icon, type IconName } from '../components/Icon';
 import { IconButton, MiddleEllipsis, Spinner, Stats } from '../components/ui';
 import { contextWindowFor } from '../lib/utils';
-import { projectName, useSessions } from '../store/sessions';
+import { projectName, sessionProject, sessionWorktree, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
 import { useContextUsage } from '../store/context';
 import { registerPanel, type PanelProps } from './registry';
@@ -44,12 +44,16 @@ function EnvironmentCard({ sessionId }: { sessionId: string }) {
   const s = useSessions((x) => x.sessions[sessionId]);
   const branch = useBranch(sessionId);
   if (!s) return null;
-  const wt = s.conv.init?.worktree;
+  const wt = sessionWorktree(s);
   return (
     <OvCard id="env" title="Environment" icon="folder">
-      <Row icon="folder" label="Project" title={s.cwd}>{projectName(s.cwd)}</Row>
+      <Row icon="folder" label="Project" title={sessionProject(s)}>{projectName(sessionProject(s))}</Row>
       {branch && <Row icon="branch" label="Branch">{branch}</Row>}
-      <Row icon="layers" label="Checkout" title={wt?.path}>{wt ? <>Worktree <span className="ov-sub">{wt.branch}</span></> : 'Project folder'}</Row>
+      <Row icon="layers" label="Checkout" title={wt?.path ?? s.cwd}>{wt ? (s.wtRemoved ? 'Worktree (removed)' : 'Worktree') : 'Project folder'}</Row>
+      {wt && <Row icon="folder-open" label="Path" title={wt.path}><MiddleEllipsis text={wt.path} tail={22} /></Row>}
+      {wt && !s.wtRemoved && !s.isDraft && (
+        <div className="ov-actions"><button type="button" className="btn" onClick={() => void useSessions.getState().removeWorktree(sessionId)}><Icon name="trash" size={13} /> Remove worktree…</button></div>
+      )}
     </OvCard>
   );
 }
@@ -154,11 +158,12 @@ const pctText = (p: number) => (p < 0.1 ? '<0.1%' : p < 10 ? p.toFixed(1) + '%' 
 function ConnectorsCard({ sessionId }: { sessionId: string }) {
   const servers = useSessions((s) => s.sessions[sessionId]?.conv.init?.mcpServers) ?? [];
   const live = useSessions((s) => !!s.sessions[sessionId]?.live);
+  const started = useSessions((s) => !!s.sessions[sessionId]?.conv.init);
   const { mcpToggle } = useSessions.getState();
   const ok = servers.filter((m) => m.status === 'connected').length;
   return (
     <OvCard id="connectors" title="Connectors" icon="plug" aside={servers.length ? `${ok}/${servers.length}` : undefined}>
-      {servers.length === 0 ? <p className="ov-note">No MCP servers configured for this session.</p> : (
+      {servers.length === 0 ? <p className="ov-note">{started ? 'No MCP servers configured for this session.' : 'Connectors connect when the session starts, with your first message.'}</p> : (
         <ul className="ov-list">
           {servers.map((m) => {
             const on = mcpEnabled(m.status);
@@ -166,7 +171,7 @@ function ConnectorsCard({ sessionId }: { sessionId: string }) {
               <li key={m.name} className={`ov-item mcp-tone-${mcpTone(m.status)}`}>
                 <span className="mcp-dot" aria-hidden="true" />
                 <span className="ov-item-main" title={m.error}>{m.name}</span>
-                <span className="ov-item-meta">{m.status === 'pending' ? <><Spinner size={10} /> connecting</> : m.error ? 'error' : m.status}</span>
+                <span className="ov-item-meta">{m.status === 'pending' ? <><Spinner size={10} /> connecting</> : m.status}</span>
                 <button type="button" role="switch" aria-checked={on} aria-label={`${on ? 'Disable' : 'Enable'} ${m.name}`} disabled={!live} className={`switch sm${on ? ' on' : ''}`} onClick={() => mcpToggle(sessionId, m.name, !on)}><i /></button>
               </li>
             );
@@ -271,7 +276,8 @@ function TaskLine({ t, since, now, onStop }: { t: TaskRow; since: number; now: n
 function TasksCard({ sessionId }: { sessionId: string }) {
   const conv = useSessions((s) => s.sessions[sessionId]?.conv);
   const running = useSessions((s) => { const r = s.sessions[sessionId]?.runtime.status; return r === 'running' || r === 'waiting_permission'; });
-  const rows = useMemo(() => (conv ? sortTasks(deriveTasks(conv, running)) : []), [conv, running]);
+  const live = useSessions((s) => !!s.sessions[sessionId]?.live);
+  const rows = useMemo(() => (conv ? sortTasks(deriveTasks(conv, running, live)) : []), [conv, running, live]);
   const active = rows.filter((r) => isActive(r.status));
   const done = rows.filter((r) => !isActive(r.status));
   const seen = useRef(new Map<string, number>());

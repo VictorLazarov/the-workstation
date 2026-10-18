@@ -369,6 +369,11 @@ export const demoBackend = new DemoBackend();
 export function createDemoTransport(): Transport & { simulateDrop(ms?: number): void } { return demoBackend; }
 
 /* ───────── REST ───────── */
+let demoRules: Array<{ source: 'local' | 'project' | 'user'; behavior: 'allow' | 'deny' | 'ask'; rule: string; removable: boolean }> = [
+  { source: 'local', behavior: 'allow', rule: 'Bash(npm test)', removable: true },
+  { source: 'project', behavior: 'deny', rule: 'Read(./.env)', removable: false },
+];
+
 export async function demoRest<T>(method: string, path: string, q: Record<string, string | undefined>, body: unknown): Promise<T> {
   await sleep(60);
   const b = demoBackend;
@@ -382,6 +387,10 @@ export async function demoRest<T>(method: string, path: string, q: Record<string
       b.config = { ...b.config, ...p };
     }
     return ok(b.config);
+  }
+  if (path === '/api/permission-rules') {
+    if (method === 'DELETE') { const r = body as { behavior: string; rule: string }; demoRules = demoRules.filter((x) => !(x.behavior === r.behavior && x.rule === r.rule && x.removable)); return ok({ removed: true }); }
+    return ok({ rules: demoRules });
   }
   if (path === '/api/models') return ok(demoModels);
   if (path === '/api/commands') return ok(demoCommands);

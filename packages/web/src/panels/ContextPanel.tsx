@@ -70,17 +70,18 @@ function Usage({ sessionId }: { sessionId: string }) {
 function Mcp({ sessionId }: { sessionId: string }) {
   const servers = useSessions((s) => s.sessions[sessionId]?.conv.init?.mcpServers) ?? [];
   const live = useSessions((s) => !!s.sessions[sessionId]?.live);
+  const started = useSessions((s) => !!s.sessions[sessionId]?.conv.init);
   const { mcpToggle, mcpReconnect } = useSessions.getState();
   return (
     <Section title="MCP servers" aside={<span className="muted">{servers.length || ''}</span>}>
-      {servers.length === 0 ? <p className="muted small">No MCP servers configured for this session.</p> : (
+      {servers.length === 0 ? <p className="muted small">{started ? 'No MCP servers configured for this session.' : 'MCP servers connect when the session starts, with your first message.'}</p> : (
         <ul className="mcp-list">
           {servers.map((m) => {
             const on = mcpEnabled(m.status);
             return (
               <li key={m.name} className={`mcp tone-${mcpTone(m.status)}`}>
                 <span className="mcp-dot" aria-hidden="true" />
-                <span className="mcp-main"><b>{m.name}</b><span className="muted small">{m.status === 'pending' ? <><Spinner size={10} /> connecting…</> : m.error ? m.error : m.status}</span></span>
+                <span className="mcp-main"><b>{m.name}</b><span className="muted small mcp-state" title={m.error}>{m.status === 'pending' ? <><Spinner size={10} /> connecting…</> : m.error ? `${m.status}: ${m.error}` : m.status === 'connected' && m.tools ? `connected · ${m.tools.length} tool${m.tools.length === 1 ? '' : 's'}` : m.status}</span></span>
                 {on && live && <IconButton icon="refresh" label={`Reconnect ${m.name}`} size={14} onClick={() => mcpReconnect(sessionId, m.name)} />}
                 <button type="button" role="switch" aria-checked={on} aria-label={`${on ? 'Disable' : 'Enable'} ${m.name}`} disabled={!live} className={`switch${on ? ' on' : ''}`} onClick={() => mcpToggle(sessionId, m.name, !on)}><i /></button>
               </li>

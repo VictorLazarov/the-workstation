@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '@workstation/protocol';
 import { fuzzy, relativeTime } from '../lib/utils';
-import { projectName, sessionStatus, useSessions, type SessionStatus } from '../store/sessions';
+import { projectName, sessionProject, sessionStatus, sessionWorktree, useSessions, type SessionStatus } from '../store/sessions';
 import { sidebarIsDrawer, useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { Icon } from './Icon';
 import { newSessionShortcut } from '../lib/shortcuts';
@@ -9,6 +9,8 @@ import { IconButton, MenuList, Popover, Segmented, Spinner, useOutsideClose, typ
 import { createPortal } from 'react-dom';
 
 interface Entry {
+  /** the project (main checkout) it is filed under; `cwd` is where it runs (a worktree directory for worktree sessions) */
+  project: string; worktree?: string;
   id: string; title: string; cwd: string; branch?: string; time: number; status: SessionStatus; summary?: SessionSummary; live: boolean;
 }
 
@@ -17,10 +19,11 @@ function useEntries(): Entry[] {
   const summaries = useSessions((s) => s.summaries);
   return useMemo(() => {
     const m = new Map<string, Entry>();
-    for (const s of summaries) m.set(s.sessionId, { id: s.sessionId, title: s.title, cwd: s.cwd ?? '', branch: s.gitBranch, time: s.lastModified, status: 'idle', summary: s, live: s.live });
+    for (const s of summaries) m.set(s.sessionId, { id: s.sessionId, title: s.title, cwd: s.cwd ?? '', project: s.worktree?.root ?? s.cwd ?? '', worktree: s.worktree?.branch, branch: s.worktree?.branch ?? s.gitBranch, time: s.lastModified, status: 'idle', summary: s, live: s.live });
     for (const s of Object.values(sessions)) {
       const prev = m.get(s.id);
-      m.set(s.id, { id: s.id, title: s.title || prev?.title || 'Session', cwd: s.cwd || prev?.cwd || '', branch: s.branch ?? prev?.branch, time: Math.max(s.lastActivity, prev?.time ?? 0), status: sessionStatus(s), summary: prev?.summary, live: s.live });
+      const wt = sessionWorktree(s);
+      m.set(s.id, { id: s.id, title: s.title || prev?.title || 'Session', cwd: s.cwd || prev?.cwd || '', project: s.projectRoot || s.conv.init?.worktree?.root || prev?.project || s.cwd || '', worktree: wt ? wt.branch ?? prev?.worktree ?? 'worktree' : prev?.worktree, branch: wt?.branch ?? s.branch ?? prev?.branch, time: Math.max(s.lastActivity, prev?.time ?? 0), status: sessionStatus(s), summary: prev?.summary, live: s.live });
     }
     return [...m.values()];
   }, [sessions, summaries]);
@@ -43,7 +46,8 @@ function RowStatus({ e }: { e: Entry }) {
     case 'needs-input': return <span className="sess-st sess-attn" title="Needs your input"><i className="st-dot st-attn" /><span className="attn-text">Needs input</span></span>;
     case 'error': return <span className="sess-st" title="Error"><i className="st-dot st-error" /><span className="sr-only">Error</span></span>;
     case 'done': return <span className="sess-st" title="Finished, unread"><i className="st-dot st-done" /><span className="sr-only">Finished, unread</span></span>;
-    default: return e.branch && !/^(main|master)$/.test(e.branch) ? <span className="sess-st sess-branch"><Icon name="branch" size={12} /></span> : null;
+    default: return e.worktree ? <span className="sess-st sess-branch" title={`Worktree ${e.worktree}`}><Icon name="layers" size={12} /></span>
+      : e.branch && !/^(main|master)$/.test(e.branch) ? <span className="sess-st sess-branch" title={`Branch ${e.branch}`}><Icon name="branch" size={12} /></span> : null;
   }
 }
 
@@ -87,9 +91,9 @@ export function Sidebar() {
     const by = new Map<string, Entry[]>();
     for (const p of projects) by.set(p, []);
     for (const e of entries) {
-      if (!e.cwd) continue;
-      if (query) { const hay = `${e.title} ${e.branch ?? ''} ${projectName(e.cwd)}`; if (fuzzy(query, hay) < 0) continue; }
-      (by.get(e.cwd) ?? by.set(e.cwd, []).get(e.cwd)!).push(e);
+      if (!e.project) continue;
+      if (query) { const hay = `${e.title} ${e.branch ?? ''} ${projectName(e.project)}${e.worktree ? ' worktree' : ''}`; if (fuzzy(query, hay) < 0) continue; }
+      (by.get(e.project) ?? by.set(e.project, []).get(e.project)!).push(e);
     }
     const list = [...by.entries()].map(([cwd, es]) => ({ cwd, es: es.sort((a, b) => b.time - a.time) }));
     return list.filter((g) => !query || g.es.length).sort((a, b) => (b.es[0]?.time ?? 0) - (a.es[0]?.time ?? 0));
@@ -107,7 +111,7 @@ export function Sidebar() {
     }
   };
   const del = async (e: Entry) => {
-    const ok = await useUi.getState().ask({ title: 'Delete this session?', body: `“${e.title}” and its history will be permanently removed.`, confirmLabel: 'Delete', danger: true });
+    const ok = await useUi.getState().ask({ title: 'Delete this session?', body: `“${e.title}” and its history will be permanently removed.${e.worktree ? ` Its worktree (${e.worktree}) is removed too if it has no uncommitted changes; otherwise it is kept.` : ''}`, confirmLabel: 'Delete', danger: true });
     if (ok) void deleteSession(e.id);
   };
   const menuItems = (e: Entry): MenuEntry[] => [
@@ -120,7 +124,8 @@ export function Sidebar() {
 
   const first = projects[0];
   const startNew = () => {
-    const cwd = (activeId && useSessions.getState().sessions[activeId]?.cwd) || first;
+    const cur = activeId ? useSessions.getState().sessions[activeId] : undefined;
+    const cwd = (cur && sessionProject(cur)) || first;
     dismissDrawer();
     if (cwd) newSession(cwd); else useUi.getState().set({ pickerOpen: true });
   };
@@ -170,7 +175,7 @@ export function Sidebar() {
                         onClick={() => open(e)} onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, e }); }}
                         onKeyDown={(ev) => { if (ev.key === 'ContextMenu' || (ev.key === 'F10' && ev.shiftKey)) { ev.preventDefault(); const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left + 24, y: r.bottom, e }); } }}
                         aria-current={activeId === e.id ? 'true' : undefined}
-                        title={[e.title, [e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
+                        title={[e.title, [e.worktree ? `worktree ${e.worktree}` : e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
                       >
                         <span className="sess-title">{e.title}</span>
                         <RowStatus e={e} />
