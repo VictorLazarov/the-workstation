@@ -40,6 +40,11 @@ const LogRow = memo(function LogRow({ e, open, onToggle, showSession, flash }: {
   );
 });
 
+/** How long a "View details" target may wait for its log line to arrive. */
+const FOCUS_WAIT_MS = 5000;
+/** ...and how long to look for the line that says exactly what the banner said before settling for the closest one. */
+const EXACT_WAIT_MS = 1000;
+
 /**
  * The diagnostics log as a workspace view: level chips, source / session filters, search, a capped list that follows the tail
  * (with a "Jump to latest" strip once you scroll away), expandable rows with their detail, and Copy / Download / Clear.
@@ -96,6 +101,15 @@ export function LogsView({ sessionId }: { sessionId?: string }) {
   useEffect(() => {
     if (!focus || !loaded) return;
     const seq = findFocusSeq(entries, { sessionId: focus.sessionId, ts: focus.ts, text: focus.text });
+    // The banner/toast can appear before its log line reaches this page (two channels: the session event and the log stream):
+    // keep the target pending and look again as entries arrive, for a few seconds. Without waiting, a nearer line (the 401 warning
+    // instead of the message shown to the user) would win and the exact one would be left closed.
+    const exact = !focus.text || entries.some((x) => x.message === focus.text && (!focus.sessionId || x.sessionId === focus.sessionId));
+    const left = (seq === undefined ? FOCUS_WAIT_MS : EXACT_WAIT_MS) - (Date.now() - focus.nonce);
+    if ((seq === undefined || !exact) && left > 0) {
+      const t = setTimeout(() => useLogs.setState({ focus: { ...focus, nonce: focus.nonce - FOCUS_WAIT_MS } }), left); // deadline passed: take the closest line
+      return () => clearTimeout(t);
+    }
     clearFocus();
     if (seq === undefined) return;
     const e = entries.find((x) => x.seq === seq)!;

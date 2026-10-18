@@ -1,5 +1,5 @@
 import type { Page } from '@playwright/test';
-import { closeDrawers, expect, expectIdle, newSessionInProject, openApp, openInspector, sendPrompt, setAppearance, test } from '../../support/app.ts';
+import { closeDrawers, expect, expectIdle, expectToast, newSessionInProject, openApp, openInspector, sendPrompt, setAppearance, test } from '../../support/app.ts';
 import { errorsOf, formatIssues, lintPage } from '../../support/layout-lint.ts';
 
 /**
@@ -87,10 +87,12 @@ test.describe('layout lint: Logs', () => {
 
         // 6. an error toast with "View details"
         await closeDrawers(page); // (a toast sits under an open drawer's scrim: the drawer is transient)
+        while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click(); // (a session's failure toast from the steps above may still be up)
         await page.evaluate(() => (window as unknown as { __ws: { toast: (t: unknown) => string } }).__ws.toast({ kind: 'error', title: 'Something failed', body: 'a long explanation that should wrap inside the toast instead of widening it ' + 'x'.repeat(60) }));
-        await expect(page.locator('.toast').getByRole('button', { name: 'View details' })).toBeVisible();
+        const failed = page.locator('.toast', { hasText: 'Something failed' });
+        await expectToast(page, failed.getByRole('button', { name: 'View details' }));
         await check('error toast with View details');
-        await page.locator('.toast').getByRole('button', { name: 'View details' }).click();
+        await failed.getByRole('button', { name: 'View details' }).click();
 
         // 7. Settings -> View logs
         await closeDrawers(page);

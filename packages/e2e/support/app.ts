@@ -114,3 +114,17 @@ export async function setAppearance(page: Page, a: { theme?: 'light' | 'dark'; b
     } catch { /* storage may be blocked */ }
   }, a);
 }
+
+/**
+ * Waits until `toast` is visible. Only two toasts show at once and the rest queue (oldest first), so toasts left over from
+ * earlier sessions on the shared mock server can hold the slots: dismiss whatever blocks, never the toast being waited for.
+ */
+export async function expectToast(page: Page, toast: Locator) {
+  await expect(async () => {
+    if (!(await toast.first().isVisible())) {
+      const blocker = page.locator('.toast').filter({ hasNot: toast }).first();
+      if (await blocker.count()) await blocker.getByRole('button', { name: 'Dismiss' }).click({ timeout: 1000 }).catch(() => {});
+    }
+    await expect(toast.first()).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 15_000 });
+}

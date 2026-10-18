@@ -1,4 +1,4 @@
-import { expect, expectIdle, newSessionInProject, openApp, sendPrompt, test, TOKEN } from '../../support/app.ts';
+import { expect, expectIdle, expectToast, newSessionInProject, openApp, sendPrompt, test, TOKEN } from '../../support/app.ts';
 
 const palette = (page: import('@playwright/test').Page) => page.getByRole('textbox', { name: 'Command palette' });
 // The settings dialog is titled "Welcome. Set up your connection" until a key or base URL is configured.
@@ -83,7 +83,7 @@ test.describe('settings dialog', () => {
     await dialog.getByLabel('Anthropic base URL').fill('https://gateway.example.test/anthropic');
     await dialog.getByLabel(/^API key/).fill(SECRET);
     await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByText('Settings saved')).toBeVisible();
+    await expectToast(page, page.getByText('Settings saved'));
     await expect(dialog).toHaveCount(0);
 
     await page.keyboard.press('ControlOrMeta+,');
@@ -103,13 +103,12 @@ test.describe('settings dialog', () => {
 
   test('a non-http base URL is rejected with an error toast', async ({ page }) => {
     await openApp(page);
-    // toasts from other workers' sessions (shared mock server) can fill the two visible slots: our error would only queue
-    while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
     await page.keyboard.press('ControlOrMeta+,');
     const dialog = settingsDialog(page);
     await dialog.getByLabel('Anthropic base URL').fill('ftp://not-http.example.test');
     await dialog.getByRole('button', { name: 'Save' }).click();
-    await expect(page.getByRole('alert').filter({ hasText: 'Could not save settings' })).toBeVisible();
+    // (toasts left over from earlier sessions on the shared mock server can fill the two visible slots: expectToast clears them)
+    await expectToast(page, page.getByRole('alert').filter({ hasText: 'Could not save settings' }));
     await expect(page.getByRole('alert').filter({ hasText: 'must start with http' })).toBeVisible();
     await expect(dialog).toBeVisible();
     await dialog.getByRole('button', { name: 'Cancel' }).click();

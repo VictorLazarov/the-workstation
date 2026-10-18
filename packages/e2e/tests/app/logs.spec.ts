@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { Page } from '@playwright/test';
-import { expect, expectIdle, newSessionInProject, openApp, openInspector, sendPrompt, test, TOKEN } from '../../support/app.ts';
+import { expect, expectIdle, expectToast, newSessionInProject, openApp, openInspector, sendPrompt, test, TOKEN } from '../../support/app.ts';
 import { startPrivateServer } from '../../support/server.ts';
 import { readState } from '../../support/env.ts';
 
@@ -8,10 +8,21 @@ const logs = (page: Page) => page.getByTestId('logs-view');
 const rows = (page: Page) => logs(page).locator('.log-row');
 const chip = (page: Page, name: string) => logs(page).getByRole('button', { name: new RegExp(`^${name}`) });
 
+/**
+ * The clipboard is read back from what the app WROTE, not from the browser: WebKit has no clipboard-read permission
+ * (navigator.clipboard.readText is refused there). Call before the page navigates.
+ */
 async function grantClipboard(page: Page) {
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await page.addInitScript(() => {
+    const w = window as unknown as { __copied?: string };
+    const c = navigator.clipboard;
+    if (!c || typeof c.writeText !== 'function') return;
+    const orig = c.writeText.bind(c);
+    c.writeText = async (t: string) => { w.__copied = t; try { await orig(t); } catch { /* not permitted here: the capture is what matters */ } };
+  });
 }
-const clipboard = (page: Page) => page.evaluate(() => navigator.clipboard.readText());
+const clipboard = (page: Page) => page.evaluate(() => (window as unknown as { __copied?: string }).__copied ?? '');
 
 test.describe('Logs panel', () => {
   test('an error in the conversation links to its log entry; level and source are right', async ({ page }) => {
@@ -224,6 +235,7 @@ test.describe('opening the Logs', () => {
     await newSessionInProject(page);
     await page.evaluate(() => (window as unknown as { __ws: { toast: (t: unknown) => string } }).__ws.toast({ kind: 'error', title: 'Something failed', body: 'details are in the log' }));
     const toast = page.locator('.toast', { hasText: 'Something failed' });
+    await expectToast(page, toast);
     await toast.getByRole('button', { name: 'View details' }).click();
     await expect(page.locator('.itab.on')).toHaveAttribute('data-panel', 'logs');
     await expect(toast).toHaveCount(0);
@@ -238,7 +250,7 @@ test.describe('opening the Logs', () => {
     await openInspector(page, 'overview');
     const card = page.locator('[data-card="diagnostics"]');
     await card.getByRole('button', { name: 'Copy debug info' }).click();
-    await expect(page.locator('.toast', { hasText: 'Debug info copied' })).toBeVisible();
+    await expectToast(page, page.locator('.toast', { hasText: 'Debug info copied' }));
     const text = await clipboard(page);
     expect(text).toContain('The Workstation debug info');
     expect(text).toMatch(/App version:\s+\S+/);
