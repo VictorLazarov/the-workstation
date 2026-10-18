@@ -131,7 +131,10 @@ input, textarea, select { font: inherit; color: inherit; }
 .palette-btn { display: inline-flex; align-items: center; gap: 6px; height: var(--ctl-h); padding: 0 6px 0 8px; border-radius: var(--radius-sm); border: 1px solid var(--border); color: var(--muted); font-size: var(--fs-sm); background: var(--surface); }
 .palette-btn:hover { border-color: var(--border-strong); color: var(--text-2); }
 .palette-btn { flex: none; white-space: nowrap; } .palette-btn span { display: none; }
-@media (max-width: 900px) { .topbar-session, .status-pill { display: none; } }
+/* narrow: the session title and its status stay (the status as a dot); the branch gives way first (it is in Overview / Changes) */
+.pill-text { display: inline; }
+@media (max-width: 900px) { .status-pill { padding: 0 4px; } .pill-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; } }
+@media (max-width: 700px) { .topbar-title > .crumb.branch { display: none; } .topbar-title .crumb-name { max-width: 7em; } .topbar-session { border-left: 0; padding-left: 2px; margin-left: 0; } .topbar-title { flex: 1 1 auto; } .topbar-spacer { flex: 0 0 0; } }
 
 /* conversation */
 .conv { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
@@ -246,7 +249,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .conn-banner { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 3px 12px; background: var(--warn-soft); color: var(--text); font-size: var(--fs-sm); border-bottom: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border)); }
 .shortcuts { margin: 0; display: grid; gap: 2px; } .shortcuts > div { display: flex; justify-content: space-between; gap: 16px; padding: 4px 0; border-bottom: 1px solid var(--border); } .shortcuts dt { display: flex; gap: 4px; } .shortcuts dd { margin: 0; color: var(--text-2); text-align: right; }
 .segmented { display: inline-flex; padding: 2px; border-radius: var(--radius); background: var(--active); gap: 2px; } .segmented button { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 10px; border-radius: 6px; color: var(--text-2); font-size: var(--fs-base); font-weight: 500; } .segmented button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
-.settings { display: grid; gap: 12px; } .settings h3 { margin: 0 0 6px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); } .settings section { display: grid; gap: 8px; }
+.settings { display: grid; gap: 12px; } .settings h3 { margin: 0 0 6px; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); } .settings section { display: grid; gap: 8px; } .settings p { margin: 0; }
 .lbl .tag { justify-self: start; } .settings > .segmented, .settings section > .segmented { justify-self: start; }
 .lbl { display: grid; gap: 3px; font-size: var(--fs-sm); font-weight: 500; color: var(--text-2); } .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .row-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: var(--fs-base); }
 .picker .dialog-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; } .picker .dialog-body > * { min-width: 0; } .picker-label { display: flex; justify-content: space-between; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; margin-top: 4px; }
@@ -277,6 +280,8 @@ input, textarea, select { font: inherit; color: inherit; }
 }
 @media (max-width: 800px) {
   /* narrow: one toast, top-centre under the topbar: never over Allow/Deny, the composer or its suggestions (all at the bottom) */
+  :root[data-toast] .topbar { margin-bottom: 58px; } /* the toast sits in this strip: the conversation is pushed down, never covered */
+  .toast-text > span { -webkit-line-clamp: 1; } .toast { padding-top: 4px; padding-bottom: 4px; align-items: center; }
   .toasts, .app[data-sidebar='docked'] .toasts { top: calc(var(--topbar-h) + 6px); bottom: auto; left: 50%; right: auto; transform: translateX(-50%); width: min(420px, calc(100vw - 24px)); }
 }
 @media (max-width: 700px) { .palette-btn .kbd { display: none; } .palette-btn { padding: 0 8px; } }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { fuzzy, isMac, modelLabel, relativeTime } from '../lib/utils';
 import { clearRemoteServer, getRemoteServer } from '../lib/storage';
 import { projectName, sessionProject, useActiveSession, useSessions } from '../store/sessions';
-import { useSidebarDrawer, useUi, visibleToasts, type Toast } from '../store/ui';
+import { MAX_TOAST_LIFE, useSidebarDrawer, useUi, visibleToasts, type Toast } from '../store/ui';
 import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
 import { MODES } from './Chips';
@@ -13,8 +13,9 @@ function ToastView({ t, more }: { t: Toast; more?: number }) {
   const dismiss = useUi((s) => s.dismissToast);
   // the timer runs only while the toast is on screen (queued ones get their full time once shown) and restarts when a repeat refreshes it
   useEffect(() => {
-    if (t.ttl <= 0) return;
-    const h = setTimeout(() => dismiss(t.id), t.ttl);
+    // every toast ends: a repeat restarts the timer, but never past MAX_TOAST_LIFE since it first appeared (ttl 0 is not "forever")
+    const left = Math.max(1000, Math.min(t.ttl > 0 ? t.ttl : MAX_TOAST_LIFE, t.since + MAX_TOAST_LIFE - Date.now()));
+    const h = setTimeout(() => dismiss(t.id), left);
     return () => clearTimeout(h);
   }, [t.id, t.rev, t.ttl, dismiss]);
   return (
@@ -33,6 +34,22 @@ export function Toasts() {
   const narrow = useSidebarDrawer();
   const visible = visibleToasts(toasts, narrow);
   const queued = toasts.length - visible.length;
+  // Toasts still waiting in the queue go stale like visible ones: a "needs approval" from a minute ago is not news (the sidebar and the card say it)
+  useEffect(() => {
+    if (toasts.length <= visible.length) return;
+    const h = setInterval(() => {
+      const { toasts: now, dismissToast } = useUi.getState();
+      const shown = new Set(visibleToasts(now, narrow).map((x) => x.id));
+      for (const x of now) if (!shown.has(x.id) && Date.now() - x.since > (x.ttl > 0 ? x.ttl : MAX_TOAST_LIFE) + 1000) dismissToast(x.id);
+    }, 1000);
+    return () => clearInterval(h);
+  }, [toasts.length, visible.length, narrow]);
+  // On a narrow screen the toast gets its own strip under the topbar (the conversation moves down) instead of covering it.
+  useEffect(() => {
+    const el = document.documentElement;
+    if (visible.length) el.setAttribute('data-toast', ''); else el.removeAttribute('data-toast');
+    return () => el.removeAttribute('data-toast');
+  }, [visible.length]);
   return (
     <div className="toasts" aria-live="polite" data-queued={queued || undefined}>
       {visible.map((t, i) => <ToastView key={t.id} t={t} more={i === visible.length - 1 ? queued : 0} />)}

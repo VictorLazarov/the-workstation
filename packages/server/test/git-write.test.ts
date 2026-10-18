@@ -15,6 +15,35 @@ beforeAll(async () => {
 });
 afterAll(async () => { await s.close(); });
 
+describe('M1: a new folder is listed file by file', () => {
+  it('status expands an untracked directory, commit/diff/revert work on its files, a huge tree is capped and counted', async () => {
+    fs.mkdirSync(path.join(s.cwd, 'fresh/deep'), { recursive: true });
+    fs.writeFileSync(path.join(s.cwd, 'fresh/a.ts'), 'a\n');
+    fs.writeFileSync(path.join(s.cwd, 'fresh/deep/b.ts'), 'b\n');
+    const st = await api(s, `/api/git/status?cwd=${encodeURIComponent(s.cwd)}`).then((r) => r.json()) as any;
+    const paths = st.files.map((f: any) => f.path);
+    expect(paths).toEqual(expect.arrayContaining(['fresh/a.ts', 'fresh/deep/b.ts']));
+    expect(paths.some((p: string) => p.endsWith('/'))).toBe(false); // never one opaque `dir/` entry
+    expect(st.untrackedMore).toBeUndefined();
+    const d = await api(s, `/api/git/diff?cwd=${encodeURIComponent(s.cwd)}&path=${encodeURIComponent('fresh/deep/b.ts')}`).then((r) => r.json()) as any;
+    expect(d.diff).toContain('+b');
+    // revert one file of the new folder
+    expect(await post('/api/git/revert', { cwd: s.cwd, path: 'fresh/a.ts' })).toMatchObject({ status: 200, body: { action: 'deleted' } });
+    // the directory itself is still refused
+    expect((await post('/api/git/revert', { cwd: s.cwd, path: 'fresh' })).status).toBeGreaterThanOrEqual(400);
+    const c = await post('/api/git/commit', { cwd: s.cwd, message: 'new folder', files: ['fresh/deep/b.ts'] });
+    expect(c.status).toBe(200);
+    expect(run('show', '--name-only', '--format=', 'HEAD').trim()).toBe('fresh/deep/b.ts');
+    // cap: more new files than the panel lists are counted, not silently hidden
+    fs.mkdirSync(path.join(s.cwd, 'gen'));
+    for (let i = 0; i < 230; i++) fs.writeFileSync(path.join(s.cwd, 'gen', `f${i}.txt`), 'x\n');
+    const big = await api(s, `/api/git/status?cwd=${encodeURIComponent(s.cwd)}`).then((r) => r.json()) as any;
+    expect(big.files.filter((f: any) => f.path.startsWith('gen/'))).toHaveLength(200);
+    expect(big.untrackedMore).toBe(30);
+    fs.rmSync(path.join(s.cwd, 'gen'), { recursive: true });
+  });
+});
+
 describe('git commit / revert', () => {
   it('status reports the repo root', async () => {
     const r = await api(s, `/api/git/status?cwd=${encodeURIComponent(s.cwd)}`);

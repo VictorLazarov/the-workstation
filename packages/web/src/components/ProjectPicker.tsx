@@ -38,7 +38,7 @@ export function ProjectPicker() {
 
   return (
     <Dialog open={open} onClose={close} title="Open a project" width={600} className="picker"
-      footer={<>{path ? <MiddleEllipsis text={path} tail={24} className="picker-path" /> : <span className="picker-path" />}<button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={!path} onClick={() => choose(path)}>Open “{projectName(path) || '/'}”</button></>}>
+      footer={<>{path ? <MiddleEllipsis text={path} tail={Math.min(path.length - 1, Math.max(14, path.split(/[\\/]/).slice(-2).join('/').length + 1))} className="picker-path" /> : <span className="picker-path" />}<button type="button" className="btn ghost" onClick={close}>Cancel</button><button type="button" className="btn primary" disabled={!path} onClick={() => choose(path)}>Open “{projectName(path) || '/'}”</button></>}>
       {(projects.length > 0 || serverCwd) && (
         <div className="picker-recent">
           <div className="picker-label">{projects.length ? 'Recent' : 'This server\'s project'}</div>

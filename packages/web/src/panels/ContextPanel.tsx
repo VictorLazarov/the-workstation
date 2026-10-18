@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { contextWindowFor, formatCost, formatDuration, formatTokens, modelLabel } from '../lib/utils';
+import { MODES } from '../components/Chips';
 import { Icon } from '../components/Icon';
 import { IconButton, Spinner } from '../components/ui';
 import { useSessions } from '../store/sessions';
@@ -109,7 +110,7 @@ function Loaded({ sessionId }: { sessionId: string }) {
       </Disclosure>
       <dl className="kv">
         {init.model && <><dt>Model</dt><dd>{modelLabel(init.model)}</dd></>}
-        {init.permissionMode && <><dt>Mode</dt><dd>{init.permissionMode}</dd></>}
+        {init.permissionMode && <><dt>Mode</dt><dd>{MODES.find((m) => m.id === init.permissionMode)?.label ?? init.permissionMode}</dd></>}
         {init.version && <><dt>Agent runtime</dt><dd>{init.version}</dd></>}
       </dl>
     </Section>

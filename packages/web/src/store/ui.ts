@@ -15,6 +15,8 @@ export interface Toast {
   count: number;
   /** bumped when a repeat refreshes the toast, so its auto-dismiss timer restarts */
   rev: number;
+  /** when the toast first appeared: repeats restart the timer but never keep a toast alive past MAX_TOAST_LIFE */
+  since: number;
 }
 /** Visible toasts at once (the rest wait in the queue); on narrow screens only one at a time (see MAX_TOASTS_NARROW). */
 export const MAX_TOASTS = 2;
@@ -22,6 +24,8 @@ export const MAX_TOASTS_NARROW = 1;
 /** Auto-dismiss times: results/info are glanceable (4s), errors and "needs you" stay longer. */
 export const TOAST_TTL = { info: 4000, success: 4000, error: 8000, attention: 10_000 } as const;
 const MAX_QUEUED = 8;
+/** A toast never stays longer than this, however often it repeats: every toast is a glance, the lasting state lives elsewhere (sidebar dot, permission card, banner). */
+export const MAX_TOAST_LIFE = 20_000;
 export const visibleToasts = (list: Toast[], narrow: boolean) => list.slice(0, narrow ? MAX_TOASTS_NARROW : MAX_TOASTS);
 export interface ConfirmOpts {
   title: string; body?: string; confirmLabel?: string; danger?: boolean; details?: string[];
@@ -50,9 +54,11 @@ interface UiState {
   setTheme: (t: Theme) => void;
   setBrand: (b: Brand) => void;
   setDensity: (d: Density) => void;
-  toast: (t: Omit<Toast, 'id' | 'ttl' | 'count' | 'rev'> & { ttl?: number }) => string;
+  toast: (t: Omit<Toast, 'id' | 'ttl' | 'count' | 'rev' | 'since'> & { ttl?: number }) => string;
   dismissToast: (id: string) => void;
   dismissToastsByTag: (tag: string) => void;
+  /** an outage: toasts about session state (approvals, finished) are stale; errors stay */
+  dismissStaleToasts: () => void;
   ask: (o: ConfirmOpts) => Promise<boolean>;
   askText: (o: PromptOpts) => Promise<string | null>;
   openInspector: (tab: string, focus?: string) => void;
@@ -128,11 +134,11 @@ export const useUi = create<UiState>((set, get) => ({
     const same = (x: Toast) => x.kind === t.kind && (t.tag ? x.tag === t.tag : !x.tag && x.title === t.title && x.body === t.body);
     const dup = get().toasts.find(same);
     if (dup) {
-      set({ toasts: get().toasts.map((x) => (x === dup ? { ...x, ...t, id: dup.id, ttl, count: dup.count + 1, rev: dup.rev + 1 } : x)) });
+      set({ toasts: get().toasts.map((x) => (x === dup ? { ...x, ...t, id: dup.id, ttl, count: dup.count + 1, rev: dup.rev + 1, since: dup.since } : x)) });
       return dup.id;
     }
     const id = uid('t');
-    let list = [...get().toasts, { ...t, id, ttl, count: 1, rev: 0 }];
+    let list = [...get().toasts, { ...t, id, ttl, count: 1, rev: 0, since: Date.now() }];
     // bound the queue: drop the oldest ones that are not asking for the user
     while (list.length > MAX_QUEUED) { const i = list.findIndex((x) => x.kind !== 'attention' && x.kind !== 'error'); list.splice(i < 0 ? 0 : i, 1); }
     set({ toasts: list });
@@ -140,6 +146,7 @@ export const useUi = create<UiState>((set, get) => ({
   },
   dismissToast: (id) => set({ toasts: get().toasts.filter((x) => x.id !== id) }),
   dismissToastsByTag: (tag) => set({ toasts: get().toasts.filter((x) => x.tag !== tag) }),
+  dismissStaleToasts: () => set({ toasts: get().toasts.filter((x) => x.kind === 'error' || (x.kind !== 'attention' && !x.tag)) }),
   ask: (o) => new Promise<boolean>((resolve) => set({ confirm: { ...o, resolve: (ok) => { set({ confirm: null }); resolve(ok); } } })),
   askText: (o) => new Promise<string | null>((resolve) => set({ prompt: { ...o, resolve: (v) => { set({ prompt: null }); resolve(v); } } })),
   openInspector: (tab, focus) => get().set({ inspectorOpen: true, inspectorTab: tab, inspectorFocus: focus }),

@@ -185,6 +185,19 @@ function onAssistant(c: Conversation, msg: AnyMsg) {
   const idx = findAssistantIdx(lane, m.id);
   const errText = msg.error ? String(msg.error) : undefined;
 
+  // The CLI's synthetic "API error" assistant message (error: authentication_failed, ...) is not something the model said: it is
+  // the failure itself. It becomes the ONE actionable notice of the turn (or nothing, when the server's error event already made it).
+  if (errText) {
+    if (!c.turnError) {
+      const raw = incoming.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join(' ').trim();
+      const text = providerErrorText(errText, raw);
+      pushItem(c, MAIN_LANE, { kind: 'notice', id: nid(c, 'n'), level: 'error', text, ts: Date.now(), code: errText, action: errorAction(errText) });
+      c.turnError = text;
+    }
+    c.statusText = null;
+    return;
+  }
+
   if (idx < 0) {
     if (incoming.length === 0 && !errText) return;
     const item: AssistantItem = { kind: 'assistant', id: nid(c, 'a'), msgId: String(m.id ?? msg.uuid ?? nid(c, 'm')), blocks: incoming, error: errText, ts: Date.now() };
@@ -297,6 +310,14 @@ export function friendlyError(message: string, code?: string, liveCount?: number
   return message;
 }
 
+/** Plain words for a provider failure. The key lives in Settings here, so the CLI's "Fix external API key" wording is replaced. */
+export function providerErrorText(code: string, raw = ''): string {
+  if (code === 'authentication_failed') return 'The API key was rejected (401). Check the key and base URL in Settings.';
+  if (code === 'billing_error') return 'The API account has a billing problem. Check the account behind your API key.';
+  if (code === 'model_not_found') return 'The provider does not know this model. Pick another model or check the base URL in Settings.';
+  return raw.replace(/\s*[·-]\s*Fix external API key\.?/i, '').trim() || `API error: ${code}`;
+}
+
 const SUBTYPE_TEXT: Record<string, string> = {
   error_max_turns: 'Reached the turn limit',
   error_max_budget_usd: 'Reached the budget limit',
@@ -312,7 +333,7 @@ function onResult(c: Conversation, msg: AnyMsg) {
   const diag = (errors ?? []).filter(isDiagnostic);
   if (diag.length) console.debug('[workstation] SDK result diagnostics:', diag.join('; '), { subtype: msg.subtype, terminal_reason: msg.terminal_reason, stop_reason: msg.stop_reason });
   const text = typeof msg.result === 'string' ? msg.result : undefined;
-  const real = [...(errors ?? []).filter((e) => !isDiagnostic(e)), ...(text && outcome === 'error' ? [text] : [])].map((e) => e.trim()).filter(Boolean);
+  const real = [...new Set([...(errors ?? []).filter((e) => !isDiagnostic(e)), ...(text && outcome === 'error' ? [text] : [])].map((e) => e.trim()).filter(Boolean))];
   const message = outcome === 'error' ? (SUBTYPE_TEXT[String(msg.subtype)] && !real.length ? SUBTYPE_TEXT[String(msg.subtype)] : real.join('; ') || SUBTYPE_TEXT[String(msg.subtype)] || 'The turn ended with an error') : undefined;
   const item = {
     kind: 'result' as const, id: nid(c, 'r'), ok: outcome === 'ok', outcome, subtype: String(msg.subtype ?? ''),
@@ -339,6 +360,7 @@ function onSystem(c: Conversation, msg: AnyMsg) {
       };
       return;
     case 'api_retry':
+      if (c.turnError) { c.retry = null; return; } // the turn already failed and was explained: no stale "retrying" card
       c.retry = {
         attempt: msg.attempt, max: msg.max_retries, delayMs: msg.retry_delay_ms, status: msg.error_status ?? null,
         message: String(msg.error ?? 'API error'), at: Date.now(),
@@ -449,6 +471,7 @@ export function addNotice(prev: Conversation, level: NoticeItem['level'], text: 
 
 /** The server reported why the running turn failed (an `error` event): one actionable notice, remembered so the result does not repeat it. */
 export function addTurnError(prev: Conversation, text: string, code?: string): Conversation {
+  if (prev.turnError) return finishStreaming(prev); // the same failure arrives as a synthetic message AND an error event: one notice
   const c = addNotice(finishStreaming(prev), 'error', text, { code, action: errorAction(code) });
   c.turnError = text;
   return c;

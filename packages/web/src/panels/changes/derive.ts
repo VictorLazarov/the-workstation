@@ -86,6 +86,8 @@ export interface ChangeFile {
   bySession: boolean;
   source: 'git' | 'session';
   oldPath?: string;
+  /** an untracked directory entry (`dir/`): cannot be diffed or reverted as one item */
+  isDir?: boolean;
 }
 
 export function porcelainStatus(f: GitFileStatus): ChangeStatus {
@@ -126,7 +128,7 @@ export function mergeChanges(cwd: string, git: GitSnapshot | null, session: Sess
       out.push({
         path, rel: relFromCwd(path, cwd), status,
         added: d?.added ?? (status === 'untracked' ? s?.added : undefined), removed: d?.removed ?? (status === 'untracked' ? s?.removed : undefined),
-        lines: d?.lines ?? (!d && s ? s.lines : undefined), binary: d?.binary, bySession: !!s, source: 'git', oldPath: d?.oldPath ? absPath(d.oldPath, root) : undefined,
+        lines: d?.lines ?? (!d && s ? s.lines : undefined), binary: d?.binary, bySession: !!s, source: 'git', isDir: f.path.endsWith('/') || undefined, oldPath: d?.oldPath ? absPath(d.oldPath, root) : undefined,
       });
     }
   }

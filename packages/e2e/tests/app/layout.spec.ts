@@ -1,5 +1,8 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { Page } from '@playwright/test';
 import { closeDrawers, composer, expect, expectIdle, newSessionInProject, openApp, openInspector, openSidebar, sendPrompt, setAppearance, test } from '../../support/app.ts';
+import { readState } from '../../support/env.ts';
 import { errorsOf, formatIssues, lintPage } from '../../support/layout-lint.ts';
 
 /**
@@ -73,6 +76,13 @@ const mainState = async (page: Page, lint: Linter) => {
   await lint.check('conversation (demo everything)');
   await page.locator('.conv-scroll').evaluate((e) => e.scrollTo(0, 0));
   await lint.check('conversation top');
+  // S4 minor: a long unbreakable token (URL, hash) in prose wraps instead of scrolling the conversation sideways
+  await sendPrompt(page, `token ${'abcdef0123456789'.repeat(11)}`);
+  await expectIdle(page);
+  await expect(page.locator('.msg-assistant').last()).toContainText('abcdef0123456789');
+  await lint.check('long token in prose');
+  const [csw, ccw] = await page.locator('.conv-scroll').evaluate((e) => [e.scrollWidth, e.clientWidth]);
+  expect(csw, 'conversation scrolls sideways').toBeLessThanOrEqual(ccw + 1);
 };
 
 test.describe('layout lint: main conversation at every width, both themes', () => {
@@ -169,6 +179,18 @@ test.describe('layout lint: every state at sampled combinations', () => {
       await expect(page.getByRole('dialog')).toBeVisible();
       await lint.check('settings');
       await page.keyboard.press('Escape');
+      // S4 M2: a very long remembered rule (what "Always allow" writes after a long command) must not break the dialog
+      const rulesFile = path.join(readState().project, '.claude', 'settings.local.json');
+      fs.mkdirSync(path.dirname(rulesFile), { recursive: true });
+      fs.writeFileSync(rulesFile, JSON.stringify({ permissions: { allow: [`Bash(git commit -m "${'a really long message '.repeat(20)}":*)`, `Bash(${'x'.repeat(300)})`, 'Bash(ls:*)'] } }));
+      try {
+        await page.keyboard.press('ControlOrMeta+,');
+        await expect(page.getByTestId('remembered-rules')).toContainText('git commit -m');
+        await lint.check('settings with very long rules');
+        const [sw, cw] = await page.locator('.dialog-body').evaluate((e) => [e.scrollWidth, e.clientWidth]);
+        expect(sw, 'settings body scrolls sideways').toBeLessThanOrEqual(cw + 1);
+        await page.keyboard.press('Escape');
+      } finally { fs.rmSync(path.dirname(rulesFile), { recursive: true, force: true }); }
       await page.keyboard.press('ControlOrMeta+k');
       await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
       await lint.check('command palette');

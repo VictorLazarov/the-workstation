@@ -80,6 +80,8 @@ export interface LiveSession {
   bufferBytes: number;
   /** a fatal API error already interrupted the current turn */
   fatalInterrupted: boolean;
+  /** an `error` event was already sent for the running turn: one failure is reported once (cleared by the result) */
+  turnErrorSent?: boolean;
   model?: string;
   permissionMode: PermissionMode;
   effort?: EffortLevel;
@@ -470,6 +472,7 @@ export class SessionManager {
     // Echo the user turn into the event stream: the SDK does not, and the UI needs the uuid for rewind.
     const echoContent = typeof content === 'string' ? content : (content as Json[]).map((b) => (b.type === 'image' ? { type: 'image', name: imgs.find((i) => i.dataBase64 === (b.source as Json).data)?.name } : b));
     this.emitSdk(s, { type: 'user', message: { role: 'user', content: echoContent }, parent_tool_use_id: null, session_id: s.id, uuid, clientMsgId, origin: 'workstation' });
+    if (s.inflight.size === 0) s.turnErrorSent = false;
     s.inflight.set(uuid, 'queued');
     if (!s.title) s.title = titleFromPrompt(text) || 'New session';
     this.emitState(s);
@@ -509,6 +512,21 @@ export class SessionManager {
     const keep: BufferedEvent[] = [];
     for (const e of s.buffer) { if (pred(e)) s.bufferBytes -= e.bytes; else keep.push(e); }
     s.buffer = keep;
+  }
+
+  /** Plain words for a provider failure; the key lives in Settings here, so the CLI's "Fix external API key" is dropped. */
+  private providerError(code: string, raw?: string): string {
+    if (code === 'authentication_failed') return 'The API key was rejected (401). Check the key and base URL in Settings.';
+    if (code === 'billing_error') return 'The API account has a billing problem. Check the account behind your API key.';
+    if (code === 'model_not_found') return 'The provider does not know this model. Pick another model or check the base URL in Settings.';
+    return (raw ?? '').replace(/\s*[·-]\s*Fix external API key\.?/i, '').trim() || `API error: ${code}`;
+  }
+
+  /** One failed turn, one `error` event (the CLI reports the same failure as a synthetic message AND as retries). */
+  private emitTurnError(s: LiveSession, code: string, raw?: string) {
+    if (s.turnErrorSent) return;
+    s.turnErrorSent = true;
+    this.emitError(s, this.providerError(code, raw), code);
   }
 
   private emitError(s: LiveSession, message: string, code?: string) {
@@ -557,17 +575,18 @@ export class SessionManager {
         }
         if (msg.type === 'assistant' && typeof msg.error === 'string') {
           const text = (msg.message?.content ?? []).filter((b) => b.type === 'text').map((b) => b.text).join(' ').trim();
-          this.emitError(s, text || `API error: ${msg.error}`, msg.error);
+          this.emitTurnError(s, msg.error, text);
         }
         if (msg.type === 'system' && msg.subtype === 'api_retry' && typeof msg.error === 'string' && FATAL_API_ERRORS.has(msg.error) && !s.fatalInterrupted) {
           // Retrying a 401/402/404-class error cannot succeed (the CLI would loop ~10 times with growing delays): stop the turn now.
           s.fatalInterrupted = true;
-          this.emitError(s, `API error${msg.error_status ? ` ${msg.error_status}` : ''}: ${msg.error}. Check the provider settings (base URL, API key/token, model).`, msg.error);
+          this.emitTurnError(s, msg.error);
           void s.query.interrupt().catch(() => {});
         }
         this.emitSdk(s, msg);
         if (msg.type === 'result') {
           s.fatalInterrupted = false;
+          s.turnErrorSent = false;
           // The CLI may fold several queued prompts into one turn: every prompt that had started is done now.
           if (s.lifecycle) { for (const [id, st] of s.inflight) if (st === 'started') s.inflight.delete(id); }
           else { const first = s.inflight.keys().next(); if (!first.done) s.inflight.delete(first.value); }

@@ -132,7 +132,9 @@ export interface AppConfig {
 export interface FsEntry { name: string; path: string; kind: 'file' | 'dir' | 'symlink'; size?: number }
 export interface GitFileStatus { path: string; index: string; worktree: string }
 /** `files[].path` is relative to the repository `root` (git porcelain semantics), not to the requested cwd. */
-export interface GitStatus { branch?: string; ahead?: number; behind?: number; files: GitFileStatus[]; isRepo: boolean; root?: string }
+export interface GitStatus { branch?: string; ahead?: number; behind?: number; files: GitFileStatus[]; isRepo: boolean; root?: string;
+  /** new files beyond the listing cap that are not in `files` (and so not shown or committed) */
+  untrackedMore?: number }
 /** A permission rule from Claude Code settings. `local` rules (.claude/settings.local.json) are the ones "Always allow" writes and can be removed. */
 export interface PermissionRuleEntry { source: 'local' | 'project' | 'user'; behavior: 'allow' | 'deny' | 'ask'; rule: string; removable: boolean }
 export interface GitCommitResult { ok: true; commit: string; summary: string }

@@ -31,7 +31,8 @@ const components = {
     return <CodeBlock code={text.replace(/\n$/, '')} lang={m?.[1]} />;
   },
   pre({ children }: { children?: ReactNode }) { return <>{children}</>; },
-  a({ href, children }: { href?: string; children?: ReactNode }) { return <a href={href} target="_blank" rel="noreferrer noopener">{children}</a>; },
+  // a link whose href was stripped as unsafe (javascript:, data:, ...) is plain text: an <a href=""> would reopen this app in a new tab
+  a({ href, children }: { href?: string; children?: ReactNode }) { return href ? <a href={href} target="_blank" rel="noreferrer noopener">{children}</a> : <span>{children}</span>; },
   table({ children }: { children?: ReactNode }) { return <div className="table-wrap"><table>{children}</table></div>; },
 };
 

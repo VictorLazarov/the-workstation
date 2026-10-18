@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionSummary } from '@workstation/protocol';
 import { fuzzy, relativeTime } from '../lib/utils';
+import { visibleSessions } from '../lib/sidebar';
 import { projectName, sessionProject, sessionStatus, sessionWorktree, useSessions, type SessionStatus } from '../store/sessions';
 import { sidebarIsDrawer, useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { Icon } from './Icon';
@@ -155,6 +156,7 @@ export function Sidebar() {
         {groups.map((g) => {
           const isC = collapsed[g.cwd];
           const limit = showAll[g.cwd] || query ? 99 : 6;
+          const shown = visibleSessions(g.es, limit, activeId);
           const running = g.es.filter((e) => e.status === 'running' || e.status === 'needs-input').length;
           return (
             <section key={g.cwd} className="proj">
@@ -168,7 +170,7 @@ export function Sidebar() {
               </div>
               {!isC && (
                 <ul className="sess-list">
-                  {g.es.slice(0, limit).map((e) => (
+                  {shown.map((e) => (
                     <li key={e.id} className="sess-item">
                       <button
                         type="button" className={`sess${activeId === e.id ? ' active' : ''}${e.status === 'needs-input' ? ' attn' : ''}${e.status === 'running' ? ' run' : ''}`}
@@ -187,7 +189,7 @@ export function Sidebar() {
                     </li>
                   ))}
                   {g.es.length === 0 && <li className="sess-none">No sessions yet</li>}
-                  {g.es.length > limit && <li><button type="button" className="sess-showall" onClick={() => setShowAll({ ...showAll, [g.cwd]: true })}>Show {g.es.length - limit} more</button></li>}
+                  {g.es.length > shown.length && <li><button type="button" className="sess-showall" onClick={() => setShowAll({ ...showAll, [g.cwd]: true })}>Show {g.es.length - shown.length} more</button></li>}
                 </ul>
               )}
             </section>

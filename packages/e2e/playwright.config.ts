@@ -54,10 +54,17 @@ function setup(): E2EState {
   fs.writeFileSync(path.join(project, 'src/example.ts'), 'export const greeting = "hello, world";\nexport const answer = 42;\nexport function add(a: number, b: number): number { return a + b; }\n');
   fs.writeFileSync(path.join(project, 'long.txt'), Array.from({ length: 70 }, (_, i) => longLine(i, 'EDITED')).join('\n') + '\n');
   fs.writeFileSync(path.join(project, 'NOTES.md'), '# Notes\n\nA new, untracked file.\n');
+  // Third fixture (the `fs` project): a repo with ONLY a README, so the mock agent's files land as new folders (src/lib/util.ts).
+  const fsProject = path.join(home, 'fs-project');
+  fs.mkdirSync(fsProject, { recursive: true });
+  fs.writeFileSync(path.join(fsProject, 'README.md'), '# FS fixture\n');
+  const fsGit = (...args: string[]) => execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', ...args], { cwd: fsProject, stdio: 'ignore' });
+  fsGit('init', '-q', '-b', 'main'); fsGit('add', '-A'); fsGit('commit', '-q', '-m', 'fixture');
   // Two isolated config homes (one per server) that share the fixed token.
   const mainHome = path.join(home, 'home-main');
   const slowHome = path.join(home, 'home-slow');
-  for (const h of [mainHome, slowHome]) {
+  const fsHome = path.join(home, 'home-fs');
+  for (const h of [mainHome, slowHome, fsHome]) {
     fs.mkdirSync(h, { recursive: true, mode: 0o700 });
     fs.writeFileSync(path.join(h, 'config.json'), JSON.stringify({ token: TOKEN, app: {} }, null, 2), { mode: 0o600 });
   }
@@ -65,7 +72,8 @@ function setup(): E2EState {
   const webSnapshot = path.join(home, 'web-dist');
   fs.cpSync(path.join(repoRoot, 'packages/web/dist'), webSnapshot, { recursive: true });
   return {
-    home, project, mainHome, slowHome, webSnapshot,
+    home, project, mainHome, slowHome, webSnapshot, fsHome, fsProject,
+    fsUrl: `http://127.0.0.1:${freePort()}`,
     mainUrl: `http://127.0.0.1:${freePort()}`,
     slowUrl: `http://127.0.0.1:${freePort()}`,
   };
@@ -89,7 +97,7 @@ const flavours = {
 } as const;
 const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_MAX_SESSIONS: '500', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
 const q = (p: string) => JSON.stringify(p); // paths with spaces (Windows profiles, macOS volumes)
-const serverCmd = (url: string) => `node ${q(path.join(repoRoot, 'packages/server/dist/cli.js'))} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${q(state.project)}`;
+const serverCmd = (url: string, cwd = state.project) => `node ${q(path.join(repoRoot, 'packages/server/dist/cli.js'))} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${q(cwd)}`;
 
 export default defineConfig({
   testDir: './tests',
@@ -115,10 +123,13 @@ export default defineConfig({
       { name: `app${fl.suffix}`, testDir: './tests/app', use: { ...fl.device, baseURL: state.mainUrl, viewport, launchOptions: fl.launchOptions } },
       // Slowed mock (speed 0.25): streaming, interrupt, reattach and queueing need a live "running" window.
       { name: `live${fl.suffix}`, testDir: './tests/live', use: { ...fl.device, baseURL: state.slowUrl, viewport, launchOptions: fl.launchOptions } },
+      // Honest mock (WORKSTATION_MOCK_FS=1): the agent's Edit/Write really change a throwaway repo, "Always allow" is persisted.
+      { name: `fs${fl.suffix}`, testDir: './tests/fs', use: { ...fl.device, baseURL: state.fsUrl, viewport, launchOptions: fl.launchOptions } },
     ];
   }),
   webServer: [
     { command: serverCmd(state.mainUrl), url: state.mainUrl, reuseExistingServer: false, env: mockEnv(state.mainHome, '0'), stdout: 'ignore', stderr: 'pipe', timeout: 60_000 },
     { command: serverCmd(state.slowUrl), url: state.slowUrl, reuseExistingServer: false, env: mockEnv(state.slowHome, '0.25'), stdout: 'ignore', stderr: 'pipe', timeout: 60_000 },
+    { command: serverCmd(state.fsUrl, state.fsProject), url: state.fsUrl, reuseExistingServer: false, env: { ...mockEnv(state.fsHome, '0'), WORKSTATION_MOCK_FS: '1' }, stdout: 'ignore', stderr: 'pipe', timeout: 60_000 },
   ],
 });

@@ -140,6 +140,8 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     const rec = sessions.worktrees.get(id);
     return rec ? { worktree: { root: rec.root, branch: rec.branch, path: rec.dir } } : {};
   };
+  /** The session's folder, or undefined when it is gone (a removed worktree): the SDK then looks for the transcript in every project, so the history of an ended worktree session stays readable. */
+  const softDir = (input: string) => requireDir(input).catch((e) => { if (e instanceof HttpError && e.status === 404) return undefined; throw e; });
   app.get('/api/sessions', async (c) => {
     const cwdQ = c.req.query('cwd');
     const dir = cwdQ ? await requireDir(cwdQ) : undefined;
@@ -153,7 +155,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       });
     }
     for (const l of sessions.list()) {
-      if (out.has(l.id) || (dir && !samePath(l.cwd, dir))) continue;
+      if (out.has(l.id) || (dir && !samePath(l.cwd, dir) && !(sessions.worktrees.get(l.id) && samePath(sessions.worktrees.get(l.id)!.root, dir)))) continue;
       out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true, ...worktreeOf(l.id) });
     }
     return c.json([...out.values()].sort((a, b) => b.lastModified - a.lastModified));
@@ -162,7 +164,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     const id = c.req.param('id');
     if (!uuidish(id)) throw new HttpError(400, 'invalid session id');
     const cwdQ = c.req.query('cwd');
-    const dir = cwdQ ? await requireDir(cwdQ) : undefined;
+    const dir = cwdQ ? await softDir(cwdQ) : undefined;
     const messages = await adapter.getSessionMessages(id, dir ? { dir } : undefined).catch((e) => {
       if (sessions.isLive(id)) return [];
       throw new HttpError(404, e instanceof Error ? e.message : 'session not found');
@@ -184,7 +186,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     const body = (await c.req.json().catch(() => null)) as { title?: unknown } | null;
     if (!body || typeof body.title !== 'string' || !body.title.trim() || body.title.length > 500) throw new HttpError(400, 'title (non-empty string) required');
     const cwdQ = c.req.query('cwd');
-    await adapter.renameSession(id, body.title.trim(), cwdQ ? { dir: await requireDir(cwdQ) } : undefined);
+    await adapter.renameSession(id, body.title.trim(), cwdQ ? { dir: await softDir(cwdQ) } : undefined);
     const live = sessions.get(id);
     if (live) live.title = body.title.trim();
     return c.json({ ok: true });
@@ -197,7 +199,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     // remove the worktree we created for this session (only if clean, unless ?force=1); kept worktrees are reported back
     const worktree = sessions.worktrees.get(id) ? await sessions.removeSessionWorktree(id, c.req.query('force') === '1') : undefined;
     const cwdQ = c.req.query('cwd');
-    await adapter.deleteSession(id, cwdQ ? { dir: await requireDir(cwdQ) } : undefined).catch((e) => {
+    await adapter.deleteSession(id, cwdQ ? { dir: await softDir(cwdQ) } : undefined).catch((e) => {
       if (!live && !worktree?.removed) throw new HttpError(404, e instanceof Error ? e.message : 'session not found');
     });
     return c.json({ ok: true, ...(worktree ? { worktree } : {}) });

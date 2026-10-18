@@ -17,7 +17,7 @@ test.describe('N1: a real API error is one actionable message (mock 401, real st
     await openApp(page);
     await newSessionInProject(page);
     await sendPrompt(page, 'please say hi 401');
-    const banner = page.locator('.banner.error', { hasText: 'API error 401: authentication_failed' });
+    const banner = page.locator('.banner.error', { hasText: 'The API key was rejected (401)' });
     await expect(banner).toBeVisible();
     await expectIdle(page);
     await expect(page.locator('.banner.error')).toHaveCount(1); // exactly one: the result adds no second banner

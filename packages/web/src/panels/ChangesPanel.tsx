@@ -20,8 +20,8 @@ export const SPLIT_MIN_WIDTH = 620;
 const LETTER: Record<ChangeStatus, string> = { modified: 'M', added: 'A', deleted: 'D', renamed: 'R', untracked: 'U' };
 const TITLE: Record<ChangeStatus, string> = { modified: 'Modified', added: 'Added', deleted: 'Deleted', renamed: 'Renamed', untracked: 'Untracked (new file)' };
 
-function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert, sessionId }: {
-  sessionId: string; f: ChangeFile; open: boolean; onToggle: () => void; mode: Mode; focused: boolean; canRevert: boolean; onRevert: () => void;
+function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert, sessionId, loading }: {
+  loading: boolean; sessionId: string; f: ChangeFile; open: boolean; onToggle: () => void; mode: Mode; focused: boolean; canRevert: boolean; onRevert: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const [flash, setFlash] = useState(false);
@@ -55,7 +55,8 @@ function FileCard({ f, open, onToggle, mode, focused, canRevert, onRevert, sessi
         <div className="cfile-body">
           {f.binary ? <div className="cdiff-empty">Binary file</div>
             : hasBody ? <FileDiff lines={f.lines!} path={f.path} mode={mode} review={{ sessionId, rel: f.rel, path: f.path }} />
-            : f.added === undefined ? <div className="cdiff-empty"><Spinner size={12} /> Loading diff…</div>
+            : f.isDir ? <div className="cdiff-empty">New folder. Its files are not listed individually.</div>
+            : f.added === undefined ? (loading ? <div className="cdiff-empty"><Spinner size={12} /> Loading diff…</div> : <div className="cdiff-empty">{f.status === 'untracked' ? 'New file. No preview loaded (many new files); it is still included in Commit.' : 'No preview available.'}</div>)
             : <div className="cdiff-empty">{f.status === 'deleted' ? 'File deleted.' : 'No textual changes.'}</div>}
         </div>
       )}
@@ -194,9 +195,10 @@ function ChangesPanel({ sessionId, cwd, focus }: PanelProps) {
         ) : files.map((f, i) => (
           <FileCard key={f.path} sessionId={sessionId} f={f} mode={shownMode} open={isOpen(f, i)} focused={f.path === focusPath}
             onToggle={() => setToggled({ ...toggled, [f.path]: !isOpen(f, i) })}
-            canRevert={f.source === 'git' && git.isRepo && f.status !== 'renamed'} onRevert={() => void revert(f)} />
+            loading={git.loading} canRevert={f.source === 'git' && git.isRepo && f.status !== 'renamed' && !f.isDir} onRevert={() => void revert(f)} />
         ))}
       </div>
+      {!!git.untrackedMore && <div className="changes-note"><Icon name="info" size={13} /> and {git.untrackedMore} more new file{git.untrackedMore === 1 ? '' : 's'} not shown. They are not included in Commit.</div>}
       <ReviewBar sessionId={sessionId} />
       {git.isRepo && commitFiles.length > 0 && <CommitBox sessionId={sessionId} cwd={cwd} files={commitFiles} />}
     </div>

@@ -5,7 +5,7 @@ import { useSessions } from '../../store/sessions';
 import { absPath, projectChanges, resolveBranch, type GitSnapshot, type ProjectChanges } from './derive';
 import { parseGitDiff } from './gitdiff';
 
-export interface GitState extends GitSnapshot { loading: boolean; loaded: boolean; error?: string; branch?: string; at: number }
+export interface GitState extends GitSnapshot { loading: boolean; loaded: boolean; error?: string; branch?: string; at: number; untrackedMore?: number }
 const blank: GitState = { isRepo: false, files: [], diffs: {}, loading: false, loaded: false, at: 0 };
 
 interface Store { bySession: Record<string, GitState>; set: (id: string, p: Partial<GitState>) => void }
@@ -16,10 +16,12 @@ export const useGit = create<Store>((set, get) => ({
 export const selectGit = (id: string) => (s: Store): GitState => s.bySession[id] ?? blank;
 
 const inflight = new Map<string, { again: boolean }>();
-const MAX_UNTRACKED = 40;
+const MAX_UNTRACKED = 60; // new files whose diff is fetched up front; the rest show a note instead of a spinner
 
 /** Load git status + diffs for a session's cwd. Concurrent calls coalesce (one trailing re-run). */
 export async function refreshGit(id: string, cwd: string): Promise<void> {
+  // The worktree was removed: its directory is gone, so asking git about it would only 404.
+  if (useSessions.getState().sessions[id]?.wtRemoved) return;
   const running = inflight.get(id);
   if (running) { running.again = true; return; }
   const ctl = { again: false };
@@ -28,6 +30,7 @@ export async function refreshGit(id: string, cwd: string): Promise<void> {
   try {
     do {
       ctl.again = false;
+      if (useSessions.getState().sessions[id]?.wtRemoved) break;
       const st = await api.gitStatus(cwd);
       if (!st.isRepo) { useGit.getState().set(id, { isRepo: false, files: [], diffs: {}, root: undefined, branch: undefined, loaded: true, error: undefined, at: Date.now() }); continue; }
       const root = st.root ?? cwd;
@@ -43,7 +46,7 @@ export async function refreshGit(id: string, cwd: string): Promise<void> {
           if (parsed) diffs[abs] = { ...parsed, status: 'added' };
         }));
       }
-      useGit.getState().set(id, { isRepo: true, root, files: st.files, diffs, branch: st.branch, loaded: true, error: undefined, at: Date.now() });
+      useGit.getState().set(id, { isRepo: true, root, files: st.files, diffs, branch: st.branch, untrackedMore: st.untrackedMore, loaded: true, error: undefined, at: Date.now() });
     } while (ctl.again);
   } catch (e) {
     useGit.getState().set(id, { loaded: true, error: e instanceof Error ? e.message : String(e) });
@@ -61,11 +64,12 @@ export function useGitSync(id: string, cwd: string) {
   const status = useSessions((s) => s.sessions[id]?.runtime.status);
   const turns = useSessions((s) => s.sessions[id]?.conv.usage.turns);
   const results = useSessions((s) => Object.keys(s.sessions[id]?.conv.toolResults ?? {}).length);
+  const removed = useSessions((s) => !!s.sessions[id]?.wtRemoved);
   useEffect(() => {
-    if (!cwd) return;
+    if (!cwd || removed) return;
     const t = setTimeout(() => void refreshGit(id, cwd), 350);
     return () => clearTimeout(t);
-  }, [id, cwd, status, turns, results]);
+  }, [id, cwd, status, turns, results, removed]);
   useEffect(() => {
     if (!cwd) return;
     const back = () => void refreshGit(id, cwd); // the server was away: status requests failed meanwhile

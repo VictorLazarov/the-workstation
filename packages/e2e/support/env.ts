@@ -17,6 +17,10 @@ export interface E2EState {
   mainHome: string;
   slowHome: string;
   webSnapshot: string;
+  /** third mock server with WORKSTATION_MOCK_FS=1 (Edit/Write touch the disk, Always allow persists) and its own throwaway repo */
+  fsUrl: string;
+  fsHome: string;
+  fsProject: string;
 }
 
 export function readState(): E2EState {

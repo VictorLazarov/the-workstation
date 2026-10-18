@@ -62,7 +62,7 @@ bridges permissions/questions to the browser, exposes REST for files/git/search/
 token-gated PTY terminal socket, and serves the built SPA. `packages/web` (React + Vite + zustand) folds raw SDK
 events into conversation state and renders them; panels register themselves. `packages/protocol` holds the
 shared wire types. `devcontainer/` has a Dev Container Feature + installer. A mock SDK (`WORKSTATION_MOCK=1`)
-drives demos and e2e tests. Details: `ARCHITECTURE.md`.
+drives demos and e2e tests (`WORKSTATION_MOCK_FS=1` makes its Edit/Write touch the disk and persists "Always allow"; the e2e `fs` project uses it). Details: `ARCHITECTURE.md`.
 
 ## 7. Current state (honest snapshot)
 **Built and verified:** server + WebSocket protocol; real-SDK sessions (streaming, permissions incl. remember,

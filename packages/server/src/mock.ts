@@ -16,10 +16,16 @@
  *   "error"  -> result with is_error
  *   "401"    -> fatal provider error (api_retry authentication_failed; the host interrupts the turn)
  *   anything else -> short streamed markdown reply (with a thinking block)
+ * WORKSTATION_MOCK_FS=1: the mock behaves like the real agent on disk. Edit/Write really change files under the session cwd
+ *   (so Changes / untracked-folder flows are exercised), "Always allow" is persisted to <cwd>/.claude/settings.local.json and applied
+ *   on the next matching tool call. "newdir" in a prompt makes the Write create a new folder (src/lib/util.ts). Off by default so
+ *   demos and shared fixtures are never modified.
  * Set WORKSTATION_MOCK_SPEED=0 for no delays (tests), 2 for double speed, default 1.
  */
 import { randomUUID } from 'node:crypto';
+import fs from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 import type { CanUseTool, ModelInfo, Options, PermissionUpdate, SDKSessionInfo, SDKUserMessage, SessionMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
 
@@ -227,8 +233,49 @@ class MockQuery implements QueryHandle {
     return { type: 'user', message, parent_tool_use_id: parent, uuid, session_id: this.sessionId, tool_use_result: structured ?? undefined };
   }
 
-  private needsPermission(tool: string): boolean {
+  private get fsMode() { return process.env.WORKSTATION_MOCK_FS === '1'; }
+  private rulesFile() { return path.join(this.session.cwd, '.claude', 'settings.local.json'); }
+  private allowRules(): string[] {
+    try { return (JSON.parse(fs.readFileSync(this.rulesFile(), 'utf8')) as { permissions?: { allow?: string[] } }).permissions?.allow ?? []; } catch { return []; }
+  }
+  /** `Tool` / `Tool(exact)` / `Tool(prefix:*)` as the real permission rules match. */
+  private ruleAllows(tool: string, input: Json): boolean {
+    const subject = tool === 'Bash' ? String(input.command ?? '') : String(input.file_path ?? input.url ?? '');
+    return this.allowRules().some((r) => {
+      const m = /^([A-Za-z_]+)(?:\((.*)\))?$/s.exec(r);
+      if (!m || m[1] !== tool) return false;
+      if (m[2] === undefined) return true;
+      return m[2].endsWith(':*') ? subject.startsWith(m[2].slice(0, -2)) : m[2] === subject;
+    });
+  }
+  private persistRules(updates: PermissionUpdate[] | undefined) {
+    for (const u of updates ?? []) {
+      if (u.type !== 'addRules' || u.behavior !== 'allow' || u.destination !== 'localSettings') continue;
+      const file = this.rulesFile();
+      let cur: Json = {};
+      try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) as Json; } catch { /* new file */ }
+      const perms = (cur.permissions ?? {}) as { allow?: string[] };
+      const allow = new Set(perms.allow ?? []);
+      for (const r of u.rules) allow.add(r.ruleContent ? `${r.toolName}(${r.ruleContent})` : r.toolName);
+      cur.permissions = { ...perms, allow: [...allow] };
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, JSON.stringify(cur, null, 2), { mode: 0o600 });
+    }
+  }
+  /** Edit/Write really touch the disk in FS mode. An Edit of a file that does not exist yet seeds it first (the fixture's old text). */
+  private applyToDisk(tool: 'Edit' | 'Write', input: Json): void {
+    if (!this.fsMode) return;
+    const file = String(input.file_path);
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (tool === 'Write') { fs.writeFileSync(file, String(input.content ?? '')); return; }
+    const old = String(input.old_string), next = String(input.new_string);
+    const cur = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : `${old}\n`;
+    fs.writeFileSync(file, cur.includes(old) ? cur.replace(old, () => next) : cur);
+  }
+
+  private needsPermission(tool: string, input?: Json): boolean {
     if (tool === 'AskUserQuestion' || tool === 'ExitPlanMode') return true;
+    if (this.fsMode && input && this.ruleAllows(tool, input)) return false;
     if (this.permissionMode === 'bypassPermissions' || this.permissionMode === 'dontAsk') return false;
     if (this.permissionMode === 'acceptEdits' && (tool === 'Edit' || tool === 'Write')) return false;
     return ['Bash', 'Edit', 'Write', 'WebFetch'].includes(tool);
@@ -237,9 +284,12 @@ class MockQuery implements QueryHandle {
   /** Ask the host via canUseTool; returns the (possibly rewritten) input or an error text on deny. */
   private async ask(tool: string, input: Json, toolUseID: string, extra: { suggestions?: PermissionUpdate[]; title?: string; description?: string; decisionReason?: string; blockedPath?: string } = {}) {
     const cb: CanUseTool | undefined = this.params.options.canUseTool;
-    if (!this.needsPermission(tool) || !cb) return { ok: true as const, input };
+    if (!this.needsPermission(tool, input) || !cb) return { ok: true as const, input };
     const res = await cb(tool, input, { signal: this.abortCtl.signal, toolUseID, requestId: randomUUID(), ...extra });
-    if (res && res.behavior === 'allow') return { ok: true as const, input: (res.updatedInput ?? input) as Json };
+    if (res && res.behavior === 'allow') {
+      if (this.fsMode) this.persistRules(res.updatedPermissions);
+      return { ok: true as const, input: (res.updatedInput ?? input) as Json };
+    }
     const d = res as { message?: string; interrupt?: boolean } | null;
     // Real SDK shape: a Stop while a prompt is open rejects the tool with this fixed text (not our "Interrupted by user" message).
     if (this.aborted || d?.interrupt) { this.abortedInTool = true; return { ok: false as const, message: REJECTED_BY_INTERRUPT, interrupt: true }; }
@@ -256,7 +306,7 @@ class MockQuery implements QueryHandle {
       final = 'Demo complete.';
     } else if (has('bash')) final = yield* this.bashScenario();
     else if (has('edit')) final = yield* this.editScenario();
-    else if (has('write')) final = yield* this.writeScenario();
+    else if (has('write')) final = yield* this.writeScenario(has('newdir'));
     else if (has('todo')) final = yield* this.todoScenario();
     else if (has('task', 'subagent')) final = yield* this.taskScenario();
     else if (has('web')) final = yield* this.webScenario();
@@ -295,6 +345,7 @@ class MockQuery implements QueryHandle {
       suggestions: [{ type: 'setMode', mode: 'acceptEdits', destination: 'session' }],
     });
     if (!r.ok) { yield this.toolResult(id, r.message, true); return yield* this.finish(`Edit denied: ${r.message}`); }
+    this.applyToDisk('Edit', input);
     yield this.toolResult(id, `The file ${file} has been updated.`, false, {
       filePath: file, oldString: input.old_string, newString: input.new_string, originalFile: 'export const greeting = "hello";\n',
       structuredPatch: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, lines: ['-export const greeting = "hello";', '+export const greeting = "hello, world";', '+export const farewell = "bye";'] }],
@@ -302,15 +353,16 @@ class MockQuery implements QueryHandle {
     return yield* this.finish('Edited `src/example.ts` (+2 -1).');
   }
 
-  private async *writeScenario(): AsyncGenerator<unknown, string> {
+  private async *writeScenario(newDir = false): AsyncGenerator<unknown, string> {
     const id = this.toolId();
-    const file = `${this.session.cwd}/NOTES.md`;
+    const file = `${this.session.cwd}/${newDir ? 'src/lib/util.ts' : 'NOTES.md'}`;
     const input = { file_path: file, content: '# Notes\n\nCreated by the mock agent.\n' };
     yield* this.step([{ type: 'text', text: 'Creating a notes file.' }, { type: 'tool_use', id, name: 'Write', input }]);
     const r = await this.ask('Write', input, id, { title: `Claude wants to create ${file}` });
     if (!r.ok) { yield this.toolResult(id, r.message, true); return yield* this.finish(`Write denied: ${r.message}`); }
+    this.applyToDisk('Write', input);
     yield this.toolResult(id, `File created successfully at: ${file}`, false, { type: 'create', filePath: file, content: input.content, structuredPatch: [] });
-    return yield* this.finish('Created `NOTES.md`.');
+    return yield* this.finish(newDir ? 'Created `src/lib/util.ts`.' : 'Created `NOTES.md`.');
   }
 
   private todos(statuses: string[]) {
@@ -396,6 +448,8 @@ class MockQuery implements QueryHandle {
   /** A fatal provider error as the real CLI reports it: an api_retry (401 authentication_failed); the host then interrupts the turn. */
   private async *authFailureScenario(): AsyncGenerator<unknown, void> {
     yield this.m({ type: 'system', subtype: 'api_retry', attempt: 1, max_retries: 10, retry_delay_ms: 577, error_status: 401, error: 'authentication_failed' });
+    // the real CLI also writes a synthetic assistant message carrying the failure (error: authentication_failed) with the CLI's own wording
+    yield { type: 'assistant', message: { id: randomUUID(), type: 'message', role: 'assistant', model: '<synthetic>', content: [{ type: 'text', text: 'Invalid API key \u00b7 Fix external API key' }], stop_reason: 'stop_sequence', stop_sequence: '', usage: { input_tokens: 0, output_tokens: 0 } }, error: 'authentication_failed', parent_tool_use_id: null, uuid: randomUUID(), session_id: this.sessionId };
     await Promise.race([this.wake.wait(), sleep(5000)]);
   }
 
@@ -517,7 +571,8 @@ export function createMockAdapter(): SdkAdapter {
     query: (params) => new MockQuery(params, store),
     async listSessions(o) {
       let all = [...store.values()].filter((s) => s.messages.length > 0);
-      if (o?.dir) all = all.filter((s) => s.cwd === o.dir);
+      // like the real SDK, a session running in one of the project's worktrees (.claude/worktrees/<n>) belongs to the project
+      if (o?.dir) all = all.filter((s) => s.cwd === o.dir || s.cwd.startsWith(`${o.dir}${path.sep}.claude${path.sep}worktrees${path.sep}`));
       all.sort((a, b) => b.modified - a.modified);
       return all.slice(0, o?.limit ?? 500).map(info);
     },

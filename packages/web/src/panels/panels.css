@@ -193,7 +193,7 @@ button.cx-line { border-radius: 4px; } button.cx-line:hover { color: var(--text)
 .ov-actions { display: flex; gap: 6px; margin-top: 6px; }
 .mcp-main .mcp-state { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; overflow: hidden; overflow-wrap: anywhere; }
 
-.rules-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.rules-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; } /* minmax(0,1fr): a long no-wrap rule must not size the track (it ellipsizes inside .rule-text) */
 .rule-row { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); }
 .rule-kind { flex: none; font-size: var(--fs-sm); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--hover); color: var(--text-2); }
 .rule-kind.rk-allow { color: var(--ok); } .rule-kind.rk-deny { color: var(--danger); }

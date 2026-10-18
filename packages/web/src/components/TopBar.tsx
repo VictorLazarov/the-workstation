@@ -34,7 +34,7 @@ export function TopBar({ session }: { session?: SessionData }) {
           </div>
           <div className="topbar-spacer" />
           <div className="topbar-chips">
-            <span className={`status-pill st-${status}`}><StatusDot status={status} />{label}</span>
+            <span className={`status-pill st-${status}`} title={label}><StatusDot status={status} /><span className="pill-text">{label}</span></span>
             {cost > 0 && <span className="cost" title={`${session.conv.usage.turns} turn(s)`}>{formatCost(cost)}</span>}
           </div>
         </>

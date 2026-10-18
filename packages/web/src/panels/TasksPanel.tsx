@@ -48,7 +48,7 @@ function Row({ t, sessionId }: { t: TaskRow; sessionId: string }) {
           </span>
           {t.description && <span className="task-desc">{t.description}</span>}
           {t.lastTool && <span className="task-last"><Spinner size={10} /> Using {t.lastTool}…</span>}
-          {t.summary && !isActive(t.status) && <span className="task-summary">{t.summary}</span>}
+          {t.summary && !isActive(t.status) && t.summary.trim() !== t.description.trim() && <span className="task-summary">{t.summary}</span>}
           {(t.tools || t.tokens || t.durationMs) ? (
             <span className="task-meta">
               {t.tools ? <span className="pill">{t.tools} tool{t.tools > 1 ? 's' : ''}</span> : null}

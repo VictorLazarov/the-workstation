@@ -85,7 +85,9 @@ test.describe('projects and sessions', () => {
     }
     const project = page.locator('section.proj').filter({ has: page.locator('.proj-name', { hasText: 'project' }) }).first();
     await expect(project.locator('.sess').first()).toBeVisible();
-    await expect(project.locator('.sess')).toHaveCount(6);
+    // six by recency, plus any session of this shared server that needs input or is running (those are never folded away)
+    await expect.poll(async () => (await project.locator('.sess').count()) - (await project.locator('.sess.attn, .sess.run').count())).toBeLessThanOrEqual(6);
+    expect(await project.locator('.sess').count()).toBeGreaterThanOrEqual(6);
     const more = project.getByRole('button', { name: /^Show \d+ more$/ });
     await expect(more).toBeVisible();
     await more.click();

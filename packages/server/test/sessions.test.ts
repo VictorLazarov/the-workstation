@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { connect, makeServer, sdkMsgs, startSession, type TestServer } from './helpers.js';
+import { api, connect, makeServer, sdkMsgs, startSession, type TestServer } from './helpers.js';
 
 let s: TestServer;
 beforeAll(async () => { s = await makeServer(); });
@@ -24,6 +24,18 @@ describe('session lifecycle with mock', () => {
     expect(states.at(-1)).toBe('idle');
     const seqs = c.msgs.filter((m) => m.type === 'sdk').map((m: any) => m.seq);
     expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    c.close();
+  });
+
+  it('history of a session whose folder is gone (a removed worktree) stays readable', async () => {
+    const c = await connect(s);
+    const sid = await startSession(c, s.cwd);
+    c.send({ type: 'prompt', sessionId: sid, text: 'hi there', clientMsgId: 'g1' });
+    await c.waitFor(isResult);
+    const gone = path.join(s.cwd, '.claude', 'worktrees', 'removed-already');
+    const r = await api(s, `/api/sessions/${sid}/messages?cwd=${encodeURIComponent(gone)}`);
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as any).messages.length).toBeGreaterThan(0);
     c.close();
   });
 
@@ -126,7 +138,8 @@ describe('session lifecycle with mock', () => {
     c.send({ type: 'prompt', sessionId: sid, text: 'say 401', clientMsgId: 'z' });
     const e: any = await c.waitFor((m) => m.type === 'error' && m.sessionId === sid, 8000, from);
     expect(e.code).toBe('authentication_failed');
-    expect(e.message).toMatch(/^API error 401: authentication_failed/);
+    expect(e.message).toMatch(/API key was rejected \(401\).*Settings/);
+    expect(c.msgs.filter((m: any) => m.type === 'error' && m.sessionId === sid)).toHaveLength(1); // one failure, one error event
     const r: any = await c.waitFor((m) => isResult(m) && c.msgs.indexOf(m) > from, 8000, from);
     expect(r.message).toMatchObject({ subtype: 'error_during_execution', terminal_reason: 'aborted_streaming' });
     expect(c.msgs.indexOf(e)).toBeLessThan(c.msgs.indexOf(r)); // the error is reported BEFORE the result

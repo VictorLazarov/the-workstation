@@ -30,7 +30,13 @@ GitHub Copilot app). NOT a terminal emulator and NOT a CLI transcript in a brows
 - One-line tool steps ellipsize (`min-width: 0` + `text-overflow`), they never paint over their neighbours.
 - Popovers and menus are placed after measuring (anchored to the trigger, flipped to the side with room, clamped to the
   viewport). Toasts: bottom-left inside the sidebar column while it is docked, otherwise top-right under the topbar; they
-  never cover the composer, the inspector tabs or the commit box.
+  never cover the composer, the inspector tabs or the commit box. At <= 800px a toast gets its own strip under the topbar (the
+  conversation moves down, nothing is covered). Every toast ends by itself (errors and "needs you" included; a repeat restarts the timer
+  but never past 20s), and the lasting state lives elsewhere (sidebar row, permission card, banner). Toasts about session state are
+  dropped when the connection is lost.
+- Long unbreakable content (a URL or hash in prose, a 300-character remembered rule, a long path) wraps or ellipsizes inside its box;
+  it never widens a dialog or scrolls the conversation sideways. Covered by layout-lint and `tests/fs/fix4.spec.ts`.
+- A session that needs input (or is running/errored) is never hidden behind "Show N more" in the sidebar. A failure is reported once.
 - Split diff needs a wide inspector (>= 620px); below that it falls back to unified.
 
 ## Keyboard shortcuts

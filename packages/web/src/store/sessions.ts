@@ -420,6 +420,8 @@ export const useSessions = create<Store>((set, get) => {
         if ((conn === 'closed' || conn === 'offline') && was === 'open') {
           // streaming state is stale until we re-attach
           for (const s of Object.values(get().sessions)) if (s.live) patch(s.id, (x) => ({ conv: finishStreaming(x.conv) }));
+          // "Approval needed" / "finished" toasts describe a state we can no longer see: they must not outlive the outage
+          useUi.getState().dismissStaleToasts();
         }
         // A refused WebSocket upgrade looks like any network error: ask /api/health whether the token is the problem.
         if ((conn === 'closed' || conn === 'offline') && !isDemo()) void get().recheckAccess();
@@ -466,7 +468,8 @@ export const useSessions = create<Store>((set, get) => {
       const cwds = new Set<string>([...get().projects]);
       const sv = get().hello?.serverCwd;
       if (sv) cwds.add(sv);
-      for (const s of Object.values(get().sessions)) if (s.cwd) cwds.add(s.cwd);
+      // A worktree session is listed under its PROJECT; its own folder may be gone (removed worktree), and asking for it is a 404.
+      for (const s of Object.values(get().sessions)) { if (s.wtRemoved) continue; const d = sessionProject(s); if (d) cwds.add(d); }
       const lists = await Promise.all([...cwds].map((c) => api.sessions(c).catch(() => [] as SessionSummary[])));
       const seen = new Map<string, SessionSummary>();
       for (const l of lists) for (const s of Array.isArray(l) ? l : []) seen.set(s.sessionId, { ...s, cwd: s.cwd ?? [...cwds][lists.indexOf(l)] });

@@ -48,10 +48,13 @@ export async function gitRoot(cwd: string): Promise<string | null> {
   }
 }
 
+/** New (untracked) files listed individually in the Changes panel; more are counted in `untrackedMore`. */
+export const MAX_UNTRACKED_FILES = 200;
+
 export async function gitStatus(cwd: string): Promise<GitStatus> {
   if (!(await isGitRepo(cwd))) return { isRepo: false, files: [] };
   const root = (await gitRoot(cwd)) ?? undefined;
-  const r = await git(cwd, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=normal']);
+  const r = await git(cwd, ['status', '--porcelain=v1', '-b', '-z', '--untracked-files=all']);
   const parts = r.stdout.split('\0');
   const files: GitFileStatus[] = [];
   let branch: string | undefined, ahead: number | undefined, behind: number | undefined;
@@ -75,7 +78,17 @@ export async function gitStatus(cwd: string): Promise<GitStatus> {
     if (x === 'R' || x === 'C') i++; // next entry is the original path
     files.push({ path: file, index: x, worktree: y });
   }
-  return { isRepo: true, branch, ahead, behind, files, root: root === undefined ? undefined : toPosix(root) };
+  // `--untracked-files=all` lists every new file (a new folder is never one opaque `dir/` entry the UI cannot review);
+  // a pathological number of them (a generated tree) is capped so the panel and Commit stay in step with what is shown.
+  let untrackedMore = 0;
+  let kept = 0;
+  const shown = files.filter((f) => {
+    if (f.index !== '?' || f.worktree !== '?') return true;
+    if (kept < MAX_UNTRACKED_FILES) { kept++; return true; }
+    untrackedMore++;
+    return false;
+  });
+  return { isRepo: true, branch, ahead, behind, files: shown, ...(untrackedMore ? { untrackedMore } : {}), root: root === undefined ? undefined : toPosix(root) };
 }
 
 export async function gitDiff(cwd: string, relPath?: string): Promise<string> {
