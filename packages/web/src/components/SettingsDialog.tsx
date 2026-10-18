@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppConfig, EffortLevel, PermissionMode } from '@workstation/protocol';
 import { platform } from '../platform';
 import { clearRemoteServer, confirmRemoteServer, getRemoteServer, getServerBase, normalizeServerOrigin } from '../lib/storage';
@@ -26,8 +26,13 @@ export function SettingsDialog() {
   const firstRunPending = useUi((s) => s.settingsFirstRun);
   const close = () => { useUi.getState().set({ settingsOpen: false }); useUi.setState({ settingsFirstRun: false }); try { localStorage.setItem('ws.firstRunDone', '1'); } catch { /* ignore */ } };
 
+  // Seed the form ONCE per opening (when the config is first available). A later config refresh (reconnect, a background reload) must
+  // not wipe what the person is typing.
+  const seeded = useRef(false);
   useEffect(() => {
-    if (!open || !config) return;
+    if (!open) { seeded.current = false; return; }
+    if (!config || seeded.current) return;
+    seeded.current = true;
     setF({ baseUrl: config.anthropicBaseUrl ?? '', apiKey: '', authToken: '', model: config.defaultModel ?? '', effort: config.defaultEffort ?? 'medium', mode: config.defaultPermissionMode ?? 'default', custom: (config.customModels ?? []).join(', ') });
     setServer(getServerBase());
     setServerToken('');

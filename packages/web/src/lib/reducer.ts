@@ -431,29 +431,38 @@ export function applySdk(prev: Conversation, msg: unknown): Conversation {
  * appended at the very end ("all turn footers stacked after the last answer"). Each result is put right after the item of
  * the main-thread message that precedes it in the buffer (its own turn), exactly as live rendering orders it.
  */
+/** A main-thread user prompt / assistant message (not a tool result, not a sub-agent's): the anchor a turn's result footer belongs after. */
+export function isMainTurnEvent(m: AnyMsg): boolean {
+  return (m.type === 'assistant' || m.type === 'user') && !m.parent_tool_use_id && !(m.type === 'user' && Array.isArray(m.message?.content) && m.message.content.every((b: AnyMsg) => b?.type === 'tool_result'));
+}
+
+/**
+ * `next` is `applySdk(.., result)`: if the new result footer was appended at the end but its own turn (the `prev` main-thread event
+ * it follows) is earlier in the thread, move it right after that turn. `onlyIfLater` (live path) moves it only when a later
+ * user/assistant item really exists, so a normal live result (which is always last) is never reordered.
+ */
+export function placeResult(next: Conversation, prev: AnyMsg | null, onlyIfLater = false): Conversation {
+  const lane = next.lanes[MAIN_LANE];
+  const items = lane?.items ?? [];
+  const last = items[items.length - 1];
+  if (!lane || last?.kind !== 'result' || !prev) return next;
+  const anchor = items.findIndex((it, i) => i < items.length - 1 && (
+    prev.type === 'assistant' ? it.kind === 'assistant' && it.msgId === String(prev.message?.id ?? prev.uuid)
+      : prev.uuid ? it.kind === 'user' && it.uuid === prev.uuid : false));
+  if (anchor < 0 || anchor >= items.length - 2) return next;
+  if (onlyIfLater && !items.slice(anchor + 1, items.length - 1).some((it) => it.kind === 'assistant' || it.kind === 'user')) return next;
+  const moved = [...items.slice(0, anchor + 1), last, ...items.slice(anchor + 1, items.length - 1)];
+  return { ...next, lanes: { ...next.lanes, [MAIN_LANE]: { ...lane, items: moved } } };
+}
+
 export function replayOnto(conv: Conversation, events: unknown[]): Conversation {
   let c = conv;
   let prev: AnyMsg | null = null; // last main-thread user/assistant event seen
   for (const raw of events) {
     const m = (raw && typeof raw === 'object' ? raw : {}) as AnyMsg;
-    const next = applySdk(c, m);
-    if (m.type === 'result' && next !== c) {
-      const lane = next.lanes[MAIN_LANE];
-      const items = lane?.items ?? [];
-      const last = items[items.length - 1];
-      if (lane && last?.kind === 'result' && prev) {
-        const anchor = items.findIndex((it, i) => i < items.length - 1 && (
-          prev!.type === 'assistant' ? it.kind === 'assistant' && it.msgId === String(prev!.message?.id ?? prev!.uuid)
-            : prev!.uuid ? it.kind === 'user' && it.uuid === prev!.uuid : false));
-        // the LAST matching item (findIndex finds the first; assistant/user ids are unique, so equal)
-        if (anchor >= 0 && anchor < items.length - 2) {
-          const moved = [...items.slice(0, anchor + 1), last, ...items.slice(anchor + 1, items.length - 1)];
-          next.lanes = { ...next.lanes, [MAIN_LANE]: { ...lane, items: moved } };
-        }
-      }
-    } else if ((m.type === 'assistant' || m.type === 'user') && !m.parent_tool_use_id && !(m.type === 'user' && Array.isArray(m.message?.content) && m.message.content.every((b: AnyMsg) => b?.type === 'tool_result'))) {
-      prev = m;
-    }
+    let next = applySdk(c, m);
+    if (m.type === 'result' && next !== c) next = placeResult(next, prev);
+    else if (isMainTurnEvent(m)) prev = m;
     c = next;
   }
   return c;

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { git, gitRoot } from './git.js';
-import { relativeInside } from './platform.js';
+import { relativeInside, samePath } from './platform.js';
 
 /** A worktree this server created for a session (persisted so cleanup works after a restart). */
 export interface WorktreeRecord {
@@ -34,7 +34,7 @@ export class WorktreeRegistry {
   get(sessionId: string) { const r = this.recs.get(sessionId); return r && !r.removedAt ? r : undefined; }
   /** Also a removed worktree's record (its session stays listed under the project). */
   getAny(sessionId: string) { return this.recs.get(sessionId); }
-  removedFor(root: string): WorktreeRecord[] { return [...this.recs.values()].filter((r) => r.removedAt && r.root === root); }
+  removedFor(root: string): WorktreeRecord[] { return [...this.recs.values()].filter((r) => r.removedAt && samePath(r.root, root)); }
   markRemoved(sessionId: string) { const r = this.recs.get(sessionId); if (r && !r.removedAt) { this.recs.set(sessionId, { ...r, removedAt: Date.now() }); this.save(); } }
   add(r: WorktreeRecord) { this.recs.set(r.sessionId, r); this.save(); }
   delete(sessionId: string) { if (this.recs.delete(sessionId)) this.save(); }

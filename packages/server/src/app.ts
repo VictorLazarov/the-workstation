@@ -173,8 +173,11 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
         }
       }
     }
+    const canon = (p: string) => fsp.realpath(p).catch(() => p);
     for (const l of sessions.list()) {
-      if (out.has(l.id) || (dir && !samePath(l.cwd, dir) && !(sessions.worktrees.get(l.id) && samePath(sessions.worktrees.get(l.id)!.root, dir)))) continue;
+      if (out.has(l.id)) continue;
+      // compare canonically: a live session's cwd is what the client sent (macOS /var vs /private/var, Windows 8.3 short names)
+      if (dir && !samePath(await canon(l.cwd), dir)) { const w = sessions.worktrees.get(l.id); if (!(w && samePath(await canon(w.root), dir))) continue; }
       out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true, ...worktreeOf(l.id, l.cwd) });
     }
     return c.json([...out.values()].sort((a, b) => b.lastModified - a.lastModified));

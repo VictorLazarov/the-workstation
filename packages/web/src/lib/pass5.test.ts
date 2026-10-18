@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { applySdk, emptyConversation, foldMessages, replayOnto } from './reducer';
+import { applySdk, emptyConversation, foldMessages, placeResult, replayOnto } from './reducer';
 import { rankSlash, slashRunsOnEnter, type SlashOption } from './slash';
 import { truncate } from './utils';
 import { usableModes } from '../components/Chips';
@@ -28,6 +28,17 @@ describe('replayOnto: turn footers follow their own turn (pass 5, minor 1)', () 
     expect(replayOnto(foldMessages(transcript), [])).toEqual(foldMessages(transcript));
     const last = (c.lanes.main?.items ?? Object.values(c.lanes)[0]!.items).filter((i) => i.kind === 'assistant') as AssistantItem[];
     expect(last.map((a) => a.msgId)).toEqual(['m1', 'm2']);
+  });
+});
+
+describe('placeResult: a replayed result that arrives AFTER the history fetch (live path)', () => {
+  const transcript = [user('u1', 'one'), asst('m1', 'answer one'), user('u2', 'two'), asst('m2', 'answer two')];
+  it('is moved after its own turn, while a normal live result (always last) is untouched', () => {
+    const late = applySdk(foldMessages(transcript), result(0.01));
+    expect(kinds(late)).toBe('UAUAR');
+    expect(kinds(placeResult(late, asst('m1', 'answer one'), true))).toBe('UARUA');
+    expect(kinds(placeResult(late, asst('m2', 'answer two'), true))).toBe('UAUAR');
+    expect(kinds(placeResult(late, null, true))).toBe('UAUAR');
   });
 });
 

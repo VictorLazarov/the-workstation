@@ -5,7 +5,7 @@ import type {
 } from '@workstation/protocol';
 import { api } from '../lib/api';
 import {
-  addLocalUser, addNotice, applySdk, applyServer, conversationBefore, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, replayOnto, lastItem, markInterruptRequested, withKnownUsage,
+  addLocalUser, addNotice, applySdk, applyServer, conversationBefore, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, isMainTurnEvent, placeResult, replayOnto, lastItem, markInterruptRequested, withKnownUsage,
 } from '../lib/reducer';
 import type { Conversation, ImageRef, PermissionRequest, UsageTotals } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
@@ -121,6 +121,7 @@ let transport: Transport | null = null;
 let initStarted = false;
 const pendingStarts = new Map<string, string>(); // reqId -> local session id
 const waiters = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+const lastMainEvent = new Map<string, unknown>(); // last main-thread user/assistant event per session (anchors a replayed result footer)
 const lastSeq = new Map<string, number>(); // last sdk seq applied per session (for attach replay)
 /** Toasts about a missing connection: they are stale the moment it is back. */
 const NOT_CONNECTED_TAG = 'not-connected';
@@ -222,6 +223,7 @@ export const useSessions = create<Store>((set, get) => {
       // past usage is not in the transcript: use what this browser remembered, else mark it unknown (never a fake $0.00 / 0 turns)
       if (!buffered.some((b) => (b as { type?: string })?.type === 'result')) conv = withKnownUsage(conv, ls.getJson<UsageTotals | null>('ws.usage.' + id, null));
       conv = replayOnto(conv, buffered);
+      for (const b of buffered) if (b && typeof b === 'object' && isMainTurnEvent(b as never)) lastMainEvent.set(id, b);
       if (cur.conv.init) conv = { ...conv, init: cur.conv.init };
       patch(id, () => ({ conv, loading: false }));
     } catch (e) {
@@ -316,7 +318,10 @@ export const useSessions = create<Store>((set, get) => {
         lastSeq.set(m.sessionId, Math.max(lastSeq.get(m.sessionId) ?? 0, m.seq));
         if (histBuffer.has(m.sessionId)) { histBuffer.get(m.sessionId)!.push(m.message); return; }
         const msg = m.message as { type?: string; subtype?: string; is_error?: boolean; result?: string; errors?: string[] };
-        const conv = applySdk(s.conv, m.message);
+        let conv = applySdk(s.conv, m.message);
+        // attach replay can land after the history fetch: a replayed result must follow ITS turn, not stack at the end (live results are last anyway)
+        if (msg?.type === 'result' && conv !== s.conv) conv = placeResult(conv, (lastMainEvent.get(m.sessionId) ?? null) as never, true);
+        else if (m.message && typeof m.message === 'object' && isMainTurnEvent(m.message as never)) lastMainEvent.set(m.sessionId, m.message);
         // the CLI's own init lists MCP servers without their errors: ask for the full state
         if (msg?.type === 'system' && msg.subtype === 'init' && ((m.message as { mcp_servers?: unknown[] }).mcp_servers?.length ?? 0) > 0) { mcpPolls.delete(m.sessionId); askMcp(m.sessionId); }
         if (msg?.type === 'result') {

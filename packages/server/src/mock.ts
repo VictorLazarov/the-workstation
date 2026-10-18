@@ -28,6 +28,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { CanUseTool, ModelInfo, Options, PermissionUpdate, SDKSessionInfo, SDKUserMessage, SessionMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
+import { isInside, samePath } from './platform.js';
 
 type Json = Record<string, unknown>;
 
@@ -572,7 +573,12 @@ export function createMockAdapter(): SdkAdapter {
     async listSessions(o) {
       let all = [...store.values()].filter((s) => s.messages.length > 0);
       // like the real SDK, a session running in one of the project's worktrees (.claude/worktrees/<n>) belongs to the project
-      if (o?.dir) all = all.filter((s) => s.cwd === o.dir || s.cwd.startsWith(`${o.dir}${path.sep}.claude${path.sep}worktrees${path.sep}`));
+      if (o?.dir) {
+        // canonical on both sides, like the real SDK (macOS /var -> /private/var, Windows 8.3 names)
+        const canon = (p: string) => { try { return fs.realpathSync.native(p); } catch { return p; } };
+        const dir = canon(o.dir);
+        all = all.filter((s) => { const c = canon(s.cwd); return samePath(c, dir) || isInside(path.join(dir, '.claude', 'worktrees'), c); });
+      }
       all.sort((a, b) => b.modified - a.modified);
       return all.slice(0, o?.limit ?? 500).map(info);
     },

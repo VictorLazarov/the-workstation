@@ -1,6 +1,7 @@
 /** Scrutiniser pass 5: bypass-permissions capability (M1) and worktree removal that must not kill the session (M2). */
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { Options } from '@anthropic-ai/claude-agent-sdk';
@@ -31,7 +32,7 @@ describe('sessions never pass allowDangerouslySkipPermissions when bypass is una
   const seen: Options[] = [];
   beforeAll(async () => {
     const base = createMockAdapter();
-    const dir = fs.mkdtempSync(path.join(fs.realpathSync(process.env.TMPDIR ?? '/tmp'), 'ws-p5-'));
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ws-p5-'));
     const cwd = path.join(dir, 'proj');
     fs.mkdirSync(cwd, { recursive: true });
     const config = new ConfigStore(path.join(dir, 'home'));

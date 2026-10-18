@@ -127,6 +127,17 @@ describe('sessions + models + commands (mock)', () => {
     expect(list.body.find((x: any) => x.sessionId === sid)).toBeUndefined();
     c.close();
   });
+  it.skipIf(process.platform === 'win32')('a project reached through a symlink lists its live sessions (macOS /var -> /private/var)', async () => {
+    const link = path.join(s.dir, 'proj-link');
+    fs.symlinkSync(s.cwd, link, 'dir');
+    const c = await connect(s);
+    const sid = await startSession(c, link);
+    const list = await j(`/api/sessions?cwd=${encodeURIComponent(link)}`);
+    expect(list.body.map((x: any) => x.sessionId)).toContain(sid);
+    const real = await j(`/api/sessions?cwd=${encodeURIComponent(s.cwd)}`);
+    expect(real.body.map((x: any) => x.sessionId)).toContain(sid);
+    c.close();
+  });
   it('health', async () => {
     expect((await j('/api/health')).body).toMatchObject({ ok: true, mock: true });
     expect((await j('/api/nope')).status).toBe(404);

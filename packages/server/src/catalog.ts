@@ -1,4 +1,4 @@
-import { claudeExecutableOption } from './platform.js';
+import { claudeExecutableOption, samePath } from './platform.js';
 import type { ModelInfo, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { ModelOption, SlashCommandInfo } from '@workstation/protocol';
 import type { ConfigStore } from './config.js';
@@ -62,7 +62,7 @@ export class Catalog {
     let list: SlashCommand[];
     if (hit && Date.now() - hit.at < 60_000) list = hit.list;
     else {
-      const live = this.sessions.list().find((s) => s.cwd === cwd);
+      const live = this.sessions.list().find((s) => samePath(s.cwd, cwd));
       try {
         list = live ? await live.query.supportedCommands() : await this.withProbe(cwd, (q) => q.supportedCommands());
         this.commands.set(cwd, { at: Date.now(), list });
