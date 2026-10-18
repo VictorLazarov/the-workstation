@@ -32,8 +32,13 @@ afterAll(async () => { await s.close(); });
 describe('hardening', () => {
   it('REST bodies over 2 MB get 413', async () => {
     const big = JSON.stringify({ customModels: ['x'.repeat(3 * 1024 * 1024)] });
-    const r = await api(s, '/api/config', { method: 'PUT', body: big });
-    expect(r.status).toBe(413);
+    // The server rejects on Content-Length and closes without reading the upload. HTTP allows the client to see that as the 413
+    // or, if the close lands while it is still sending (Windows resets the socket), as a connection error: either way the body is refused.
+    const r = await api(s, '/api/config', { method: 'PUT', body: big }).catch((e: { cause?: { code?: string } }) => e);
+    if ('status' in r) expect(r.status).toBe(413);
+    else expect(['ECONNRESET', 'UND_ERR_SOCKET', 'EPIPE']).toContain((r as { cause?: { code?: string } }).cause?.code);
+    const cfg = await (await api(s, '/api/config')).json() as { customModels?: string[] };
+    expect(JSON.stringify(cfg.customModels ?? [])).not.toContain('xxxxxxxx');
     const ok = await api(s, '/api/config', { method: 'PUT', body: JSON.stringify({ customModels: ['m'] }) });
     expect(ok.status).toBe(200);
   });
