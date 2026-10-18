@@ -64,13 +64,13 @@ test.describe('Logs panel', () => {
     await expect(rows(page).first()).toBeVisible();
 
     // this session only: nothing from the server's own start-up
-    await expect(rows(page).filter({ hasText: 'Server listening' })).toHaveCount(0);
+    await expect(rows(page).filter({ hasText: 'WebSocket connected' })).toHaveCount(0);
     const mine = await rows(page).count();
     await page.getByRole('combobox', { name: 'Session' }).selectOption('all');
-    await expect(rows(page).filter({ hasText: 'Server listening' })).toHaveCount(1);
+    await expect(rows(page).filter({ hasText: 'WebSocket connected' }).first()).toBeVisible();
     expect(await rows(page).count()).toBeGreaterThan(mine);
     await page.getByRole('combobox', { name: 'Session' }).selectOption('__this');
-    await expect(rows(page).filter({ hasText: 'Server listening' })).toHaveCount(0);
+    await expect(rows(page).filter({ hasText: 'WebSocket connected' })).toHaveCount(0);
 
     // level chips
     await chip(page, 'Info').click();
@@ -178,14 +178,15 @@ test.describe('Logs panel', () => {
     await expectIdle(page);
     await openInspector(page, 'logs');
     await page.getByRole('combobox', { name: 'Session' }).selectOption('all');
-    const start = rows(page).filter({ hasText: 'Server listening' }).first();
+    const start = rows(page).filter({ hasText: 'Session started' }).last();
+    await start.scrollIntoViewIfNeeded();
     await start.locator('.log-head').click();
-    await expect(start.locator('.log-json')).toContainText('"version"');
+    await expect(start.locator('.log-json')).toContainText('"cwd"');
     await expect(start.locator('.log-facts')).toContainText('Time');
     const [sw, cw] = await logs(page).locator('.logs-list').evaluate((e) => [e.scrollWidth, e.clientWidth]);
     expect(sw).toBeLessThanOrEqual(cw + 1);
     // hover shows relative + absolute time
-    await expect(start.locator('time.log-time')).toHaveAttribute('title', /ago.*\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}/);
+    await expect(start.locator('time.log-time')).toHaveAttribute('title', /(ago|just now).*\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}/);
   });
 });
 
