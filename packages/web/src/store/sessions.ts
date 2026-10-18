@@ -65,7 +65,7 @@ interface Store {
   conn: ConnStatus;
   access: Access;
   ready: boolean;
-  hello?: { version: string; serverCwd: string; mock: boolean };
+  hello?: { version: string; serverCwd: string; mock: boolean; bypass?: { available: boolean; reason?: string } };
   config: AppConfig | null;
   configError?: string;
   models: ModelOption[];
@@ -243,7 +243,7 @@ export const useSessions = create<Store>((set, get) => {
   const onServer = (m: ServerMessage) => {
     switch (m.type) {
       case 'hello':
-        set({ hello: { version: m.version, serverCwd: m.serverCwd, mock: m.mock } });
+        set({ hello: { version: m.version, serverCwd: m.serverCwd, mock: m.mock, ...(m.bypass ? { bypass: m.bypass } : {}) } });
         void onOpen();
         return;
       case 'ack': {

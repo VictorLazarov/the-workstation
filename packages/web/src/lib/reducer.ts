@@ -297,7 +297,7 @@ export function resultOutcome(c: Pick<Conversation, 'interruptRequested' | 'turn
   return 'error';
 }
 
-const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error']);
+const SETTINGS_CODES = new Set(['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'invalid_request', 'model_not_found', 'cloud_credential_error', 'bypass_unavailable']);
 /** The action that fits an error event: provider/model problems go to Settings, anything else can be retried. */
 export function errorAction(code?: string): NoticeAction {
   if (code === 'session_limit') return 'close-idle';

@@ -9,7 +9,9 @@ import type { ConfigStore } from './config.js';
 import { HttpError, requireDir } from './files.js';
 import { createWorktree, gitRoot } from './git.js';
 import { claudeExecutableOption } from './platform.js';
-import { headSha, removeWorktree, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
+import { bypassCapability, BYPASS_ROOT_REASON, type BypassCapability } from './bypass.js';
+import { buildCliEnv } from './cli-env.js';
+import { headSha, removeWorktree, worktreeRemovalBlock, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
 import { normalizeContextUsage } from './context-usage.js';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
 
@@ -168,6 +170,7 @@ export class SessionManager {
         case 'set.permissionMode': {
           const s = this.must(msg.sessionId);
           if (!MODES.has(msg.mode)) throw new Error('invalid permission mode');
+          if (msg.mode === 'bypassPermissions') { const b = this.bypass(); if (!b.available) throw new CodedError(b.reason ?? 'Bypass permissions is unavailable', 'bypass_unavailable'); }
           await s.query.setPermissionMode(msg.mode);
           s.permissionMode = msg.mode;
           this.emitState(s, true);
@@ -284,6 +287,9 @@ export class SessionManager {
     try { return await p; } finally { this.starting.delete(key); }
   }
 
+  /** Whether "Bypass permissions" can work here (replaceable in tests). */
+  bypass: () => BypassCapability = () => bypassCapability(buildCliEnv(this.config.providerEnv(), process.env));
+
   /** In-flight starts keyed by session id (resume), so concurrent starts yield one live process. */
   private starting = new Map<string, Promise<LiveSession>>();
 
@@ -314,7 +320,13 @@ export class SessionManager {
       if (!msg.resume || !msg.fork || typeof msg.rewindBefore !== 'string') throw new Error('rewindBefore needs resume and fork');
       resumeAt = await this.messageBefore(msg.resume, msg.rewindBefore, cwd);
     }
-    const permissionMode = msg.permissionMode ?? app.defaultPermissionMode ?? 'default';
+    const bypass = this.bypass();
+    let permissionMode = msg.permissionMode ?? app.defaultPermissionMode ?? 'default';
+    if (permissionMode === 'bypassPermissions' && !bypass.available) {
+      // an explicit request fails with the honest reason; a saved default quietly falls back so sessions still start
+      if (msg.permissionMode) throw new CodedError(bypass.reason ?? 'Bypass permissions is unavailable', 'bypass_unavailable');
+      permissionMode = 'default';
+    }
     const model = msg.model ?? app.defaultModel;
     const effort = msg.effort ?? app.defaultEffort;
 
@@ -334,7 +346,8 @@ export class SessionManager {
       includePartialMessages: true,
       enableFileCheckpointing: true,
       permissionMode,
-      allowDangerouslySkipPermissions: true,
+      // only when the CLI will accept it (it exits at startup as root outside a sandbox): see bypass.ts
+      ...(bypass.available ? { allowDangerouslySkipPermissions: true } : {}),
       canUseTool: (toolName, input, o) => this.canUseTool(s, toolName, input, o),
       env: this.config.cliEnv(), // credential isolation for custom endpoints (cli-env.ts)
       ...claudeExecutableOption(),
@@ -365,6 +378,7 @@ export class SessionManager {
       const why = e instanceof Error ? e.message : String(e);
       this.close(s, `failed to start: ${why}`, true);
       if (msg.worktree && worktree && !msg.resume) void this.removeSessionWorktree(id, false).catch(() => {});
+      if (/cannot be used with root\/sudo/i.test(why)) throw new CodedError(BYPASS_ROOT_REASON.replace('Bypass permissions is unavailable', 'Claude Code refused to start in bypass mode'), 'bypass_unavailable');
       throw new Error(`Claude Code did not initialize: ${why}`);
     }
     const current = boot.current_permission_mode as PermissionMode | undefined;
@@ -448,6 +462,11 @@ export class SessionManager {
   async removeSessionWorktree(sessionId: string, force: boolean): Promise<WorktreeRemoval | { removed: false; branchDeleted: false; reason: string }> {
     const rec = this.worktrees.get(sessionId);
     if (!rec) return { removed: false, branchDeleted: false, reason: 'session has no workstation-created worktree' };
+    // Decide BEFORE touching the live session: a refused (not forced) removal must leave session and worktree untouched.
+    if (!force) {
+      const block = await worktreeRemovalBlock(rec);
+      if (block) return { removed: false, branchDeleted: false, reason: block };
+    }
     const live = this.sessions.get(sessionId);
     if (live) this.close(live, 'worktree removed');
     const res = await removeWorktree(rec, force);

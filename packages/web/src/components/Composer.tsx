@@ -8,7 +8,7 @@ import { Icon } from './Icon';
 import { IconButton } from './ui';
 import { useContextSummary } from '../panels/OverviewPanel';
 import { useUi } from '../store/ui';
-import { EffortChip, MODES, ModeChip, ModelChip, WorktreeChip } from './Chips';
+import { EffortChip, ModeChip, usableModes, useBypass, ModelChip, WorktreeChip } from './Chips';
 import { basename, dirname } from '../lib/utils';
 
 interface Popup { kind: 'mention' | 'slash'; query: string; start: number; end: number }
@@ -21,6 +21,7 @@ export function Composer({ session }: { session: SessionData }) {
   const { send, interrupt, setMode, cancelQueued, retryQueued } = useSessions.getState();
     const config = useSessions((s) => s.config);
   const commands = useSessions((s) => s.commands);
+  const bypass = useBypass();
   const [text, setText] = useState(() => ls.get(draftKey(id)) ?? '');
   const [images, setImages] = useState<(ImageAttachment & { url: string })[]>([]);
   const [popup, setPopup] = useState<Popup | null>(null);
@@ -140,7 +141,7 @@ export function Composer({ session }: { session: SessionData }) {
     if (e.key === 'Escape' && running && !text) { e.preventDefault(); interrupt(id); return; }
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
-      const order = MODES.map((m) => m.id);
+      const order = usableModes(bypass).map((m) => m.id);
       setMode(id, order[(order.indexOf(session.runtime.permissionMode) + 1) % order.length]);
     }
   };

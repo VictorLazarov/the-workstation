@@ -124,7 +124,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   const q = (c: { req: { query(k: string): string | undefined } }, k: string): unknown => c.req.query(k);
   const cwdParam = (c: { req: { query(k: string): string | undefined } }) => requireDir(q(c, 'cwd') ?? serverCwd);
 
-  app.get('/api/health', (c) => c.json({ ok: true, version: VERSION, mock: adapter.mock, cwd: serverCwd, sessions: sessions.list().length }));
+  app.get('/api/health', (c) => c.json({ ok: true, version: VERSION, mock: adapter.mock, cwd: serverCwd, sessions: sessions.list().length, bypassPermissions: sessions.bypass() }));
 
   app.get('/api/config', (c) => c.json(config.redacted()));
   app.put('/api/config', async (c) => {
@@ -302,7 +302,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       id: randomUUID(),
       send(msg: ServerMessage) { if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg)); },
     };
-    sub.send({ type: 'hello', version: VERSION, serverCwd, mock: adapter.mock });
+    sub.send({ type: 'hello', version: VERSION, serverCwd, mock: adapter.mock, bypass: sessions.bypass() });
     // Serialise per-connection so ordering of client messages is preserved.
     let chain: Promise<void> = Promise.resolve();
     ws.on('message', (data) => {

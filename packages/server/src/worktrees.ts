@@ -41,6 +41,15 @@ export async function headSha(cwd: string): Promise<string | undefined> {
   return r.code === 0 ? r.stdout.trim() : undefined;
 }
 
+/** Why removing `rec` without force would be refused (uncommitted changes), or undefined when it is clean/gone. */
+export async function worktreeRemovalBlock(rec: WorktreeRecord): Promise<string | undefined> {
+  if (!fs.existsSync(rec.dir)) return undefined;
+  const st = await git(rec.dir, ['status', '--porcelain']);
+  if (st.code !== 0) return `git status failed: ${st.stderr.trim()}`;
+  if (st.stdout.trim()) return 'worktree has uncommitted changes (use force to discard them)';
+  return undefined;
+}
+
 /**
  * Remove a worktree created by us. Without `force` it refuses when the worktree has uncommitted/untracked
  * changes; the branch is only deleted when it has no commits of its own (or on force).

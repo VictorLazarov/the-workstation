@@ -67,11 +67,12 @@ test.describe('B2: toasts never cover the composer, inspector tabs or commit box
     for (const sidebar of ['shown', 'hidden'] as const) {
       test(`${width}px, sidebar ${sidebar}`, async ({ page }) => {
         await start(page, width);
+        // clear start-up toasts BEFORE the inspector opens: at <=1100px it is an overlay whose scrim would intercept the Dismiss click
+        while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
         await openInspector(page, 'changes');
         if (width > 1100) await expect(page.locator('.ccommit')).toBeVisible();
         if (sidebar === 'hidden') { await closeDrawers(page); if (await page.getByRole('complementary', { name: 'Sessions' }).isVisible()) await page.keyboard.press('ControlOrMeta+b'); }
         if (width > 1100) await expect(page.getByRole('complementary', { name: 'Sessions' })).toHaveCount(sidebar === 'shown' ? 1 : 0);
-        while (await page.locator('.toast').count()) await page.locator('.toast').first().getByRole('button', { name: 'Dismiss' }).click();
         for (let i = 0; i < 3; i++) {
           await page.keyboard.press('ControlOrMeta+,');
           await page.getByRole('dialog').getByRole('button', { name: 'Save' }).click();

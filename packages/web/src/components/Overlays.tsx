@@ -5,7 +5,7 @@ import { projectName, sessionProject, useActiveSession, useSessions } from '../s
 import { MAX_TOAST_LIFE, useSidebarDrawer, useUi, visibleToasts, type Toast } from '../store/ui';
 import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
-import { MODES } from './Chips';
+import { usableModes } from './Chips';
 import { newSessionShortcut } from '../lib/shortcuts';
 
 /* ───────── toasts ───────── */
@@ -170,7 +170,7 @@ export function CommandPalette() {
       ...(['light', 'dark', 'system'] as const).map((t): Cmd => ({ id: 'theme-' + t, label: `Theme: ${t[0].toUpperCase() + t.slice(1)}`, icon: t === 'light' ? 'sun' : t === 'dark' ? 'moon' : 'monitor', group: 'View', hint: theme === t ? 'current' : undefined, run: () => U.setTheme(t) })),
     ];
     if (active) {
-      for (const m of MODES) out.push({ id: 'mode-' + m.id, label: `Mode: ${m.label}`, icon: m.icon, group: 'Session', keywords: 'permission', hint: active.runtime.permissionMode === m.id ? 'current' : undefined, run: () => S.setMode(active.id, m.id) });
+      for (const m of usableModes(S.hello?.bypass ?? { available: true })) out.push({ id: 'mode-' + m.id, label: `Mode: ${m.label}`, icon: m.icon, group: 'Session', keywords: 'permission', hint: active.runtime.permissionMode === m.id ? 'current' : undefined, run: () => S.setMode(active.id, m.id) });
       for (const m of models) out.push({ id: 'model-' + m.id, label: `Model: ${m.label}`, icon: 'sparkles', group: 'Session', hint: active.runtime.model === m.id ? 'current' : undefined, run: () => S.setModel(active.id, m.id) });
       out.push({ id: 'fork', label: 'Fork this session', icon: 'fork', group: 'Session', run: () => S.forkSession(active.id) });
       if (active.runtime.status === 'running') out.push({ id: 'stop', label: 'Stop the agent', icon: 'stop', group: 'Session', run: () => S.interrupt(active.id) });

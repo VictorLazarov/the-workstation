@@ -12,6 +12,13 @@ export const MODES: { id: PermissionMode; label: string; desc: string; icon: 'sh
   { id: 'auto', label: 'Auto', desc: 'A classifier approves safe actions for you', icon: 'sparkles' },
   { id: 'bypassPermissions', label: 'Bypass permissions', desc: 'Run everything without asking. Use with care', icon: 'zap' },
 ];
+/** Whether "Bypass permissions" can work on this server (unknown = available; the server refuses honestly otherwise). */
+export function useBypass(): { available: boolean; reason?: string } {
+  return useSessions((s) => s.hello?.bypass) ?? { available: true };
+}
+/** Modes the user can switch to right now (Shift+Tab cycling, command palette). */
+export const usableModes = (bypass: { available: boolean }) => MODES.filter((m) => m.id !== 'bypassPermissions' || bypass.available);
+
 export const EFFORTS: { id: EffortLevel; label: string }[] = [
   { id: 'low', label: 'Low' }, { id: 'medium', label: 'Medium' }, { id: 'high', label: 'High' }, { id: 'xhigh', label: 'Extra high' }, { id: 'max', label: 'Max' },
 ];
@@ -48,7 +55,11 @@ export function ModelChip({ session }: { session: SessionData }) {
 export function ModeChip({ session }: { session: SessionData }) {
   const setMode = useSessions((s) => s.setMode);
   const mode = MODES.find((m) => m.id === session.runtime.permissionMode) ?? MODES[0];
-  const items: MenuEntry[] = [{ heading: 'Permission mode' }, ...MODES.map((m) => ({ id: m.id, label: m.label, description: m.desc, icon: m.icon, checked: m.id === mode.id, onSelect: () => setMode(session.id, m.id) }))];
+  const bypass = useBypass();
+  const items: MenuEntry[] = [{ heading: 'Permission mode' }, ...MODES.map((m) => {
+    const off = m.id === 'bypassPermissions' && !bypass.available;
+    return { id: m.id, label: m.label, description: off ? bypass.reason : m.desc, icon: m.icon, checked: m.id === mode.id, disabled: off, onSelect: () => setMode(session.id, m.id) };
+  })];
   return (
     <span className={`mode-${mode.id}`}>
       <Dropdown title="Permission mode (Shift+Tab to cycle)" items={items} trigger={() => <><Icon name={mode.icon} size={13} /><span>{mode.label}</span><Icon name="chevron-down" size={12} /></>} />

@@ -49,6 +49,7 @@ function setup(): E2EState {
   const longLine = (i: number, tail = '') => `line ${i}: ${'lorem ipsum dolor sit amet, '.repeat(7)}${tail}`;
   fs.writeFileSync(path.join(project, 'long.txt'), Array.from({ length: 70 }, (_, i) => longLine(i)).join('\n') + '\n');
   git('init', '-q', '-b', 'develop');
+  git('config', 'user.email', 'e2e@example.com'); git('config', 'user.name', 'e2e'); // the SERVER commits here too (CI runners have no global identity)
   git('add', '-A');
   git('commit', '-q', '-m', 'fixture');
   fs.writeFileSync(path.join(project, 'src/example.ts'), 'export const greeting = "hello, world";\nexport const answer = 42;\nexport function add(a: number, b: number): number { return a + b; }\n');
@@ -59,7 +60,7 @@ function setup(): E2EState {
   fs.mkdirSync(fsProject, { recursive: true });
   fs.writeFileSync(path.join(fsProject, 'README.md'), '# FS fixture\n');
   const fsGit = (...args: string[]) => execFileSync('git', ['-c', 'user.email=e2e@example.com', '-c', 'user.name=e2e', ...args], { cwd: fsProject, stdio: 'ignore' });
-  fsGit('init', '-q', '-b', 'main'); fsGit('add', '-A'); fsGit('commit', '-q', '-m', 'fixture');
+  fsGit('init', '-q', '-b', 'main'); fsGit('config', 'user.email', 'e2e@example.com'); fsGit('config', 'user.name', 'e2e'); fsGit('add', '-A'); fsGit('commit', '-q', '-m', 'fixture');
   // Two isolated config homes (one per server) that share the fixed token.
   const mainHome = path.join(home, 'home-main');
   const slowHome = path.join(home, 'home-slow');

@@ -5,7 +5,7 @@ import { clearRemoteServer, confirmRemoteServer, getRemoteServer, getServerBase,
 import { useSessions } from '../store/sessions';
 import { useUi, type Brand, type Density, type Theme } from '../store/ui';
 import { modelLabel } from '../lib/utils';
-import { EFFORTS, MODES } from './Chips';
+import { EFFORTS, MODES, useBypass } from './Chips';
 import { Dialog, Segmented } from './ui';
 import { RememberedRules } from './RememberedRules';
 
@@ -16,6 +16,7 @@ export function SettingsDialog() {
   const brand = useUi((s) => s.brand);
   const density = useUi((s) => s.density);
   const config = useSessions((s) => s.config);
+  const bypass = useBypass();
   const models = useSessions((s) => s.models);
   const [f, setF] = useState({ baseUrl: '', apiKey: '', authToken: '', model: '', effort: 'medium' as EffortLevel, mode: 'default' as PermissionMode, custom: '' });
   const [server, setServer] = useState(getServerBase());
@@ -83,7 +84,7 @@ export function SettingsDialog() {
             <label className="lbl">Model<input className="field" list="model-opts" value={f.model} onChange={set('model')} placeholder="Server default" /><datalist id="model-opts">{modelOpts.map((m) => <option key={m} value={m}>{modelLabel(m)}</option>)}</datalist></label>
             <label className="lbl">Thinking effort<select className="field" value={f.effort} onChange={set('effort')}>{EFFORTS.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}</select></label>
           </div>
-          <label className="lbl">Permission mode<select className="field" value={f.mode} onChange={set('mode')}>{MODES.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}</select></label>
+          <label className="lbl">Permission mode<select className="field" value={f.mode} onChange={set('mode')}>{MODES.map((m) => { const off = m.id === 'bypassPermissions' && !bypass.available && f.mode !== m.id; return <option key={m.id} value={m.id} disabled={off}>{m.label}{off ? ' (unavailable on this server)' : ''}</option>; })}</select></label>
           <label className="lbl">Custom model ids<input className="field" value={f.custom} onChange={set('custom')} placeholder="comma separated, e.g. my-gateway/claude-sonnet" spellCheck={false} /></label>
         </section>
         <RememberedRules active={open} />

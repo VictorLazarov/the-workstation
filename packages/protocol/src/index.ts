@@ -51,7 +51,7 @@ export type PermissionDecision =
 
 // ───────────── Server → Client (WebSocket) ─────────────
 export type ServerMessage =
-  | { type: 'hello'; version: string; serverCwd: string; mock: boolean }
+  | { type: 'hello'; version: string; serverCwd: string; mock: boolean; /** can "Bypass permissions" work on this server? (not as root outside a sandbox) */ bypass?: { available: boolean; reason?: string } }
   | { type: 'ack'; reqId: string; ok: true; data?: unknown }
   /** `code` is set for API/runtime failures surfaced from the SDK (e.g. `authentication_failed`, `rate_limit`, `process_exited`). */
   | { type: 'error'; reqId?: string; sessionId?: SessionId; message: string; code?: string }
