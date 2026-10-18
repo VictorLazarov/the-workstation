@@ -112,3 +112,38 @@ describe('removing a worktree does not kill the session unless it will really be
     c.close();
   });
 });
+
+describe('a removed worktree\'s session stays listed under its project (M3)', () => {
+  let s: TestServer;
+  beforeAll(async () => { s = await makeServer(); });
+  afterAll(async () => { await s.close(); });
+
+  it('after removal (and after a registry reload) /api/sessions?cwd=<project> still returns it, flagged worktree.removed; deleting drops it', async () => {
+    const repo = fs.mkdtempSync(path.join(s.dir, 'repo-'));
+    execSync('git init -q -b main && git -c user.email=a@b -c user.name=n commit -q --allow-empty -m init', { cwd: repo });
+    const c = await connect(s);
+    const sid = await startSession(c, repo, { worktree: true });
+    c.send({ type: 'prompt', sessionId: sid, text: 'hello', clientMsgId: 'm1' });
+    await c.waitFor((m) => m.type === 'sdk' && (m as any).message.type === 'result');
+    const list = async () => (await (await api(s, `/api/sessions?cwd=${encodeURIComponent(repo)}`)).json() as any[]).find((x) => x.sessionId === sid);
+    expect((await list()).worktree.removed).toBeUndefined();
+
+    expect(await s.sessions.removeSessionWorktree(sid, true)).toMatchObject({ removed: true });
+    const after = await list();
+    expect(after).toBeTruthy();
+    expect(after.worktree).toMatchObject({ removed: true, root: fs.realpathSync.native(repo) });
+    // history is still readable
+    const msgs = await (await api(s, `/api/sessions/${sid}/messages`)).json() as any;
+    expect(msgs.messages.length).toBeGreaterThan(0);
+    // survives a server restart (registry on disk)
+    const { SessionManager } = await import('../src/session-manager.js');
+    const reborn = new SessionManager(createMockAdapter(), s.config, s.cwd);
+    expect(reborn.worktrees.getAny(sid)?.removedAt).toBeTruthy();
+    expect(reborn.worktrees.get(sid)).toBeUndefined();
+
+    await api(s, `/api/sessions/${sid}`, { method: 'DELETE' });
+    expect(await list()).toBeUndefined();
+    expect(s.sessions.worktrees.getAny(sid)).toBeUndefined();
+    c.close();
+  });
+});

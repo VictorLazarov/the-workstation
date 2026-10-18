@@ -162,7 +162,7 @@ export function Home() {
               {recent.map((s) => (
                 <button key={s.sessionId} type="button" className="home-row" onClick={() => open(s)}>
                   <Icon name="chat" size={15} /><span className="home-row-title">{s.title}</span>
-                  <span className="muted">{s.cwd ? projectName(s.cwd) : ''}</span><span className="muted">{relativeTime(s.lastModified)}</span>
+                  <span className="muted">{s.worktree?.removed ? 'worktree removed' : (s.worktree?.root ?? s.cwd) ? projectName((s.worktree?.root ?? s.cwd)!) : ''}</span><span className="muted">{relativeTime(s.lastModified)}</span>
                 </button>
               ))}
             </div>

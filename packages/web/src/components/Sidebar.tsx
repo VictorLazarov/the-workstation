@@ -11,7 +11,7 @@ import { createPortal } from 'react-dom';
 
 interface Entry {
   /** the project (main checkout) it is filed under; `cwd` is where it runs (a worktree directory for worktree sessions) */
-  project: string; worktree?: string;
+  project: string; worktree?: string; /** the worktree is gone: history only */ removed?: boolean;
   id: string; title: string; cwd: string; branch?: string; time: number; status: SessionStatus; summary?: SessionSummary; live: boolean;
 }
 
@@ -20,11 +20,11 @@ function useEntries(): Entry[] {
   const summaries = useSessions((s) => s.summaries);
   return useMemo(() => {
     const m = new Map<string, Entry>();
-    for (const s of summaries) m.set(s.sessionId, { id: s.sessionId, title: s.title, cwd: s.cwd ?? '', project: s.worktree?.root ?? s.cwd ?? '', worktree: s.worktree?.branch, branch: s.worktree?.branch ?? s.gitBranch, time: s.lastModified, status: 'idle', summary: s, live: s.live });
+    for (const s of summaries) m.set(s.sessionId, { id: s.sessionId, title: s.title, cwd: s.cwd ?? '', project: s.worktree?.root ?? s.cwd ?? '', worktree: s.worktree?.branch || (s.worktree ? 'worktree' : undefined), removed: s.worktree?.removed, branch: s.worktree?.branch || s.gitBranch, time: s.lastModified, status: 'idle', summary: s, live: s.live });
     for (const s of Object.values(sessions)) {
       const prev = m.get(s.id);
       const wt = sessionWorktree(s);
-      m.set(s.id, { id: s.id, title: s.title || prev?.title || 'Session', cwd: s.cwd || prev?.cwd || '', project: s.projectRoot || s.conv.init?.worktree?.root || prev?.project || s.cwd || '', worktree: wt ? wt.branch ?? prev?.worktree ?? 'worktree' : prev?.worktree, branch: wt?.branch ?? s.branch ?? prev?.branch, time: Math.max(s.lastActivity, prev?.time ?? 0), status: sessionStatus(s), summary: prev?.summary, live: s.live });
+      m.set(s.id, { id: s.id, title: s.title || prev?.title || 'Session', cwd: s.cwd || prev?.cwd || '', project: s.projectRoot || s.conv.init?.worktree?.root || prev?.project || s.cwd || '', worktree: wt ? wt.branch ?? prev?.worktree ?? 'worktree' : prev?.worktree, branch: wt?.branch ?? s.branch ?? prev?.branch, time: Math.max(s.lastActivity, prev?.time ?? 0), status: sessionStatus(s), summary: prev?.summary, live: s.live, removed: s.wtRemoved || prev?.removed });
     }
     return [...m.values()];
   }, [sessions, summaries]);
@@ -47,7 +47,8 @@ function RowStatus({ e }: { e: Entry }) {
     case 'needs-input': return <span className="sess-st sess-attn" title="Needs your input"><i className="st-dot st-attn" /><span className="attn-text">Needs input</span></span>;
     case 'error': return <span className="sess-st" title="Error"><i className="st-dot st-error" /><span className="sr-only">Error</span></span>;
     case 'done': return <span className="sess-st" title="Finished, unread"><i className="st-dot st-done" /><span className="sr-only">Finished, unread</span></span>;
-    default: return e.worktree ? <span className="sess-st sess-branch" title={`Worktree ${e.worktree}`}><Icon name="layers" size={12} /></span>
+    default: return e.removed ? <span className="sess-st sess-gone" title="Worktree removed. History only">worktree removed</span>
+      : e.worktree ? <span className="sess-st sess-branch" title={`Worktree ${e.worktree}`}><Icon name="layers" size={12} /></span>
       : e.branch && !/^(main|master)$/.test(e.branch) ? <span className="sess-st sess-branch" title={`Branch ${e.branch}`}><Icon name="branch" size={12} /></span> : null;
   }
 }
@@ -177,7 +178,7 @@ export function Sidebar() {
                         onClick={() => open(e)} onContextMenu={(ev) => { ev.preventDefault(); setMenu({ x: ev.clientX, y: ev.clientY, e }); }}
                         onKeyDown={(ev) => { if (ev.key === 'ContextMenu' || (ev.key === 'F10' && ev.shiftKey)) { ev.preventDefault(); const r = ev.currentTarget.getBoundingClientRect(); setMenu({ x: r.left + 24, y: r.bottom, e }); } }}
                         aria-current={activeId === e.id ? 'true' : undefined}
-                        title={[e.title, [e.worktree ? `worktree ${e.worktree}` : e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
+                        title={[e.title, [e.removed ? 'worktree removed (read-only history)' : e.worktree ? `worktree ${e.worktree}` : e.branch, relativeTime(e.time)].filter(Boolean).join(' · '), STATUS_LABEL[e.status]].filter(Boolean).join('\n')}
                       >
                         <span className="sess-title">{e.title}</span>
                         <RowStatus e={e} />

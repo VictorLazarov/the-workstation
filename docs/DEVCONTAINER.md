@@ -24,6 +24,11 @@ Three supported ways, all exercised by `scripts/test-devcontainer.sh` against a 
   }
 }
 ```
+**Until the owner publishes the `v0.1.0` release tag** the feature's default `version` does not exist: add
+`"version": "<branch-or-full-commit-sha>"` to the feature's options (`"ghcr.io/victorlazarov/the-workstation/workstation:1": { "version": "<sha>" }`).
+The feature image itself (`ghcr.io/...:1`) is also only available once the release procedure below has been run; before that use
+`source=local` or the Docker/installer routes.
+
 Reopen in the container, then in a terminal inside it:
 ```bash
 workstation-url        # The Workstation: http://127.0.0.1:7777/?token=...   (open it through the forwarded port)
@@ -66,7 +71,7 @@ Codespaces' `*.app.github.dev`) needs `WORKSTATION_ALLOWED_HOSTS`/`WORKSTATION_A
 | Option | Default | Meaning |
 |---|---|---|
 | `source` | `git` | `git` (clone `sourceUrl` @ `version`, build), `npm` (package `sourceUrl`, default `workstation`, at `version`; **the package is not published yet**), `tarball` (source archive URL in `sourceUrl`, built), `local` (bind-mounted checkout at `localPath`) |
-| `version` | `v0.1.0` | release tag, or a full 40-char commit SHA (most reproducible; verified after checkout). Branches such as `main` float: avoid. npm: package version (a leading `v` is stripped) |
+| `version` | `v0.1.0` | release tag, or a full 40-char commit SHA (most reproducible; verified after checkout). **The default tag does not exist until the owner pushes it: set `"version": "<branch-or-full-sha>"` explicitly until then.** Branches float. npm: package version (a leading `v` is stripped) |
 | `sourceUrl` | _(empty)_ | repo URL / npm package name / tarball URL |
 | `localPath` | `/workspaces/the-workstation` | `source=local`: where the checkout lives; built on first start if `dist` is missing |
 | `port` | `7777` | listen port |
@@ -99,6 +104,21 @@ The feature sets `WORKSTATION_HOME=/usr/local/share/workstation-config` and moun
 `devcontainer up --remove-existing-container`). For non-root remote users, `~/.config/workstation` is symlinked to it.
 Delete the volume (`docker volume rm workstation-config-...`) to rotate the token.
 
+## Running as root: Bypass permissions
+Claude Code refuses `--dangerously-skip-permissions` when it runs as root/sudo unless it is inside a deliberate sandbox. Many
+devcontainers and plain Docker images run as root, so The Workstation only enables **Bypass permissions** when the server is
+non-root, or `IS_SANDBOX=1` (or `CLAUDE_CODE_BUBBLEWRAP`) is set in the environment the server starts with. Otherwise:
+
+* normal sessions work (ask / auto-accept edits / plan / auto);
+* the *Bypass permissions* entry in the mode menu is disabled with the reason, `Shift+Tab` and the command palette skip it, and
+  `/api/health` reports `bypassPermissions: { available: false, reason }`;
+* a saved default mode of "Bypass permissions" quietly falls back to "Ask permissions", and an explicit request for it is
+  refused with an explanation (not a cryptic "process exited with code 1").
+
+To use it: run as a non-root user (`remoteUser` in `devcontainer.json`, `USER` in the image), or, in a container you consider
+disposable, set `"containerEnv": { "IS_SANDBOX": "1" }` (or `IS_SANDBOX=1 workstation`). `WORKSTATION_ALLOW_BYPASS=0` turns the
+mode off everywhere. (Verified against the real SDK as root: sessions run without `IS_SANDBOX`; with it bypass is offered.)
+
 ## Credentials / custom endpoints
 Pass `ANTHROPIC_API_KEY` and optionally `ANTHROPIC_BASE_URL` via `remoteEnv` as above (or `containerEnv`). Only
 Anthropic-API-compatible endpoints serving Claude models work with the Agent SDK. You can also set them in the UI
@@ -109,7 +129,7 @@ ends with "Not logged in" (the bundled `claude` binary starts; that is what the 
 ## Standalone image: Docker / Compose
 ```bash
 docker compose up --build              # first build: a few minutes (compiles node-pty)
-docker compose logs workstation        # prints  http://localhost:7777/?token=...   (the port inside the container)
+docker compose logs workstation        # prints  http://127.0.0.1:7777/?token=...   (the port inside the container)
 ```
 * Publishes `127.0.0.1:7777` only; change the host port with `WORKSTATION_PORT=7780 docker compose up`.
 * Runs as the non-root `node` user (uid 1000). The project is `./` bind-mounted at `/workspace`. If your host uid is not
@@ -124,14 +144,17 @@ docker compose logs workstation        # prints  http://localhost:7777/?token=..
   the WebSockets. Never publish it on `0.0.0.0` of a shared network without a reverse proxy that adds TLS.
 
 ## Other ways to install
-`curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/v0.1.0/scripts/install.sh`, read it, then
-`bash install.sh` (`WORKSTATION_REF` selects a tag/commit, `WORKSTATION_REPO` another remote). Needs git, Node >= 20 and, on
+`curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/<ref>/scripts/install.sh`, read it, then
+`WORKSTATION_REF=<ref> bash install.sh` (`WORKSTATION_REPO` selects another remote). `<ref>` must exist: no release tag
+(`v0.1.0`) is published until the owner pushes it, so use a branch (default `main`) or a full commit SHA, e.g.
+`REF=$(git rev-parse HEAD)`. The simplest alternative is `git clone` + `npm ci && npm run build && npm start`. Needs git, Node >= 20 and, on
 Linux, `python3 make g++` (it prints the install command if the build fails because they are missing).
 
 ## Troubleshooting
 | Symptom | Cause / fix |
 |---|---|
-| `could not check out 'v0.1.0' from ...` during the build | The release tag does not exist yet (or is private). Set the `version` option to an existing tag or a full commit SHA. |
+| `could not check out 'v0.1.0' from ...` during the build | The release tag does not exist yet (or is private). Set the `version` option to an existing branch or a full commit SHA, e.g. `"workstation": { "version": "<sha>" }`. |
+| Every session fails with `--dangerously-skip-permissions cannot be used with root/sudo` | Fixed: update. Bypass is now only offered when allowed, see [Running as root](#running-as-root-bypass-permissions). |
 | Build fails with `Cannot find module 'node-pty'` | The native toolchain is missing (an older installer, or `scripts/install.sh` on a bare machine): install `python3 make g++` and rebuild. The feature installs them itself. |
 | `Failed to download package for ghcr.io/...` | The registry/package is unreachable or private. After the first publish make the package public (see Release). Behind a TLS-inspecting proxy the proxy CA must be trusted by Docker and the CLI. |
 | Browser shows a blank/403 page through Codespaces/remote forwarding | Host header not allowed: set `WORKSTATION_ALLOWED_HOSTS` / `WORKSTATION_ALLOWED_ORIGINS` (`containerEnv`) to the forwarded host. |

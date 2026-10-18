@@ -8,14 +8,25 @@ Your `CLAUDE.md`, skills, hooks, MCP servers and `settings.json` behave as in th
 
 ## Quickstart
 
-### Local
-Requires Node >= 20.
+### Local (the supported path)
+Requires Node >= 20, git, and (Linux) `python3 make g++` for the terminal's `node-pty`.
 ```bash
 git clone https://github.com/VictorLazarov/the-workstation && cd the-workstation
 npm ci && npm run build
-npm start            # opens http://localhost:7777/?token=...
+npm start            # prints http://127.0.0.1:7777/?token=... and opens it
 ```
-Or the installer (pinned to a release tag; read it before running): `curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/v0.1.0/scripts/install.sh && bash install.sh`, then `workstation`.
+
+### Installer script and Dev Container Feature (need a ref that exists)
+Both build the app from a git **ref** (a release tag, a branch or a full commit SHA). No release tag has been published yet,
+so the `v0.1.0` default of the Feature (and any `.../v0.1.0/...` URL) does not resolve until the owner pushes that tag. Until then
+name a branch or commit explicitly:
+```bash
+REF=<branch-or-full-commit-sha>        # e.g. the branch you cloned, or: git rev-parse HEAD
+curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/$REF/scripts/install.sh
+less install.sh && WORKSTATION_REF=$REF bash install.sh      # then: workstation
+```
+For the Feature set the option `"version": "<branch-or-full-commit-sha>"` (see [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md)).
+A commit SHA is the most reproducible; a branch floats.
 
 Flags: `--host <addr>` (default `127.0.0.1`), `--port <n>` (default `7777`), `--no-open` (don't launch a browser).
 
@@ -37,6 +48,27 @@ docker compose logs workstation  # the sign-in URL with the token
 ```
 Runs as a non-root user; on Linux with a host uid other than 1000 first `export WORKSTATION_UID=$(id -u) WORKSTATION_GID=$(id -g)`. See [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md#standalone-image-docker--compose).
 
+## First 10 minutes
+1. **Install and start**: the three Local commands above. Leave the terminal open; it prints the URL once, e.g.
+   `http://127.0.0.1:7777/?token=...` (also in `~/.config/workstation/config.json`). Treat the URL like a password.
+2. **Open the URL** (it opens itself unless `--no-open`). The first run shows Settings.
+3. **Provider**: the app does not log you in. Either you are already signed in with Claude Code on this machine (leave the
+   key empty), or put an API key in Settings. For a gateway/proxy set the **Base URL** (`ANTHROPIC_BASE_URL`); only
+   Anthropic-API-compatible endpoints serving Claude models work. Environment variables work too
+   (`ANTHROPIC_API_KEY=... npm start`).
+4. **Open a project**: *Open project* (`Ctrl/Cmd O`) and pick a folder (a git repo gives you Changes, commit and worktrees).
+5. **First session**: type a task in the composer. `@` mentions a file, `/` lists commands and skills (Enter runs one that
+   needs no argument), `Shift+Tab` cycles permission modes. Approve or deny the permission cards as they appear; sessions that
+   need you are marked *Needs input* in the sidebar.
+6. **Review**: open the inspector (`Ctrl/Cmd Alt B`) > Changes: read each diff, click a line to comment, *Send to agent*,
+   then *Commit*. Commit needs a git name and email (`git config --global user.name ...`; the app tells you if they are missing).
+   *Rewind* on a message restores files from before it.
+7. **Parallel work**: tick *New git worktree* on a new session to give it its own branch and checkout.
+8. **Shortcuts**: `Ctrl/Cmd K` command palette (every action, session and panel, e.g. "Open terminal"), `Ctrl/Cmd /` the full list.
+
+Running as root (typical in Docker/devcontainers)? Everything works except *Bypass permissions*, which Claude Code refuses as
+root unless `IS_SANDBOX=1` is set; the mode is shown disabled with the reason. See [docs/DEVCONTAINER.md](docs/DEVCONTAINER.md#running-as-root-bypass-permissions).
+
 ## Configuration
 Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HOME`; the dev container feature persists it in a volume).
 
@@ -45,6 +77,8 @@ Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HO
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` | credentials passed to the Agent SDK |
 | `ANTHROPIC_BASE_URL` | custom endpoint (gateway/proxy) |
 | `WORKSTATION_HOME` | config directory |
+| `IS_SANDBOX=1` | tell Claude Code it runs in a throw-away sandbox, which enables *Bypass permissions* when running as root |
+| `WORKSTATION_ALLOW_BYPASS=0` | switch *Bypass permissions* off for everyone |
 
 These can also be set in the UI settings. **Custom endpoints:** only Anthropic-API-compatible endpoints serving Claude
 models work, because the Agent SDK speaks the Anthropic Messages API. Other providers are out of scope.

@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { EffortLevel, ImageAttachment, PermissionMode } from '@workstation/protocol';
 import { api } from '../lib/api';
-import { debounce, fileToBase64, formatTokens, fuzzy } from '../lib/utils';
+import { debounce, fileToBase64, formatTokens } from '../lib/utils';
 import { ls } from '../lib/storage';
 import { useSessions, type SessionData } from '../store/sessions';
 import { Icon } from './Icon';
 import { IconButton } from './ui';
 import { useContextSummary } from '../panels/OverviewPanel';
 import { useUi } from '../store/ui';
+import { rankSlash, slashRunsOnEnter, type SlashOption } from '../lib/slash';
 import { EffortChip, ModeChip, usableModes, useBypass, ModelChip, WorktreeChip } from './Chips';
 import { basename, dirname } from '../lib/utils';
 
 interface Popup { kind: 'mention' | 'slash'; query: string; start: number; end: number }
-interface Option { id: string; label: string; detail?: string; insert: string }
+type Option = SlashOption
 
 const draftKey = (id: string) => 'ws.draft.' + id;
 
@@ -66,7 +67,7 @@ export function Composer({ session }: { session: SessionData }) {
   /* ───── popups ───── */
   const slashOptions = useMemo<Option[]>(() => {
     const map = new Map<string, Option>();
-    for (const c of commands) map.set(c.name, { id: c.name, label: '/' + c.name, detail: c.description + (c.argumentHint ? `  ${c.argumentHint}` : ''), insert: `/${c.name} ` });
+    for (const c of commands) map.set(c.name, { id: c.name, label: '/' + c.name, detail: c.description + (c.argumentHint ? `  ${c.argumentHint}` : ''), insert: `/${c.name} `, hint: c.argumentHint });
     for (const n of session.conv.init?.slashCommands ?? []) if (!map.has(n)) map.set(n, { id: n, label: '/' + n, insert: `/${n} ` });
     return [...map.values()];
   }, [commands, session.conv.init]);
@@ -93,8 +94,7 @@ export function Composer({ session }: { session: SessionData }) {
   useEffect(() => {
     if (!popup) { setOptions([]); return; }
     if (popup.kind === 'slash') {
-      const scored = slashOptions.map((o) => ({ o, s: fuzzy(popup.query, o.id) })).filter((x) => x.s >= 0).sort((a, b) => b.s - a.s).slice(0, 8);
-      setOptions(scored.map((x) => x.o));
+      setOptions(rankSlash(slashOptions, popup.query));
       setSel(0);
     } else {
       searchFiles(session.cwd, popup.query, ++searchToken.current);
@@ -134,7 +134,15 @@ export function Composer({ session }: { session: SessionData }) {
     if (popup && options.length) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => (s + 1) % options.length); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return; }
-      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); accept(options[sel]); return; }
+      if (e.key === 'Tab') { e.preventDefault(); accept(options[sel]); return; }
+      if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        const o = options[sel];
+        // one Enter runs a command that needs no argument; files and commands that need one are completed first
+        if (popup.kind === 'slash' && slashRunsOnEnter(o) && !session.wtRemoved) { send(id, o.insert.trim(), []); setText(''); ls.del(draftKey(id)); setPopup(null); }
+        else accept(o);
+        return;
+      }
     }
     if (popup && e.key === 'Escape') { e.preventDefault(); setPopup(null); return; }
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && !composing.current) { e.preventDefault(); submit(); return; }
@@ -210,7 +218,7 @@ export function Composer({ session }: { session: SessionData }) {
             onCompositionEnd={() => { composing.current = false; }}
             onPaste={(e) => { const f = [...e.clipboardData.files].filter((x) => x.type.startsWith('image/')); if (f.length) { e.preventDefault(); void addFiles(f); } }}
           />
-          {running && <button type="button" className="send stop" onClick={() => interrupt(id)} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" size={12} fill /></button>}
+          {running && <button type="button" className="send stop" onClick={() => { interrupt(id); ta.current?.focus(); }} aria-label="Stop" title="Stop (Esc)"><Icon name="stop" size={12} fill /></button>}
           <button type="button" className="send" disabled={!canSend} onClick={submit} aria-label={running ? 'Queue message' : 'Send message'} title={running ? 'Queue (Enter)' : 'Send (Enter)'}>
             <Icon name="arrow-up" size={15} />
           </button>

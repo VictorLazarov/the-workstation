@@ -13,6 +13,8 @@ export interface WorktreeRecord {
   branch: string;
   baseSha: string;
   createdAt: number;
+  /** set when the worktree was removed: the record is kept so the session stays listed (read-only) under its project */
+  removedAt?: number;
 }
 
 export interface WorktreeRemoval { removed: boolean; branchDeleted: boolean; reason?: string }
@@ -28,7 +30,12 @@ export class WorktreeRegistry {
   private save() {
     try { fs.writeFileSync(this.file, JSON.stringify([...this.recs.values()], null, 2), { mode: 0o600 }); } catch { /* best effort */ }
   }
-  get(sessionId: string) { return this.recs.get(sessionId); }
+  /** The worktree of a session while it exists. */
+  get(sessionId: string) { const r = this.recs.get(sessionId); return r && !r.removedAt ? r : undefined; }
+  /** Also a removed worktree's record (its session stays listed under the project). */
+  getAny(sessionId: string) { return this.recs.get(sessionId); }
+  removedFor(root: string): WorktreeRecord[] { return [...this.recs.values()].filter((r) => r.removedAt && r.root === root); }
+  markRemoved(sessionId: string) { const r = this.recs.get(sessionId); if (r && !r.removedAt) { this.recs.set(sessionId, { ...r, removedAt: Date.now() }); this.save(); } }
   add(r: WorktreeRecord) { this.recs.set(r.sessionId, r); this.save(); }
   delete(sessionId: string) { if (this.recs.delete(sessionId)) this.save(); }
 }

@@ -1,5 +1,5 @@
 import { formatCost } from '../lib/utils';
-import { projectName, sessionProject, sessionStatus, sessionWorktree, type SessionData } from '../store/sessions';
+import { projectName, sessionProject, sessionStatus, sessionWorktree, useSessions, type SessionData } from '../store/sessions';
 import { useSidebarDrawer, useUi } from '../store/ui';
 import { isMac } from '../lib/utils';
 import { Icon } from './Icon';
@@ -19,7 +19,10 @@ export function TopBar({ session }: { session?: SessionData }) {
   const drawer = useSidebarDrawer();
   const inspectorOpen = useUi((s) => s.inspectorOpen);
   const status = session ? sessionStatus(session) : 'idle';
-  const label = { running: 'Working', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished', idle: 'Idle', starting: 'Starting' }[status];
+  const conn = useSessions((x) => x.conn);
+  // a session we cannot see right now is not "Idle": say so
+  const offline = !!session?.live && (conn === 'closed' || conn === 'offline');
+  const label = offline ? 'Disconnected' : { running: 'Working', 'needs-input': 'Needs your input', error: 'Error', done: 'Finished', idle: 'Idle', starting: 'Starting' }[status];
   const cost = session?.conv.usage.known === false ? 0 : session?.conv.usage.costUsd ?? 0; // unknown after a resume: hidden, not $0.00
   const mod = isMac() ? '⌘' : 'Ctrl';
   return (

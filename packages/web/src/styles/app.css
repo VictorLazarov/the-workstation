@@ -100,6 +100,7 @@ input, textarea, select { font: inherit; color: inherit; }
 .st-dot.st-attn { background: var(--accent-solid); }
 .st-dot.st-done { background: var(--ok); } .st-dot.st-error { background: var(--danger); }
 .sess-branch { opacity: 0.7; }
+.sess-gone { font-size: var(--fs-xs); color: var(--muted); white-space: nowrap; font-style: italic; }
 /* hover: time (and the actions button) replace the glyph so the row never grows */
 .sess-hover { display: none; position: absolute; right: 28px; top: 0; bottom: 0; align-items: center; padding-left: 16px; font-size: var(--fs-xs); color: var(--muted); background: linear-gradient(90deg, transparent, var(--row-bg) 12px); }
 .sess-time { flex: none; font-variant-numeric: tabular-nums; }

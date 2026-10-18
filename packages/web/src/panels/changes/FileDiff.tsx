@@ -112,6 +112,9 @@ export function FileDiff({ lines, path, mode, review }: { lines: DiffLine[]; pat
   const more = lines.length - visible.length;
   const comments = useComments(review?.sessionId ?? '').filter((c) => c.path === path);
   const [target, setTarget] = useState<Target | null>(null);
+  const scroller = useRef<HTMLDivElement>(null);
+  // a refreshed diff must not stay scrolled sideways with its gutter cut off
+  useEffect(() => { if (scroller.current) scroller.current.scrollLeft = 0; }, [lines]);
   const open = review ? (t: Target) => setTarget(t) : undefined;
   if (!lines.length) return <div className="cdiff-empty">No textual changes.</div>;
 
@@ -151,7 +154,7 @@ export function FileDiff({ lines, path, mode, review }: { lines: DiffLine[]; pat
   }
   return (
     <div className="cdiff">
-      <div className="cdiff-scroll">{body}</div>
+      <div className="cdiff-scroll" ref={scroller}>{body}</div>
       {mode === 'split' && review && (comments.length > 0 || target) && (
         // side by side, both panes must stay row-aligned, so comments are listed under the diff instead of between its rows
         <div className="cmt-stack cmt-below">

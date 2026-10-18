@@ -34,7 +34,7 @@
 .cs-modified { background: var(--accent-soft); color: var(--accent); } .cs-added, .cs-untracked { background: var(--ok-soft); color: var(--ok); }
 .cs-deleted { background: var(--danger-soft); color: var(--danger); } .cs-renamed { background: var(--ai-soft); color: var(--ai); }
 .cdiff-empty { padding: 8px 10px; color: var(--muted); font-size: var(--fs-sm); display: flex; gap: 6px; align-items: center; }
-.cdiff-scroll { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+.cdiff-scroll { container-type: inline-size; overflow-x: auto; max-height: 480px; overflow-y: auto; }
 .cdiff-table { min-width: 100%; width: max-content; }
 .split-panes { display: flex; min-width: 0; }
 .split-pane { flex: 1 1 0; min-width: 0; overflow: auto; max-height: 480px; overscroll-behavior: contain; }
@@ -207,6 +207,7 @@ button.cx-line { border-radius: 4px; } button.cx-line:hover { color: var(--text)
 .diff-cbtn { position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; display: none; place-items: center; border-radius: 4px; background: var(--accent-solid, var(--accent)); color: #fff; padding: 0; }
 .diff-row:hover .diff-cbtn, .diff-cbtn:focus-visible { display: grid; }
 .diff-cmt-row > td { padding: 0; background: var(--surface); }
+.diff-cmt-row .cmt-stack { position: sticky; left: 0; width: 100cqw; box-sizing: border-box; } /* the comment stays as wide as the visible pane while a long line scrolls sideways */
 .cmt-stack { display: grid; gap: 6px; padding: 6px 8px 8px 44px; white-space: normal; max-width: 100%; }
 .cmt-below { padding: 6px 8px 8px; border-top: 1px solid var(--border); }
 .cmt { position: relative; display: grid; gap: 4px; padding: 6px 28px 6px 8px; border: 1px solid var(--border); border-left: 3px solid var(--info); border-radius: var(--radius); background: var(--surface-2); font-family: var(--font-sans, inherit); font-size: var(--fs-base); color: var(--text); }

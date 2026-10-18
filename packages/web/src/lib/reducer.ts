@@ -175,12 +175,15 @@ function onStream(c: Conversation, msg: AnyMsg) {
 }
 
 /* ───────────── final assistant message ───────────── */
+const NO_RESPONSE = 'No response requested.';
 function onAssistant(c: Conversation, msg: AnyMsg) {
   const key: string = msg.parent_tool_use_id ?? MAIN_LANE;
   const m = msg.message ?? {};
   c.retry = null;
   setContext(c, m.usage, key);
   const incoming = (Array.isArray(m.content) ? m.content : []).map(toBlock).filter(Boolean) as Block[];
+  // The SDK writes this placeholder as an "assistant" message for a turn that was interrupted before the model said anything.
+  if (!msg.error && incoming.length > 0 && incoming.every((b) => b.type === 'text' && (b as { text: string }).text.trim() === NO_RESPONSE)) return;
   const lane = laneOf(c, key);
   const idx = findAssistantIdx(lane, m.id);
   const errText = msg.error ? String(msg.error) : undefined;
@@ -418,6 +421,40 @@ export function applySdk(prev: Conversation, msg: unknown): Conversation {
       c.toolProgress = { ...c.toolProgress, [String(m.tool_use_id)]: Number(m.elapsed_time_seconds ?? 0) };
       break;
     default: return prev;
+  }
+  return c;
+}
+
+/**
+ * Replays buffered live events (the server's whole event buffer after a reload/reopen) on top of a conversation that was
+ * already folded from the transcript. The transcript carries no `result` messages, so every replayed result would be
+ * appended at the very end ("all turn footers stacked after the last answer"). Each result is put right after the item of
+ * the main-thread message that precedes it in the buffer (its own turn), exactly as live rendering orders it.
+ */
+export function replayOnto(conv: Conversation, events: unknown[]): Conversation {
+  let c = conv;
+  let prev: AnyMsg | null = null; // last main-thread user/assistant event seen
+  for (const raw of events) {
+    const m = (raw && typeof raw === 'object' ? raw : {}) as AnyMsg;
+    const next = applySdk(c, m);
+    if (m.type === 'result' && next !== c) {
+      const lane = next.lanes[MAIN_LANE];
+      const items = lane?.items ?? [];
+      const last = items[items.length - 1];
+      if (lane && last?.kind === 'result' && prev) {
+        const anchor = items.findIndex((it, i) => i < items.length - 1 && (
+          prev!.type === 'assistant' ? it.kind === 'assistant' && it.msgId === String(prev!.message?.id ?? prev!.uuid)
+            : prev!.uuid ? it.kind === 'user' && it.uuid === prev!.uuid : false));
+        // the LAST matching item (findIndex finds the first; assistant/user ids are unique, so equal)
+        if (anchor >= 0 && anchor < items.length - 2) {
+          const moved = [...items.slice(0, anchor + 1), last, ...items.slice(anchor + 1, items.length - 1)];
+          next.lanes = { ...next.lanes, [MAIN_LANE]: { ...lane, items: moved } };
+        }
+      }
+    } else if ((m.type === 'assistant' || m.type === 'user') && !m.parent_tool_use_id && !(m.type === 'user' && Array.isArray(m.message?.content) && m.message.content.every((b: AnyMsg) => b?.type === 'tool_result'))) {
+      prev = m;
+    }
+    c = next;
   }
   return c;
 }

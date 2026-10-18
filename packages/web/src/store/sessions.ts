@@ -5,7 +5,7 @@ import type {
 } from '@workstation/protocol';
 import { api } from '../lib/api';
 import {
-  addLocalUser, addNotice, applySdk, applyServer, conversationBefore, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, lastItem, markInterruptRequested, withKnownUsage,
+  addLocalUser, addNotice, applySdk, applyServer, conversationBefore, emptyConversation, finishStreaming, errorAction, foldMessages, friendlyError, replayOnto, lastItem, markInterruptRequested, withKnownUsage,
 } from '../lib/reducer';
 import type { Conversation, ImageRef, PermissionRequest, UsageTotals } from '../lib/types';
 import { createTransport, type ConnStatus, type Transport } from '../lib/transport';
@@ -122,6 +122,8 @@ let initStarted = false;
 const pendingStarts = new Map<string, string>(); // reqId -> local session id
 const waiters = new Map<string, { resolve: (v: unknown) => void; reject: (e: Error) => void; timer: ReturnType<typeof setTimeout> }>();
 const lastSeq = new Map<string, number>(); // last sdk seq applied per session (for attach replay)
+/** Toasts about a missing connection: they are stale the moment it is back. */
+const NOT_CONNECTED_TAG = 'not-connected';
 const histBuffer = new Map<string, unknown[]>(); // sdk events arriving while history loads
 
 const freshRuntime = (cfg: AppConfig | null): SessionRuntimeState => ({
@@ -157,7 +159,7 @@ export const useSessions = create<Store>((set, get) => {
     const s = get().sessions[id];
     const isActive = get().activeId === id && !document.hidden;
     if (isActive) return;
-    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title, 40) + ': ' : ''}${body}`, action: { label: 'Open', run: () => get().setActive(id) }, });
+    useUi.getState().toast({ kind, tag: id, title, body: `${s ? truncate(s.title.replace(/(?:\.{2,}|…)+$/, '').trim(), 40) + ': ' : ''}${body.replace(/(?:\.{2,}|…)+$/, '…')}`, action: { label: 'Open', run: () => get().setActive(id) }, });
     if (document.hidden) platform.notify({ title, body: s?.title ?? body, tag: id, onClick: () => get().setActive(id) });
   };
 
@@ -169,7 +171,7 @@ export const useSessions = create<Store>((set, get) => {
     if (!ok) {
       // Not lost: it goes (back) to the queue marked as not sent; reconnecting re-sends it, and it has a Retry button.
       patch(id, (x) => ({ queue: failMessage(x.queue, { id: qid, text, images }) }));
-      useUi.getState().toast({ kind: 'error', title: 'Not connected', body: 'Your message was not sent. It will be sent when the connection is back, or retry it from the queue.' });
+      useUi.getState().toast({ kind: 'error', tag: NOT_CONNECTED_TAG, title: 'Not connected', body: 'Your message was not sent. It will be sent when the connection is back, or retry it from the queue.' });
       return;
     }
     const conv = addLocalUser(s.conv, qid, text, refs);
@@ -202,7 +204,7 @@ export const useSessions = create<Store>((set, get) => {
     if (!ok) {
       pendingStarts.delete(reqId);
       patch(localId, (x) => ({ queue: markAllFailed(x.queue) }));
-      toast({ kind: 'error', title: 'Not connected', body: 'Could not start the session. Your message is kept; it is sent when the connection is back.' });
+      toast({ kind: 'error', tag: NOT_CONNECTED_TAG, title: 'Not connected', body: 'Could not start the session. Your message is kept; it is sent when the connection is back.' });
       return;
     }
     patch(localId, () => ({ starting: true, runtime: { ...s.runtime, status: 'starting' } }));
@@ -219,7 +221,7 @@ export const useSessions = create<Store>((set, get) => {
       const buffered = histBuffer.get(id) ?? [];
       // past usage is not in the transcript: use what this browser remembered, else mark it unknown (never a fake $0.00 / 0 turns)
       if (!buffered.some((b) => (b as { type?: string })?.type === 'result')) conv = withKnownUsage(conv, ls.getJson<UsageTotals | null>('ws.usage.' + id, null));
-      for (const m of buffered) conv = applySdk(conv, m);
+      conv = replayOnto(conv, buffered);
       if (cur.conv.init) conv = { ...conv, init: cur.conv.init };
       patch(id, () => ({ conv, loading: false }));
     } catch (e) {
@@ -417,6 +419,7 @@ export const useSessions = create<Store>((set, get) => {
       transport.onStatus((conn) => {
         const was = get().conn;
         set({ conn });
+        if (conn === 'open') useUi.getState().dismissToastsByTag(NOT_CONNECTED_TAG);
         if ((conn === 'closed' || conn === 'offline') && was === 'open') {
           // streaming state is stale until we re-attach
           for (const s of Object.values(get().sessions)) if (s.live) patch(s.id, (x) => ({ conv: finishStreaming(x.conv) }));
@@ -532,7 +535,7 @@ export const useSessions = create<Store>((set, get) => {
       if (existing) { get().setActive(id); return; }
       const cfg = get().config;
       set({
-        sessions: { ...get().sessions, [id]: makeSession(id, sum.cwd ?? '', { title: sum.title, branch: sum.worktree?.branch ?? sum.gitBranch, projectRoot: sum.worktree?.root, lastActivity: sum.lastModified, live: false, runtime: freshRuntime(cfg) }) },
+        sessions: { ...get().sessions, [id]: makeSession(id, sum.cwd ?? '', { title: sum.title, branch: sum.worktree?.branch ?? sum.gitBranch, projectRoot: sum.worktree?.root, lastActivity: sum.lastModified, live: false, ...(sum.worktree?.removed ? { wtRemoved: true } : {}), runtime: freshRuntime(cfg) }) },
         activeId: id,
       });
       void loadHistory(id, sum.cwd ?? '', false);

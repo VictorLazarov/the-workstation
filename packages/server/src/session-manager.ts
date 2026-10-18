@@ -470,7 +470,7 @@ export class SessionManager {
     const live = this.sessions.get(sessionId);
     if (live) this.close(live, 'worktree removed');
     const res = await removeWorktree(rec, force);
-    if (res.removed) this.worktrees.delete(sessionId);
+    if (res.removed) this.worktrees.markRemoved(sessionId);
     return res;
   }
 

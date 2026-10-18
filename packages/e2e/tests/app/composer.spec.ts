@@ -26,10 +26,12 @@ test.describe('composer', () => {
     const list = page.getByRole('listbox', { name: 'Commands' });
     await expect(list).toBeVisible();
     for (const c of ['/compact', '/review', '/init', '/mock-skill']) await expect(list).toContainText(c);
-    await composer(page).fill('/rev');
+    // a command that REQUIRES an argument (`<arg>`) is completed by Enter so the argument can be typed;
+    // one without (or with an optional one) runs on the first Enter (see pass5-ui.spec.ts)
+    await composer(page).fill('/mock');
     await expect(list.getByRole('option')).toHaveCount(1);
     await composer(page).press('Enter');
-    await expect(composer(page)).toHaveValue('/review ');
+    await expect(composer(page)).toHaveValue('/mock-skill ');
     await expect(list).toHaveCount(0);
   });
 

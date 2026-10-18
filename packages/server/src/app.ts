@@ -136,9 +136,14 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
 
   // ── sessions ──
   /** The worktree a session runs in (only ones this server created, from its registry), so the UI files it under its project. */
-  const worktreeOf = (id: string): Pick<SessionSummary, 'worktree'> => {
-    const rec = sessions.worktrees.get(id);
-    return rec ? { worktree: { root: rec.root, branch: rec.branch, path: rec.dir } } : {};
+  const worktreeOf = (id: string, cwd?: string): Pick<SessionSummary, 'worktree'> => {
+    const rec = sessions.worktrees.getAny(id);
+    if (rec) return { worktree: { root: rec.root, branch: rec.branch, path: rec.dir, ...(rec.removedAt || !fs.existsSync(rec.dir) ? { removed: true } : {}) } };
+    // A worktree session we have no record of (removed before records were kept, or made by `claude -w`): when its folder
+    // is gone it is still filed under the project it lived in, as history only.
+    const m = cwd ? /^(.*?)[\\/]\.claude[\\/]worktrees[\\/][^\\/]+/.exec(cwd) : null;
+    if (m && !fs.existsSync(m[0])) return { worktree: { root: m[1]!, branch: '', path: m[0], removed: true } };
+    return {};
   };
   /** The session's folder, or undefined when it is gone (a removed worktree): the SDK then looks for the transcript in every project, so the history of an ended worktree session stays readable. */
   const softDir = (input: string) => requireDir(input).catch((e) => { if (e instanceof HttpError && e.status === 404) return undefined; throw e; });
@@ -151,12 +156,24 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
       out.set(s.sessionId, {
         sessionId: s.sessionId, title: sessionTitle(s), cwd: s.cwd, gitBranch: s.gitBranch,
         lastModified: s.lastModified, createdAt: (s as { createdAt?: number }).createdAt, live: sessions.isLive(s.sessionId), tag: s.tag,
-        ...worktreeOf(s.sessionId),
+        ...worktreeOf(s.sessionId, s.cwd),
       });
+    }
+    // The SDK looks a project's sessions up through `git worktree list`, so the sessions of REMOVED worktrees are not found
+    // by project: add them back from our own records (the removal dialog promises their history stays readable).
+    if (dir) {
+      const gone = sessions.worktrees.removedFor(dir).filter((r) => !out.has(r.sessionId));
+      if (gone.length) {
+        const ids = new Set(gone.map((r) => r.sessionId));
+        for (const s of await adapter.listSessions({ limit: 500 }).catch(() => [])) {
+          if (!ids.has(s.sessionId) || out.has(s.sessionId)) continue;
+          out.set(s.sessionId, { sessionId: s.sessionId, title: sessionTitle(s), cwd: s.cwd, gitBranch: s.gitBranch, lastModified: s.lastModified, createdAt: (s as { createdAt?: number }).createdAt, live: false, tag: s.tag, ...worktreeOf(s.sessionId, s.cwd) });
+        }
+      }
     }
     for (const l of sessions.list()) {
       if (out.has(l.id) || (dir && !samePath(l.cwd, dir) && !(sessions.worktrees.get(l.id) && samePath(sessions.worktrees.get(l.id)!.root, dir)))) continue;
-      out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true, ...worktreeOf(l.id) });
+      out.set(l.id, { sessionId: l.id, title: l.title || 'New session', cwd: l.cwd, lastModified: l.createdAt, createdAt: l.createdAt, live: true, ...worktreeOf(l.id, l.cwd) });
     }
     return c.json([...out.values()].sort((a, b) => b.lastModified - a.lastModified));
   });
@@ -202,6 +219,7 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     await adapter.deleteSession(id, cwdQ ? { dir: await softDir(cwdQ) } : undefined).catch((e) => {
       if (!live && !worktree?.removed) throw new HttpError(404, e instanceof Error ? e.message : 'session not found');
     });
+    if (sessions.worktrees.getAny(id)?.removedAt) sessions.worktrees.delete(id); // deleted for good: nothing left to list
     return c.json({ ok: true, ...(worktree ? { worktree } : {}) });
   });
 

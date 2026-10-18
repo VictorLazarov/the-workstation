@@ -50,8 +50,12 @@ export function relPath(p: string, cwd?: string): string {
   return np.replace(/^\/(?:home|Users)\/[^/]+/, '~').replace(/^[A-Za-z]:\/Users\/[^/]+/, '~');
 }
 
+/** Ends in an ellipsis already (the SDK / a session title shortened it before us). */
+const TRAILING_ELLIPSIS = /(?:\.{2,}|…)+$/;
+/** Shortens to at most `n` characters with exactly ONE trailing ellipsis (never "……" or "..." + "…"). */
 export function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s;
+  if (s.length <= n) return s;
+  return s.slice(0, n - 1).trimEnd().replace(TRAILING_ELLIPSIS, '') + '…';
 }
 
 export function formatCost(usd: number): string {

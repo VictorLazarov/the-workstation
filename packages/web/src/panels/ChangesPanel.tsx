@@ -104,6 +104,7 @@ function ReviewBar({ sessionId }: { sessionId: string }) {
   const send = () => {
     useSessions.getState().send(sessionId, formatReview(comments));
     useReview.getState().clear(sessionId);
+    requestAnimationFrame(() => window.dispatchEvent(new Event('ws:focus-composer'))); // the button is about to disappear: focus goes back to the composer, not <body>
     useUi.getState().toast({ kind: 'success', title: 'Review sent', body: `${comments.length} comment${comments.length === 1 ? '' : 's'} went to the agent as one message.` });
   };
   return (

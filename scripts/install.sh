@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # One-liner installer for The Workstation (any container / VM / laptop with Node >= 20).
-#   curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/v0.1.0/scripts/install.sh
-#   less install.sh && bash install.sh
-# Env: WORKSTATION_REPO (git url), WORKSTATION_REF (release tag or full commit SHA, default v0.1.0; a branch such as
-#      main floats), WORKSTATION_DIR (default ~/.local/share/workstation), WORKSTATION_BIN (default ~/.local/bin)
+#   REF=main        # or a release tag once one exists, or a full commit SHA (most reproducible)
+#   curl -fsSLO https://raw.githubusercontent.com/VictorLazarov/the-workstation/$REF/scripts/install.sh
+#   less install.sh && WORKSTATION_REF=$REF bash install.sh
+# Env: WORKSTATION_REPO (git url), WORKSTATION_REF (branch, release tag or full commit SHA, default main; a branch floats),
+#      WORKSTATION_DIR (default ~/.local/share/workstation), WORKSTATION_BIN (default ~/.local/bin)
 set -euo pipefail
 REPO="${WORKSTATION_REPO:-https://github.com/VictorLazarov/the-workstation.git}"
-REF="${WORKSTATION_REF:-v0.1.0}"
+REF="${WORKSTATION_REF:-main}"
 DIR="${WORKSTATION_DIR:-$HOME/.local/share/workstation}"
 BIN="${WORKSTATION_BIN:-$HOME/.local/bin}"
 
@@ -18,12 +19,12 @@ major="$(node -p 'process.versions.node.split(".")[0]')"
 if [ -d "$DIR/.git" ]; then
   echo "Updating $DIR"
   if git -C "$DIR" fetch --depth 1 origin "$REF"; then git -C "$DIR" -c advice.detachedHead=false checkout -q FETCH_HEAD
-  else fail "could not fetch '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"; fi
+  else fail "could not fetch '$REF'; that ref does not exist in $REPO (release tags are only created by the owner). Set WORKSTATION_REF to an existing branch, tag or full commit SHA, e.g. WORKSTATION_REF=\$(git rev-parse HEAD)"; fi
 else
   echo "Cloning $REPO ($REF) into $DIR"; mkdir -p "$(dirname "$DIR")"
   git clone -q --depth 1 --branch "$REF" "$REPO" "$DIR" 2>/dev/null \
     || { rm -rf "$DIR"; git clone -q "$REPO" "$DIR" && git -C "$DIR" -c advice.detachedHead=false checkout -q "$REF"; } \
-    || fail "could not check out '$REF'; set WORKSTATION_REF to an existing release tag or full commit SHA"
+    || fail "could not check out '$REF'; that ref does not exist in $REPO (release tags are only created by the owner). Set WORKSTATION_REF to an existing branch, tag or full commit SHA, e.g. WORKSTATION_REF=\$(git rev-parse HEAD)"
 fi
 if printf '%s' "$REF" | grep -Eq '^[0-9a-f]{40}$'; then
   [ "$(git -C "$DIR" rev-parse HEAD)" = "$REF" ] || fail "checked-out commit does not match $REF"

@@ -7,6 +7,7 @@ import { Icon, type IconName } from './Icon';
 import { Dialog, IconButton, Kbd, Spinner } from './ui';
 import { usableModes } from './Chips';
 import { newSessionShortcut } from '../lib/shortcuts';
+import { usePanels } from '../panels/registry';
 
 /* ───────── toasts ───────── */
 function ToastView({ t, more }: { t: Toast; more?: number }) {
@@ -154,6 +155,7 @@ export function CommandPalette() {
   const models = useSessions((s) => s.models);
   const active = useActiveSession();
   const theme = useUi((s) => s.theme);
+  const panels = usePanels();
   const list = useRef<HTMLDivElement>(null);
   useEffect(() => { if (open) { setQ(''); setIdx(0); } }, [open]);
 
@@ -172,15 +174,16 @@ export function CommandPalette() {
     if (active) {
       for (const m of usableModes(S.hello?.bypass ?? { available: true })) out.push({ id: 'mode-' + m.id, label: `Mode: ${m.label}`, icon: m.icon, group: 'Session', keywords: 'permission', hint: active.runtime.permissionMode === m.id ? 'current' : undefined, run: () => S.setMode(active.id, m.id) });
       for (const m of models) out.push({ id: 'model-' + m.id, label: `Model: ${m.label}`, icon: 'sparkles', group: 'Session', hint: active.runtime.model === m.id ? 'current' : undefined, run: () => S.setModel(active.id, m.id) });
+      for (const p of panels) out.push({ id: 'panel-' + p.id, label: p.id === 'terminal' ? 'Open terminal' : `Open ${p.title}`, icon: p.icon, group: 'View', keywords: `panel inspector tab ${p.title}`, run: () => U.openInspector(p.id) });
       out.push({ id: 'fork', label: 'Fork this session', icon: 'fork', group: 'Session', run: () => S.forkSession(active.id) });
       if (active.runtime.status === 'running') out.push({ id: 'stop', label: 'Stop the agent', icon: 'stop', group: 'Session', run: () => S.interrupt(active.id) });
     }
     const seen = new Set<string>();
     for (const s of Object.values(sessions)) { seen.add(s.id); out.push({ id: 's-' + s.id, label: s.title, icon: 'chat', group: 'Sessions', hint: projectName(sessionProject(s)), keywords: s.branch, run: () => S.setActive(s.id) }); }
-    for (const s of [...summaries].sort((a, b) => b.lastModified - a.lastModified).slice(0, 40)) if (!seen.has(s.sessionId)) out.push({ id: 's-' + s.sessionId, label: s.title, icon: 'chat', group: 'Sessions', hint: `${s.worktree?.root ?? s.cwd ? projectName(s.worktree?.root ?? s.cwd!) : ''} · ${relativeTime(s.lastModified)}`, run: () => S.openSession(s) });
+    for (const s of [...summaries].sort((a, b) => b.lastModified - a.lastModified).slice(0, 40)) if (!seen.has(s.sessionId)) out.push({ id: 's-' + s.sessionId, label: s.title, icon: 'chat', group: 'Sessions', hint: `${s.worktree?.root ?? s.cwd ? projectName(s.worktree?.root ?? s.cwd!) : ''} · ${relativeTime(s.lastModified)}${s.worktree?.removed ? ' · worktree removed' : ''}`, run: () => S.openSession(s) });
     for (const p of projects) out.push({ id: 'p-' + p, label: `New session in ${projectName(p)}`, icon: 'folder', group: 'Projects', hint: p, run: () => S.newSession(p) });
     return out;
-  }, [open, sessions, summaries, projects, models, active, theme]);
+  }, [open, sessions, summaries, projects, models, active, theme, panels]);
 
   const results = useMemo(() => {
     if (!q) { const order = ['Session', 'Actions', 'View', 'Sessions', 'Projects'];

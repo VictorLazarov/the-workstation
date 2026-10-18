@@ -250,6 +250,9 @@ export async function gitCommit(cwd: string, message: unknown, files?: unknown):
   const r = await git(root, ['commit', '-m', message.trim(), '--', ...list.map((p) => `:(literal)${p}`)], { timeout: 120_000, runHooks: true });
   if (r.code !== 0) {
     const out = lastLines(`${r.stdout}\n${r.stderr}`, 20);
+    if (/Author identity unknown|auto-detection is disabled|no (name|email) was given|unable to auto-detect email|empty ident name|Please tell me who you are/i.test(out)) {
+      throw new GitError(409, 'Git needs your name and email before it can commit. Run in a terminal:\n  git config --global user.name "Your Name"\n  git config --global user.email "you@example.com"\n(drop --global to set it for this repository only), then press Commit again.');
+    }
     throw new GitError(409, `git commit failed (a hook may have rejected it):\n${out}`);
   }
   const head = await git(root, ['rev-parse', '--short', 'HEAD']);

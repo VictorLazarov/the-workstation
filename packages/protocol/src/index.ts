@@ -112,7 +112,7 @@ export interface SessionSummary {
   sessionId: SessionId; title: string; cwd?: string; gitBranch?: string;
   lastModified: number; createdAt?: number; live: boolean; tag?: string;
   /** set when the session runs in a git worktree this server created: `root` is the main checkout (the project it belongs to) */
-  worktree?: { root: string; branch: string; path: string };
+  worktree?: { root: string; branch: string; path: string; /** the checkout is gone: the session is history only */ removed?: boolean };
 }
 export interface AppConfig {
   anthropicBaseUrl?: string;
