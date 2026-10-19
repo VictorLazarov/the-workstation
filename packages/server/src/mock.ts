@@ -33,6 +33,9 @@ import path from 'node:path';
 import type { CanUseTool, ModelInfo, Options, PermissionUpdate, SDKSessionInfo, SDKUserMessage, SessionMessage, SlashCommand } from '@anthropic-ai/claude-agent-sdk';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
 import { isInside, samePath } from './platform.js';
+import { resolveSettingSources } from '@workstation/protocol';
+import { scanConfig, type ScanResult } from './loaded-config.js';
+import { userSettingsDir } from './permission-rules.js';
 
 type Json = Record<string, unknown>;
 
@@ -81,8 +84,27 @@ class MockQuery implements QueryHandle {
   readonly sessionId: string;
   private session: MockSession;
 
+  /** what the enabled config sources contribute, read from the real files like the CLI would (so tests can toggle sources) */
+  private cfg: ScanResult;
+  private plugins: Array<{ name: string; path: string; version?: string }> = [];
+
   constructor(private params: { prompt: AsyncIterable<SDKUserMessage>; options: Options }, private store: Map<string, MockSession>) {
     const o = params.options;
+    const sources = resolveSettingSources(o.settingSources);
+    const cwd0 = o.cwd ?? process.cwd();
+    const userDir = userSettingsDir();
+    this.cfg = scanConfig({ userDir, projectDir: cwd0, cwd: cwd0 }, sources);
+    if (sources.includes('user')) {
+      try {
+        for (const e of fs.readdirSync(path.join(userDir, 'plugins'), { withFileTypes: true })) {
+          if (!e.isDirectory()) continue;
+          const dir = path.join(userDir, 'plugins', e.name);
+          let version: string | undefined;
+          try { version = JSON.parse(fs.readFileSync(path.join(dir, '.claude-plugin', 'plugin.json'), 'utf8')).version; } catch { /* none */ }
+          this.plugins.push({ name: e.name, path: dir, ...(typeof version === 'string' ? { version } : {}) });
+        }
+      } catch { /* no plugins dir */ }
+    }
     this.permissionMode = o.permissionMode ?? 'default';
     this.model = o.model ?? 'default';
     this.sessionId = o.sessionId ?? (o.resume && !o.forkSession ? o.resume : randomUUID());
@@ -137,7 +159,7 @@ class MockQuery implements QueryHandle {
     rows.push({ name: 'Free space', tokens: Math.max(0, max - used - buffer), color: 'promptBorder', kind: 'free' });
     return {
       categories: rows, totalTokens: used, maxTokens: max, rawMaxTokens: max, percentage: (used / max) * 100, model: this.model,
-      memoryFiles: [], mcpTools, agents: [], isAutoCompactEnabled: true, autoCompactThreshold: max - buffer,
+      memoryFiles: this.cfg.memory.map((m) => ({ path: path.resolve(this.session.cwd, m.detail?.startsWith('~/') ? path.join(os.homedir(), m.detail.slice(2)) : m.detail ?? m.name), type: m.origin === 'user' ? 'User' : m.origin === 'local' ? 'Local' : 'Project', tokens: 120 })), mcpTools, agents: [], isAutoCompactEnabled: true, autoCompactThreshold: max - buffer,
       messageBreakdown: { toolCallTokens: Math.round(messages * 0.2), toolResultTokens: Math.round(messages * 0.35), attachmentTokens: 0, assistantMessageTokens: Math.round(messages * 0.25), userMessageTokens: Math.round(messages * 0.2), redirectedContextTokens: 0, unattributedTokens: 0 },
       apiUsage: { input_tokens: 1200, output_tokens: 340, cache_read_input_tokens: used - 1200, cache_creation_input_tokens: 500 },
       gridRows: [{ color: 'claude', isFilled: true, categoryName: 'System prompt', tokens: 3_100, percentage: 1.5, squareFullness: 1 }],
@@ -147,9 +169,13 @@ class MockQuery implements QueryHandle {
   async toggleMcpServer(name: string, enabled: boolean) { this.mcp.set(name, enabled); }
   async reconnectMcpServer(name: string) { if (!this.mcp.has(name)) throw new Error(`Unknown MCP server: ${name}`); }
   async supportedModels() { return MOCK_MODELS; }
-  async supportedCommands() { return MOCK_COMMANDS; }
+  private allCommands(): SlashCommand[] {
+    const extra = [...this.cfg.commands.keys(), ...this.cfg.skills.keys()].filter((n) => !MOCK_COMMANDS.some((c) => c.name === n));
+    return [...MOCK_COMMANDS, ...extra.map((name) => ({ name, description: 'From your config', argumentHint: '' }))];
+  }
+  async supportedCommands() { return this.allCommands(); }
   async initializationResult() {
-    return { commands: MOCK_COMMANDS, models: MOCK_MODELS, agents: [], current_permission_mode: this.permissionMode };
+    return { commands: this.allCommands(), models: MOCK_MODELS, agents: ['general-purpose', 'Explore', ...this.cfg.agents.keys()].map((name) => ({ name, description: name })), current_permission_mode: this.permissionMode };
   }
   close() {
     this.closed = true;
@@ -169,7 +195,7 @@ class MockQuery implements QueryHandle {
       type: 'system', subtype: 'init', cwd: this.session.cwd, model: this.model, permissionMode: this.permissionMode,
       tools: ['Bash', 'Edit', 'Read', 'Write', 'Grep', 'Glob', 'TodoWrite', 'Task', 'WebSearch', 'WebFetch', 'AskUserQuestion', 'ExitPlanMode'],
       mcp_servers: [...this.mcp].map(([name, on]) => ({ name, status: on ? 'connected' : 'disabled' })),
-      slash_commands: MOCK_COMMANDS.map((c) => c.name), skills: ['mock-skill'], agents: ['general-purpose', 'Explore'], plugins: [],
+      slash_commands: this.allCommands().map((c) => c.name), skills: ['mock-skill', ...this.cfg.skills.keys()], agents: ['general-purpose', 'Explore', ...this.cfg.agents.keys()], plugins: this.plugins,
       apiKeySource: 'none', claude_code_version: '0.0.0-mock', output_style: 'default',
     });
   }

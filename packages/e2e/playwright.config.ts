@@ -96,7 +96,7 @@ const flavours = {
   firefox: { suffix: '-firefox', device: devices['Desktop Firefox'], launchOptions: {} },
   webkit: { suffix: '-webkit', device: devices['Desktop Safari'], launchOptions: {} },
 } as const;
-const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_MAX_SESSIONS: '500', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
+const mockEnv = (home: string, speed: string) => ({ ...process.env, WORKSTATION_HOME: home, CLAUDE_CONFIG_DIR: path.join(home, 'claude-user'), /* hermetic: the mock reads the user's Claude dir like the CLI would, never the real ~/.claude */ WORKSTATION_MOCK: '1', WORKSTATION_MOCK_SPEED: speed, WORKSTATION_NO_OPEN: '1', WORKSTATION_MAX_SESSIONS: '500', WORKSTATION_WEB_DIST: state.webSnapshot }) as Record<string, string>;
 const q = (p: string) => JSON.stringify(p); // paths with spaces (Windows profiles, macOS volumes)
 const serverCmd = (url: string, cwd = state.project) => `node ${q(path.join(repoRoot, 'packages/server/dist/cli.js'))} --no-open --host 127.0.0.1 --port ${new URL(url).port} --cwd ${q(cwd)}`;
 

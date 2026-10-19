@@ -4,7 +4,7 @@ import path from 'node:path';
 import { modelNotFoundText, rejectedModelFromText } from '@workstation/protocol';
 import type { Options, PermissionResult, PermissionUpdate, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import type {
-  ClientMessage, EffortLevel, ImageAttachment, PermissionDecision, PermissionMode, ServerMessage, SessionId, SessionRule, SessionRuntimeState,
+  ClientMessage, EffortLevel, ImageAttachment, PermissionDecision, PermissionMode, LoadedConfig, ServerMessage, SessionId, SessionRule, SessionRuntimeState, SettingSourceId,
 } from '@workstation/protocol';
 import type { ConfigStore } from './config.js';
 import { HttpError, requireDir } from './files.js';
@@ -14,6 +14,8 @@ import { bypassCapability, BYPASS_ROOT_REASON, type BypassCapability } from './b
 import { buildCliEnv } from './cli-env.js';
 import { headSha, removeWorktree, worktreeRemovalBlock, WorktreeRegistry, type WorktreeRemoval } from './worktrees.js';
 import { normalizeContextUsage } from './context-usage.js';
+import { composeLoadedConfig } from './loaded-config.js';
+import { listPermissionRules, settingsProjectDir, userSettingsDir } from './permission-rules.js';
 import type { QueryHandle, SdkAdapter } from './sdk.js';
 import { log } from './log.js';
 import { createStderrLogger, forgetMcp, logMcpStatus, logSdkMessage } from './sdk-log.js';
@@ -90,6 +92,8 @@ export interface LiveSession {
   /** model_not_found from an api_retry waits briefly for the CLI's own message, which names the rejected model */
   modelErrorTimer?: NodeJS.Timeout;
   model?: string;
+  /** config sources this session was started with (fixed; Settings changes apply to new sessions) */
+  settingSources: SettingSourceId[];
   permissionMode: PermissionMode;
   effort?: EffortLevel;
   lastStatus: SessionRuntimeState['status'];
@@ -132,7 +136,7 @@ export class SessionManager {
   list(): LiveSession[] { return [...this.sessions.values()]; }
 
   runtimeState(s: LiveSession): SessionRuntimeState {
-    return { status: s.closed ? 'closed' : this.status(s), model: s.model, permissionMode: s.permissionMode, effort: s.effort, ...(s.rules.length ? { rules: s.rules } : {}) };
+    return { status: s.closed ? 'closed' : this.status(s), model: s.model, permissionMode: s.permissionMode, effort: s.effort, settingSources: s.settingSources, ...(s.rules.length ? { rules: s.rules } : {}) };
   }
   private status(s: LiveSession): SessionRuntimeState['status'] {
     if (s.pending.size > 0) return 'waiting_permission';
@@ -255,6 +259,37 @@ export class SessionManager {
     return main[i - 1]!.uuid!;
   }
 
+  /**
+   * What the agent loaded for this session, by origin: the SDK's own lists plus a read-only scan of the enabled sources' files
+   * (loaded-config.ts). Each SDK call is optional: a failure only makes the answer less complete, never fails it.
+   */
+  async loadedConfig(s: LiveSession): Promise<LoadedConfig> {
+    const opt = async <T>(f: () => Promise<T>): Promise<T | undefined> => {
+      try { return await Promise.race([f(), new Promise<undefined>((r) => setTimeout(() => r(undefined), 8_000))]); } catch { return undefined; }
+    };
+    const live = !s.closed;
+    const [usage, mcp] = live ? await Promise.all([
+      opt(() => s.query.getContextUsage({ detail: 'summary' })),
+      opt(() => s.query.mcpServerStatus()),
+    ]) : [undefined, undefined];
+    const projectDir = await settingsProjectDir(s.worktree?.root ?? s.cwd);
+    const composed = composeLoadedConfig({
+      sources: s.settingSources,
+      dirs: { userDir: userSettingsDir(), projectDir, cwd: s.cwd },
+      init: s.init as Record<string, unknown> | undefined,
+      memoryFiles: (usage as { memoryFiles?: Array<{ path: string; type: string }> } | undefined)?.memoryFiles,
+      mcp: Array.isArray(mcp) ? (mcp as Array<{ name: string; status: string; scope?: string; source?: string }>) : undefined,
+    });
+    const rules: LoadedConfig['rules'] = {};
+    for (const r of listPermissionRules(projectDir, undefined, s.settingSources)) rules[r.source] = (rules[r.source] ?? 0) + 1;
+    if (s.rules.length) rules.session = s.rules.filter((r) => r.destination === 'session').length || undefined;
+    const notes: string[] = [];
+    if (!s.settingSources.length) notes.push('No config sources were loaded: only the built-in agent.');
+    if (!s.settingSources.includes('local')) notes.push('"Always allow" is kept for this session only (the Local source is off).');
+    if (!live) notes.push('The session has ended: lists come from the files only.');
+    return { sources: s.settingSources, current: this.config.settingSources(), ...composed, rules, live: live && !!usage, notes };
+  }
+
   /** Real context-window breakdown from the SDK query (`getContextUsage`), reduced to the wire shape. */
   async contextUsage(s: LiveSession, detail?: unknown) {
     const d: 'summary' | 'full' = detail === 'summary' ? 'summary' : 'full';
@@ -339,11 +374,12 @@ export class SessionManager {
     const model = msg.model ?? app.defaultModel;
     const effort = msg.effort ?? app.defaultEffort;
 
+    const settingSources = this.config.settingSources();
     const queue = new PromptQueue();
     const abort = new AbortController();
     const s: LiveSession = {
       id, cwd, worktree, queue, subs: new Set(), buffer: [], seq: 0, evictedThrough: 0, pending: new Map(), inflight: new Map(), lifecycle: false, autoTurn: false, rules: [], bufferBytes: 0, fatalInterrupted: false,
-      model, permissionMode, effort, lastStatus: 'starting', init: undefined, createdAt: Date.now(), closed: false,
+      model, settingSources, permissionMode, effort, lastStatus: 'starting', init: undefined, createdAt: Date.now(), closed: false,
       query: undefined as unknown as QueryHandle,
     };
 
@@ -351,7 +387,7 @@ export class SessionManager {
     const options: Options = {
       cwd,
       abortController: abort,
-      settingSources: ['user', 'project', 'local'],
+      settingSources,
       systemPrompt: { type: 'preset', preset: 'claude_code' },
       includePartialMessages: true,
       enableFileCheckpointing: true,
@@ -689,8 +725,11 @@ export class SessionManager {
       const updates: PermissionUpdate[] = [];
       if (d.remember) {
         // Only rule/directory suggestions: the SDK also suggests `setMode acceptEdits`, which "always allow" must not trigger.
+        // Without the `local` source Claude Code still WRITES an "Always allow" rule to settings.local.json but neither applies it nor
+        // reads it back (checked against the real SDK), so a persistent rule would be a silent lie: it is kept for this session only.
+        const sessionOnly = d.remember === 'session' || !s.settingSources.includes('local');
         for (const u of rememberable(p.suggestions)) {
-          const upd = d.remember === 'session' ? { ...u, destination: 'session' as const } : u;
+          const upd = sessionOnly && u.type !== 'setMode' ? { ...u, destination: 'session' as const } : u;
           updates.push(upd);
           if (upd.type === 'setMode') s.permissionMode = upd.mode;
           if (upd.type === 'addRules') for (const r of upd.rules) s.rules.push({ toolName: r.toolName, ...(r.ruleContent ? { ruleContent: r.ruleContent } : {}), behavior: upd.behavior, destination: upd.destination });

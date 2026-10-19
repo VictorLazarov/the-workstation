@@ -390,7 +390,21 @@ export async function demoRest<T>(method: string, path: string, q: Record<string
   }
   if (path === '/api/permission-rules') {
     if (method === 'DELETE') { const r = body as { behavior: string; rule: string }; demoRules = demoRules.filter((x) => !(x.behavior === r.behavior && x.rule === r.rule && x.removable)); return ok({ removed: true }); }
-    return ok({ rules: demoRules });
+    return ok({ dir: DEMO_CWD, rules: demoRules, sources: ['user', 'project', 'local'] });
+  }
+  if (/^\/api\/sessions\/[^/]+\/loaded-config$/.test(path)) {
+    return ok({
+      sources: ['user', 'project', 'local'], current: ['user', 'project', 'local'], live: true, hasHooks: true, notes: [],
+      builtinCounts: { skills: 3, commands: 18, agents: 3 }, rules: { local: 1, user: 2 },
+      items: [
+        { kind: 'memory', origin: 'user', name: 'CLAUDE.md', detail: '~/.claude/CLAUDE.md' },
+        { kind: 'memory', origin: 'project', name: 'CLAUDE.md', detail: 'CLAUDE.md' },
+        { kind: 'skill', origin: 'user', name: 'commit-helper' },
+        { kind: 'command', origin: 'project', name: 'ship' },
+        { kind: 'hook', origin: 'user', name: 'PreToolUse', detail: 'PreToolUse · Bash', command: 'my-audit-log --quiet' },
+        { kind: 'mcp', origin: 'project', name: 'docs', detail: 'connected' },
+      ],
+    });
   }
   if (path === '/api/models') return ok(demoModels);
   if (path === '/api/gateway/test') return ok({ ok: false, message: 'Not available in the demo', models: [] });

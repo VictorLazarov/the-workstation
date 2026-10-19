@@ -89,6 +89,22 @@ root unless `IS_SANDBOX=1` is set; the mode is shown disabled with the reason. S
 Inherited credentials are never sent to the gateway (see Credential isolation): without a key, it sees `x-api-key: workstation-no-credential`.
 Only gateways that speak the Anthropic Messages API work; a gateway that only speaks the OpenAI chat API needs an Anthropic-compatible front (LiteLLM provides one).
 
+## What the agent loads from your machine
+The agent is Claude Code (through the Claude Agent SDK), so it picks up your Claude configuration the way the `claude` CLI does. That is the SDK's
+`settingSources` option; The Workstation passes all three by default, for parity with Claude Code Desktop:
+
+| Source | Loads |
+|---|---|
+| **User** (`~/.claude`) | `CLAUDE.md`/memory, settings, skills, slash commands, agents, plugins, MCP servers, permission rules, **hooks** |
+| **Project** (`.claude/` + `CLAUDE.md` in the repo) | the repo's `CLAUDE.md`, shared settings, skills, commands, agents, `.mcp.json`, **hooks** |
+| **Local** (`.claude/settings.local.json`) | your private per-repo settings: "Always allow" rules, **hooks**, overrides |
+
+Hooks run shell commands as you, so a repo you open can run commands through its hooks. **Settings -> Config sources** has a switch per source
+(applies to new sessions; a running session keeps what it started with). **Overview -> Loaded configuration** lists what the open session
+actually loaded, by origin (names, paths and hook commands only, never file contents). With **Local** off, Claude Code would still write an
+"Always allow" rule to `settings.local.json` but neither apply nor read it (checked against the real SDK), so the app offers "Allow for this
+session" instead. With a custom base URL the agent uses a credential-free copy of your config (see `docs/ARCHITECTURE.md`).
+
 ## Configuration
 Config and token live in `~/.config/workstation/` (override with `WORKSTATION_HOME`; the dev container feature persists it in a volume).
 

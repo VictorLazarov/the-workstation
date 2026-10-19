@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { PermissionRuleEntry } from '@workstation/protocol';
+import { SETTING_SOURCES, type PermissionRuleEntry, type SettingSourceId } from '@workstation/protocol';
 import { HttpError } from './files.js';
 import { git } from './git.js';
 import { fromGitPath } from './platform.js';
@@ -41,16 +41,31 @@ function readJson(file: string): Record<string, unknown> | null {
   } catch { return null; }
 }
 
-/** The permission rules (allow / deny / ask) that apply to a project directory, from its local, project and user settings. */
-export function listPermissionRules(cwd: string, env?: Record<string, string | undefined>): PermissionRuleEntry[] {
+/** Where the user's Claude config dir is (also what the loaded-config scan reads). */
+export function userSettingsDir(env: Record<string, string | undefined> = process.env): string {
+  return env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
+}
+
+/**
+ * The permission rules (allow / deny / ask) that apply to a project directory, from its local, project and user settings.
+ * Only the config `sources` Settings has enabled count: Claude Code does not read the others. With `ignored`, the number of
+ * rules that exist in a disabled source is added to it (so the viewer can say they are not applied).
+ */
+export function listPermissionRules(cwd: string, env?: Record<string, string | undefined>, sources: readonly SettingSourceId[] = SETTING_SOURCES, ignored?: Partial<Record<SettingSourceId, number>>): PermissionRuleEntry[] {
   const out: PermissionRuleEntry[] = [];
   for (const { source, file } of files(cwd, env)) {
+    const enabled = sources.includes(source);
+    if (!enabled && !ignored) continue;
     const perms = readJson(file)?.permissions as Record<string, unknown> | undefined;
     if (!perms || typeof perms !== 'object') continue;
     for (const behavior of BEHAVIORS) {
       const list = perms[behavior];
       if (!Array.isArray(list)) continue;
-      for (const rule of list) if (typeof rule === 'string' && rule) out.push({ source, behavior, rule, removable: source === 'local' });
+      for (const rule of list) {
+        if (typeof rule !== 'string' || !rule) continue;
+        if (enabled) out.push({ source, behavior, rule, removable: source === 'local' });
+        else if (ignored) ignored[source] = (ignored[source] ?? 0) + 1;
+      }
     }
   }
   return out;

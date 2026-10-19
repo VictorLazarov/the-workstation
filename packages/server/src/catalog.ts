@@ -20,13 +20,14 @@ export class Catalog {
   private models?: { at: number; key: string; list: ModelInfo[]; fallback: boolean };
   private gateway?: { at: number; key: string; ids: string[] };
   private commands = new Map<string, { at: number; list: SlashCommand[] }>();
+  private srcKey = '';
 
   constructor(private adapter: SdkAdapter, private config: ConfigStore, private sessions: SessionManager, private serverCwd: string) {}
 
   private async withProbe<T>(cwd: string, fn: (q: QueryHandle) => Promise<T>): Promise<T> {
     const q = this.adapter.query({
       prompt: idle as AsyncIterable<never>,
-      options: { cwd, settingSources: ['user', 'project', 'local'], env: this.config.cliEnv(), ...claudeExecutableOption() },
+      options: { cwd, settingSources: this.config.settingSources(), env: this.config.cliEnv(), ...claudeExecutableOption() },
     });
     try {
       return await Promise.race([fn(q), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('probe timeout')), 25_000))]);
@@ -36,13 +37,13 @@ export class Catalog {
   }
 
   async getModels(): Promise<ModelOption[]> {
-    const key = JSON.stringify([this.config.app.anthropicBaseUrl, !!this.config.app.apiKey, !!this.config.app.authToken]);
+    const key = JSON.stringify([this.config.app.anthropicBaseUrl, !!this.config.app.apiKey, !!this.config.app.authToken, this.config.settingSources()]);
     const m = this.models;
     let list: ModelInfo[];
     if (m && m.key === key && Date.now() - m.at < (m.fallback ? 30_000 : 10 * 60_000)) list = m.list;
     else {
       try {
-        const live = this.sessions.list()[0];
+        const live = this.sessions.list().find((s) => s.settingSources.join(',') === this.config.settingSources().join(','));
         list = live ? await live.query.supportedModels() : await this.withProbe(this.serverCwd, (q) => q.supportedModels());
         this.models = { at: Date.now(), key, list, fallback: false };
       } catch {
@@ -78,11 +79,16 @@ export class Catalog {
   }
 
   async getCommands(cwd: string): Promise<SlashCommandInfo[]> {
+    // the sources change what exists (user/project commands and skills): never serve a list made under other sources
+    const srcs = this.config.settingSources();
+    const srcKey = srcs.join(',');
+    if (srcKey !== this.srcKey) { this.commands.clear(); this.srcKey = srcKey; }
     const hit = this.commands.get(cwd);
     let list: SlashCommand[];
     if (hit && Date.now() - hit.at < 60_000) list = hit.list;
     else {
-      const live = this.sessions.list().find((s) => samePath(s.cwd, cwd));
+      // a live session answers only when it started with the same sources as Settings has now
+      const live = this.sessions.list().find((s) => samePath(s.cwd, cwd) && s.settingSources.join(',') === srcKey);
       try {
         list = live ? await live.query.supportedCommands() : await this.withProbe(cwd, (q) => q.supportedCommands());
         this.commands.set(cwd, { at: Date.now(), list });

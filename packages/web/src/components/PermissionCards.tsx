@@ -3,6 +3,7 @@ import type { PermissionDecision } from '@workstation/protocol';
 import type { PermissionRequest, ToolResult, ToolUseBlock } from '../lib/types';
 import { str, toolTitle } from '../lib/tools';
 import { Icon } from './Icon';
+import { useSessions } from '../store/sessions';
 import { Markdown } from './Markdown';
 import type { ToolStatus } from './ToolCards';
 import { Shell } from './ToolCards';
@@ -31,6 +32,8 @@ function describe(perm: PermissionRequest, cwd?: string): string {
 export function PermissionActions({ perm, onRespond, compact, cwd }: { perm: PermissionRequest; onRespond: Respond; compact?: boolean; cwd?: string }) {
   const [denying, setDenying] = useState(false);
   const [feedback, setFeedback] = useState('');
+  // "Always allow" is saved in .claude/settings.local.json: a session started without the Local source would never apply it
+  const persistent = useSessions((s) => (s.activeId ? s.sessions[s.activeId]?.runtime.settingSources?.includes('local') : undefined) ?? true);
   // For Bash the description is already the step's title, so it is not repeated here.
   const reason = [perm.toolName === 'Bash' ? undefined : perm.description, perm.decisionReason, perm.blockedPath && `Path: ${relativize(perm.blockedPath, cwd)}`].filter(Boolean).join(' · ');
   return (
@@ -58,7 +61,9 @@ export function PermissionActions({ perm, onRespond, compact, cwd }: { perm: Per
       ) : (
         <div className="perm-actions">
           <button type="button" className="btn primary" data-perm-allow onClick={() => onRespond({ behavior: 'allow' })}>Allow once</button>
-          {perm.hasSuggestions && <button type="button" className="btn" onClick={() => onRespond({ behavior: 'allow', remember: true })} title="Allow and remember this choice for similar requests">Always allow</button>}
+          {perm.hasSuggestions && (persistent
+            ? <button type="button" className="btn" onClick={() => onRespond({ behavior: 'allow', remember: true })} title="Allow and remember this choice for similar requests">Always allow</button>
+            : <button type="button" className="btn" data-testid="allow-session" onClick={() => onRespond({ behavior: 'allow', remember: 'session' })} title="The Local config source is off, so a saved rule would not be applied. Allow similar requests until this session ends.">Allow for this session</button>)}
           <button type="button" className="btn ghost" onClick={() => setDenying(true)}>Deny…</button>
         </div>
       )}

@@ -44,7 +44,7 @@ interface UiState {
   density: Density;
   sidebarOpen: boolean; sidebarWidth: number;
   inspectorOpen: boolean; inspectorWidth: number; inspectorTab: string; inspectorFocus?: string;
-  paletteOpen: boolean; settingsOpen: boolean; /** open Settings with this field focused */ settingsFocus?: 'model'; pickerOpen: boolean; shortcutsOpen: boolean;
+  paletteOpen: boolean; settingsOpen: boolean; /** open Settings with this field focused */ settingsFocus?: 'model' | 'sources'; pickerOpen: boolean; shortcutsOpen: boolean;
   sidebarQuery: string;
   toasts: Toast[];
   confirm: (ConfirmOpts & { resolve: (ok: boolean) => void }) | null;

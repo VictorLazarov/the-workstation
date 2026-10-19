@@ -30,7 +30,7 @@ remapping its message/permission model. We build a small purpose-built stack and
 - `includePartialMessages: true` → stream deltas to UI. SDK messages are forwarded raw inside `sdk` events (typed as unknown-ish in protocol) so new SDK message types don't need server changes.
 - `canUseTool` → `permission_request` event; browser answers with `permission_response`. Also AskUserQuestion, ExitPlanMode go through it.
 - History: `listSessions/getSessionMessages/renameSession/forkSession/deleteSession` from SDK.
-- Settings sources: `['user','project','local']` so CLAUDE.md, skills, hooks, MCP and settings.json behave as in the CLI.
+- Settings sources: `AppConfig.settingSources` (default all of `['user','project','local']`, see "Config sources") so CLAUDE.md, skills, hooks, MCP and settings.json behave as in the CLI.
 - Provider/base URL: UI settings → `options.env` (`ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN`, model overrides). Only Anthropic-API-compatible endpoints / Claude models.
 - Concurrent `session.start{resume}` of one id is serialized (map of in-flight starts): one CLI process, later callers
   attach. Live sessions are capped (`WORKSTATION_MAX_SESSIONS`, default 20).
@@ -62,6 +62,33 @@ capture server).
   settings are not filtered. Bedrock/Vertex configured only via AppConfig `env` (no base URL/key/token) take the default
   path. The agent's own tools can still read files of the user (a third-party model drives a shell): isolation stops
   *automatic* credential forwarding, it does not sandbox the agent.
+
+## Config sources and the loaded-configuration view
+Code: `packages/protocol` (`SettingSourceId`, `resolveSettingSources`, `LoadedConfig`), `server/src/config.ts` (`settingSources()`),
+`session-manager.ts` (start options, `loadedConfig`), `catalog.ts`, `permission-rules.ts`, `loaded-config.ts`; web `panels/LoadedConfig.tsx`,
+Settings -> Config sources. Tests: `server/test/config-sources.test.ts`, `real-config-sources.test.ts` (`REAL_SDK=1`), `e2e/tests/app/config-sources.spec.ts`.
+- **One setting, three consumers.** `AppConfig.settingSources` (unset = `user, project, local`; `[]` = SDK isolation) is passed as `options.settingSources`
+  at session start, to the throwaway catalog probes (models / slash commands; the command cache is dropped when it changes and a live session only
+  answers when it started with the same sources) and to the remembered-rules viewer (`GET /api/permission-rules` lists only enabled sources and
+  reports `ignored` counts for the others). A session's value is fixed at start (`SessionRuntimeState.settingSources`); changing Settings applies to new
+  sessions. The credential-isolated `cli-home` (custom endpoint) is independent: it only controls *where* the user source is read from.
+- **Local off and "Always allow" (measured against the real SDK, haiku).** `settingSources` without `local` does NOT stop the CLI from writing an "Always
+  allow" rule to `.claude/settings.local.json` (the suggestion still says `destination: localSettings` and the file is written), but the rule is not applied
+  (an identical second call asks again) and a rule already in that file is not read. So persistence would be a silent lie: with Local off the server
+  rewrites `remember: true` to a session-only rule (`destination: session`, which does work and writes nothing) and the UI shows "Allow for this session"
+  instead of "Always allow". With Local on a rule is saved and applies immediately.
+- **Loaded configuration** (`GET /api/sessions/:id/loaded-config`, Overview card): the SDK says what was loaded (init: skills, slash commands, agents,
+  plugins, MCP servers with their scope; `getContextUsage().memoryFiles`; `mcpServerStatus`), and `loaded-config.ts` adds the origin by a read-only scan of
+  fixed locations of the ENABLED sources (`CLAUDE.md` chain up to the project root, `CLAUDE.local.md`, `skills/*/SKILL.md`, `commands/**.md`, `agents/*.md`,
+  the `hooks` key of the three settings files and of plugins' `hooks/hooks.json`). The SDK has no query call for hooks, hence the scan. Only names, paths and
+  hook event / matcher / command are returned: never file bodies or env values; hook commands pass through `redactString` and are cut at 90 characters.
+  Built-in skills / commands / agents are only counted. Hooks show a "run commands on your machine" badge with a link to Settings.
+- **Mock.** The mock agent reads the same files (user dir from `CLAUDE_CONFIG_DIR` or `~/.claude`, project from the cwd) for its commands, skills,
+  agents, plugins and memory files, honouring `settingSources`, so toggling a source changes what a new mock session lists. The e2e servers set
+  `CLAUDE_CONFIG_DIR` to a throwaway dir: they never read the real `~/.claude`.
+- Limits: managed/enterprise settings are not scanned (the SDK's own lists still include what they load); `@import`ed memory files and nested
+  `CLAUDE.md` files below the cwd are only shown when the SDK reports them in `memoryFiles`; `/api/commands` for an already open session uses the current
+  Settings, not that session's own sources.
 
 ## Using a gateway (LiteLLM/OpenRouter-style)
 A custom `ANTHROPIC_BASE_URL` means the endpoint decides which model ids exist, so nothing may silently fall back to an Anthropic alias.

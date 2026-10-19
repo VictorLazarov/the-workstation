@@ -1,5 +1,5 @@
 import type {
-  AppConfig, FsEntry, GatewayTestRequest, GatewayTestResult, GitCommitResult, GitRevertResult, GitStatus, ModelOption, PermissionRuleEntry, SessionSummary, SlashCommandInfo,
+  AppConfig, FsEntry, GatewayTestRequest, GatewayTestResult, GitCommitResult, GitRevertResult, GitStatus, LoadedConfig, ModelOption, PermissionRulesResponse, SessionSummary, SlashCommandInfo,
 } from '@workstation/protocol';
 import { getServerBase, getToken, isDemo } from './storage';
 
@@ -57,7 +57,8 @@ export const api = {
   /** Commits exactly `files` (the changed paths shown in the Changes panel); repository hooks run. */
   gitCommit: (cwd: string, message: string, files: string[]) => request<GitCommitResult>('POST', '/api/git/commit', undefined, { cwd, message, files }),
   gitRevert: (cwd: string, path: string) => request<GitRevertResult>('POST', '/api/git/revert', undefined, { cwd, path }),
-  permissionRules: (cwd: string) => request<{ rules: PermissionRuleEntry[] }>('GET', '/api/permission-rules', { cwd }),
+  permissionRules: (cwd: string) => request<PermissionRulesResponse>('GET', '/api/permission-rules', { cwd }),
   removePermissionRule: (cwd: string, behavior: string, rule: string) => request<{ removed: boolean }>('DELETE', '/api/permission-rules', undefined, { cwd, behavior, rule }),
+  loadedConfig: (sessionId: string) => request<LoadedConfig>('GET', `/api/sessions/${encodeURIComponent(sessionId)}/loaded-config`),
   commands: (cwd?: string) => request<SlashCommandInfo[]>('GET', '/api/commands', { cwd }),
 };

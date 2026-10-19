@@ -79,6 +79,8 @@ export interface SessionRuntimeState {
   effort?: EffortLevel;
   /** Permission rules remembered during this session via `remember` (informational list). */
   rules?: SessionRule[];
+  /** Config sources this session loaded (fixed at session start; later changes in Settings apply to new sessions). */
+  settingSources?: SettingSourceId[];
 }
 export interface SessionRule { toolName: string; ruleContent?: string; behavior: 'allow' | 'deny' | 'ask'; destination: string }
 
@@ -150,6 +152,15 @@ export interface SessionSummary {
   /** set when the session runs in a git worktree this server created: `root` is the main checkout (the project it belongs to) */
   worktree?: { root: string; branch: string; path: string; /** the checkout is gone: the session is history only */ removed?: boolean };
 }
+/** Claude Code settings sources (the SDK's `settingSources`): `user` ~/.claude, `project` .claude/ + CLAUDE.md, `local` .claude/settings.local.json. */
+export type SettingSourceId = 'user' | 'project' | 'local';
+export const SETTING_SOURCES: readonly SettingSourceId[] = ['user', 'project', 'local'];
+/** Normalises a stored value to the ordered list handed to the SDK. Unset (or garbage) means all three: parity with Claude Code Desktop. */
+export function resolveSettingSources(v: unknown): SettingSourceId[] {
+  if (!Array.isArray(v)) return [...SETTING_SOURCES];
+  return SETTING_SOURCES.filter((id) => v.includes(id));
+}
+
 export interface AppConfig {
   anthropicBaseUrl?: string;
   /** Never returned in full by GET; use `hasApiKey`. Accepted on PUT. */
@@ -163,6 +174,8 @@ export interface AppConfig {
   /** Additional model ids offered in the model picker (custom providers). */
   customModels?: string[];
   recentProjects?: string[];
+  /** Which Claude Code config sources new sessions load. Unset = all three (user, project, local). `[]` = none (SDK isolation). */
+  settingSources?: SettingSourceId[];
   theme?: 'system' | 'light' | 'dark';
 }
 export interface FsEntry { name: string; path: string; kind: 'file' | 'dir' | 'symlink'; size?: number }
@@ -173,6 +186,37 @@ export interface GitStatus { branch?: string; ahead?: number; behind?: number; f
   untrackedMore?: number }
 /** A permission rule from Claude Code settings. `local` rules (.claude/settings.local.json) are the ones "Always allow" writes and can be removed. */
 export interface PermissionRuleEntry { source: 'local' | 'project' | 'user'; behavior: 'allow' | 'deny' | 'ask'; rule: string; removable: boolean }
+/** GET /api/permission-rules answer. `ignored`: rules that exist in a source Settings turned off (so Claude Code does not apply them). */
+export interface PermissionRulesResponse { dir: string; rules: PermissionRuleEntry[]; sources: SettingSourceId[]; ignored?: Partial<Record<SettingSourceId, number>> }
+
+/** Where a piece of loaded configuration came from. */
+export type ConfigOrigin = 'user' | 'project' | 'local' | 'plugin' | 'builtin';
+export type ConfigItemKind = 'memory' | 'skill' | 'command' | 'agent' | 'mcp' | 'hook' | 'plugin';
+/** One thing the agent loaded. Names, paths and event types only: never file bodies or env values. */
+export interface ConfigItem {
+  kind: ConfigItemKind; origin: ConfigOrigin; name: string;
+  /** memory: shortened path; hook: `Event · matcher`; mcp: status; plugin: version */
+  detail?: string;
+  /** hook: the command, redacted and shortened */
+  command?: string;
+}
+/** GET /api/sessions/:id/loaded-config. */
+export interface LoadedConfig {
+  /** the sources THIS session started with */
+  sources: SettingSourceId[];
+  /** the sources Settings has now (applies to new sessions) */
+  current: SettingSourceId[];
+  items: ConfigItem[];
+  /** built-in skills / commands / agents that are not listed one by one */
+  builtinCounts: { skills: number; commands: number; agents: number };
+  /** permission rule counts by where they come from (+ this session only) */
+  rules: Partial<Record<SettingSourceId | 'session', number>>;
+  /** at least one hook (they run commands on this machine) */
+  hasHooks: boolean;
+  /** false when the SDK facilities could not be asked (e.g. session closed): lists come from the files only */
+  live: boolean;
+  notes: string[];
+}
 export interface GitCommitResult { ok: true; commit: string; summary: string }
 export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
 
@@ -190,7 +234,8 @@ export interface GitRevertResult { ok: true; action: 'restored' | 'deleted' }
  *  GET  /api/files/search?cwd=&q= -> string[]      (@mention fuzzy search)
  *  GET  /api/git/status?cwd=   -> GitStatus
  *  GET  /api/git/diff?cwd=&path= -> { diff: string }
- *  GET  /api/permission-rules?cwd= -> { dir, rules: PermissionRuleEntry[] }  (dir: the main checkout whose .claude/ holds them)   DELETE /api/permission-rules {cwd, behavior, rule} -> { removed }
+ *  GET  /api/sessions/:id/loaded-config -> LoadedConfig  (what the agent loaded for this live session, by origin)
+ *  GET  /api/permission-rules?cwd= -> PermissionRulesResponse  (dir: the main checkout whose .claude/ holds them)   DELETE /api/permission-rules {cwd, behavior, rule} -> { removed }
  *  POST /api/git/commit {cwd, message, files[]} -> GitCommitResult (stages and commits exactly `files`, each a current
  *                                       git status entry; repository hooks run, a hook failure is a 409 with its output)
  *  POST /api/git/revert {cwd, path}     -> GitRevertResult   (restore tracked file to HEAD / delete untracked; `path` must

@@ -14,6 +14,7 @@ import { pctLabel, tone, usageView } from './context/usage';
 import { useBranch, useGitSync, useProjectChanges } from './changes/store';
 import { deriveTasks, isActive, sortTasks, type TaskRow } from './tasks/derive';
 import { scrollToToolCall } from './TasksPanel';
+import { LoadedConfigBody, openSourcesSettings, sourcesText } from './LoadedConfig';
 import './panels.css';
 
 /* ───────── collapsible card ───────── */
@@ -183,6 +184,17 @@ function ConnectorsCard({ sessionId }: { sessionId: string }) {
   );
 }
 
+/* ───────── Loaded configuration ───────── */
+function LoadedConfigCard({ sessionId }: { sessionId: string }) {
+  const sources = useSessions((s) => s.sessions[sessionId]?.runtime.settingSources);
+  return (
+    <OvCard id="loaded-config" title="Loaded configuration" icon="settings" aside={sources ? sourcesText(sources) : undefined}>
+      <LoadedConfigBody sessionId={sessionId} />
+      <div className="ov-actions"><button type="button" className="link-btn" data-testid="open-config-sources" onClick={openSourcesSettings}>Config sources in Settings</button></div>
+    </OvCard>
+  );
+}
+
 /* ───────── Outputs ───────── */
 function OutputsCard({ sessionId, cwd }: { sessionId: string; cwd: string }) {
   const { outputs, planFiles } = useProjectChanges(sessionId, cwd);
@@ -328,6 +340,7 @@ function OverviewPanel({ sessionId, cwd }: PanelProps) {
       <EnvironmentCard sessionId={sessionId} />
       <ContextCard sessionId={sessionId} />
       <ConnectorsCard sessionId={sessionId} />
+      <LoadedConfigCard sessionId={sessionId} />
       <OutputsCard sessionId={sessionId} cwd={cwd} />
       <ChangesCard sessionId={sessionId} cwd={cwd} />
       <TasksCard sessionId={sessionId} />

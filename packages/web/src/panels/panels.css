@@ -218,3 +218,22 @@ button.cx-line { border-radius: 4px; } button.cx-line:hover { color: var(--text)
 .cmt-actions { display: flex; gap: 6px; }
 .review-count, .review-bar .btn { white-space: nowrap; } .review-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .review-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); background: var(--surface-2); flex: none; font-size: var(--fs-base); }
+
+/* Loaded configuration (Overview) */
+.lc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; font-size: var(--fs-sm); }
+.lc-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; } .lc-fixed { margin-left: auto; } .lc-off { color: var(--muted); }
+.lc-hooks { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 8px; border-radius: var(--radius-sm); background: var(--warn-soft); color: var(--text); } .lc-hooks .link-btn { margin-left: auto; }
+.lc-group { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; border-top: 1px solid var(--border); padding-top: 4px; } .lc-group.off .lc-head b { font-weight: 500; }
+.lc-head { display: flex; align-items: baseline; gap: 6px; } .lc-head b { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.lc-line { display: flex; align-items: baseline; gap: 8px; min-height: 22px; min-width: 0; }
+.lc-kind { flex: none; width: 74px; color: var(--muted); font-size: var(--fs-xs); }
+.lc-names { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.lc-main { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.lc-meta { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: var(--fs-xs); }
+.lc-cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--fs-xs); color: var(--text-2); }
+.lc-rules { margin: 0; display: flex; align-items: baseline; gap: 8px; border-top: 1px solid var(--border); padding-top: 4px; }
+
+/* Settings: config sources */
+.src-row { display: flex; align-items: flex-start; gap: 10px; } .src-row .switch { margin-top: 1px; }
+.src-text { display: grid; gap: 1px; min-width: 0; flex: 1; } .src-text b { font-weight: 600; font-size: var(--fs-base); } .src-text span { color: var(--muted); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.src-warn { padding: 4px 8px; border-radius: var(--radius-sm); background: var(--warn-soft); font-size: var(--fs-sm); color: var(--text); }

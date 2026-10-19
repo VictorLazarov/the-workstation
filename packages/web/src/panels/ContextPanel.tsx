@@ -8,6 +8,7 @@ import { registerPanel, type PanelProps } from './registry';
 import { groupTools, mcpEnabled, mcpTone, turnCosts } from './context/derive';
 import { pctLabel } from './context/usage';
 import { ContextBody, useContextSummary } from './OverviewPanel';
+import { sourcesText } from './LoadedConfig';
 import './panels.css';
 
 function Section({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
@@ -95,6 +96,7 @@ function Mcp({ sessionId }: { sessionId: string }) {
 }
 
 function Loaded({ sessionId }: { sessionId: string }) {
+  const sources = useSessions((s) => s.sessions[sessionId]?.runtime.settingSources);
   const init = useSessions((s) => s.sessions[sessionId]?.conv.init);
   const tools = useMemo(() => groupTools(init?.tools ?? []), [init?.tools]);
   if (!init) return <Section title="Loaded"><p className="muted small">Details appear once the session has started.</p></Section>;
@@ -112,6 +114,7 @@ function Loaded({ sessionId }: { sessionId: string }) {
         {init.model && <><dt>Model</dt><dd>{modelLabel(init.model)}</dd></>}
         {init.permissionMode && <><dt>Mode</dt><dd>{MODES.find((m) => m.id === init.permissionMode)?.label ?? init.permissionMode}</dd></>}
         {init.version && <><dt>Agent runtime</dt><dd>{init.version}</dd></>}
+        {sources && <><dt>Config sources</dt><dd title="Fixed when the session started. The Overview tab lists what was loaded from each.">{sourcesText(sources)}</dd></>}
       </dl>
     </Section>
   );

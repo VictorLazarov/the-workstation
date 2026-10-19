@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AppConfig } from '@workstation/protocol';
+import { SETTING_SOURCES, resolveSettingSources, type AppConfig } from '@workstation/protocol';
 import { buildCliEnv, hasCustomEndpoint, prepareCliHome } from './cli-env.js';
 import { configDirFor, writeFileAtomic } from './platform.js';
 import { log } from './log.js';
@@ -97,6 +97,13 @@ export class ConfigStore {
       else if (['system', 'light', 'dark'].includes(p.theme as string)) next.theme = p.theme as AppConfig['theme'];
       else throw new Error('invalid theme');
     }
+    if ('settingSources' in p) {
+      if (p.settingSources == null) delete next.settingSources;
+      else if (Array.isArray(p.settingSources) && p.settingSources.every((x) => (SETTING_SOURCES as readonly unknown[]).includes(x))) {
+        next.settingSources = resolveSettingSources(p.settingSources);
+        if (next.settingSources.length === SETTING_SOURCES.length) delete next.settingSources; // all on is the default: store nothing
+      } else throw new Error('settingSources must be a list of user, project, local');
+    }
     if ('env' in p) {
       if (p.env == null) delete next.env;
       else if (typeof p.env === 'object' && !Array.isArray(p.env)) {
@@ -150,6 +157,9 @@ export class ConfigStore {
     if (!hasCustomEndpoint(provider)) return buildCliEnv(provider, base);
     return buildCliEnv(provider, base, prepareCliHome(path.join(path.dirname(this.file), 'cli-home')));
   }
+
+  /** The Claude Code config sources new sessions (and catalog probes) load. */
+  settingSources() { return resolveSettingSources(this.data.app.settingSources); }
 
   /** Env vars to hand to the Claude Code process. */
   providerEnv(): Record<string, string> {

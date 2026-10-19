@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { MODEL_ALIAS_ENV, type AppConfig, type EffortLevel, type GatewayTestResult, type PermissionMode } from '@workstation/protocol';
+import { MODEL_ALIAS_ENV, SETTING_SOURCES, resolveSettingSources, type AppConfig, type EffortLevel, type GatewayTestResult, type PermissionMode, type SettingSourceId } from '@workstation/protocol';
 import { api } from '../lib/api';
 import { platform } from '../platform';
 import { clearRemoteServer, confirmRemoteServer, getRemoteServer, getServerBase, normalizeServerOrigin } from '../lib/storage';
@@ -10,6 +10,12 @@ import { modelLabel } from '../lib/utils';
 import { EFFORTS, MODES, useBypass } from './Chips';
 import { Dialog, Segmented } from './ui';
 import { RememberedRules } from './RememberedRules';
+
+const SOURCE_ROWS: Array<{ id: SettingSourceId; title: string; text: string }> = [
+  { id: 'user', title: 'User · ~/.claude', text: 'Your CLAUDE.md and memory, settings, skills, slash commands, agents, plugins, MCP servers and permission rules. Hooks in your settings run commands as you.' },
+  { id: 'project', title: 'Project · .claude/ and CLAUDE.md', text: 'The repository’s CLAUDE.md, shared settings, skills, commands, agents, .mcp.json and hooks. Opening a repo with hooks lets them run commands as you.' },
+  { id: 'local', title: 'Local · .claude/settings.local.json', text: 'Your private, uncommitted settings for this repository: “Always allow” rules, hooks (they run commands as you) and overrides.' },
+];
 
 export function SettingsDialog() {
   const open = useUi((s) => s.settingsOpen);
@@ -22,6 +28,7 @@ export function SettingsDialog() {
   const models = useSessions((s) => s.models);
   const [f, setF] = useState({ baseUrl: '', apiKey: '', authToken: '', model: '', effort: 'medium' as EffortLevel, mode: 'default' as PermissionMode, custom: '' });
   const [alias, setAlias] = useState<Record<string, string>>({});
+  const [srcs, setSrcs] = useState<SettingSourceId[]>([...SETTING_SOURCES]);
   const [gw, setGw] = useState<{ busy: boolean; result?: GatewayTestResult; error?: string }>({ busy: false });
   const focus = useUi((s) => s.settingsFocus);
   const [server, setServer] = useState(getServerBase());
@@ -39,6 +46,7 @@ export function SettingsDialog() {
     if (!config || seeded.current) return;
     seeded.current = true;
     setF({ baseUrl: config.anthropicBaseUrl ?? '', apiKey: '', authToken: '', model: config.defaultModel ?? '', effort: config.defaultEffort ?? 'medium', mode: config.defaultPermissionMode ?? 'default', custom: (config.customModels ?? []).join(', ') });
+    setSrcs(resolveSettingSources(config.settingSources));
     setAlias(Object.fromEntries(MODEL_ALIAS_ENV.map((a) => [a.env, config.env?.[a.env] ?? ''])));
     setGw({ busy: false });
     setServer(getServerBase());
@@ -49,6 +57,13 @@ export function SettingsDialog() {
   useEffect(() => {
     if (!open || focus !== 'model' || !config) return;
     const t = setTimeout(() => { const el = document.getElementById('set-model'); el?.scrollIntoView({ block: 'center' }); el?.focus(); }, 60);
+    return () => clearTimeout(t);
+  }, [open, focus, config]);
+
+  // "Change in Settings" (Overview -> Loaded configuration): land on the Config sources section
+  useEffect(() => {
+    if (!open || focus !== 'sources' || !config) return;
+    const t = setTimeout(() => { const el = document.getElementById('set-sources'); el?.scrollIntoView({ block: 'center' }); el?.querySelector<HTMLElement>('[role=switch]')?.focus(); }, 60);
     return () => clearTimeout(t);
   }, [open, focus, config]);
 
@@ -71,7 +86,7 @@ export function SettingsDialog() {
     setSaving(true);
     const patch: Partial<AppConfig> = {
       anthropicBaseUrl: f.baseUrl.trim(), defaultModel: f.model.trim() || undefined, defaultEffort: f.effort, defaultPermissionMode: f.mode,
-      customModels: f.custom.split(/[,\n]/).map((x) => x.trim()).filter(Boolean), theme,
+      customModels: f.custom.split(/[,\n]/).map((x) => x.trim()).filter(Boolean), settingSources: srcs, theme,
     };
     // gateway aliases live in the env handed to the agent; every other env entry is kept as it is (secret-looking ones stay masked server-side)
     const env = { ...(config?.env ?? {}) };
@@ -143,6 +158,21 @@ export function SettingsDialog() {
             </div>
           </section>
         )}
+        <section id="set-sources" data-testid="config-sources">
+          <h3>Config sources</h3>
+          <p className="muted small">What the agent loads from your machine, the way the Claude command-line tool does. Applies to new sessions; a running session keeps the sources it started with.</p>
+          {SOURCE_ROWS.map((r) => {
+            const on = srcs.includes(r.id);
+            return (
+              <div key={r.id} className="src-row" data-source={r.id}>
+                <button type="button" role="switch" aria-checked={on} aria-label={`${r.title}`} className={`switch${on ? ' on' : ''}`} onClick={() => setSrcs(SETTING_SOURCES.filter((x) => (x === r.id ? !on : srcs.includes(x))))}><i /></button>
+                <span className="src-text"><b>{r.title}</b><span>{r.text}</span></span>
+              </div>
+            );
+          })}
+          {!srcs.includes('local') && <p className="src-warn" role="note" data-testid="local-off-note">With Local off, “Always allow” is kept for the current session only: the agent would still write the rule to settings.local.json, but it neither applies nor reads it back while Local is off.</p>}
+          {srcs.length === 0 && <p className="src-warn" role="note">With all sources off the agent runs without your CLAUDE.md, skills, hooks, MCP servers or saved permission rules.</p>}
+        </section>
         <RememberedRules active={open} />
         <section>
           <h3>Appearance</h3>

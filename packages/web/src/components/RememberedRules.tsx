@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { PermissionRuleEntry } from '@workstation/protocol';
+import type { PermissionRuleEntry, PermissionRulesResponse } from '@workstation/protocol';
 import { api } from '../lib/api';
 import { projectName, sessionProject, useSessions } from '../store/sessions';
 import { useUi } from '../store/ui';
@@ -26,12 +26,13 @@ export function RememberedRules({ active }: { active: boolean }) {
   }, [projects, sessions, current]);
   const [dir, setDir] = useState('');
   const [rules, setRules] = useState<PermissionRuleEntry[] | null>(null);
+  const [meta, setMeta] = useState<Pick<PermissionRulesResponse, 'sources' | 'ignored'>>({ sources: ['user', 'project', 'local'] });
   const [err, setErr] = useState('');
   const effectiveDir = dir && dirs.some(([d]) => d === dir) ? dir : (current ? sessionProject(current) : '') || dirs[0]?.[0] || '';
 
   const load = useCallback(async () => {
     if (!effectiveDir) { setRules([]); return; }
-    try { setErr(''); setRules((await api.permissionRules(effectiveDir)).rules); } catch (e) { setErr((e as Error).message); setRules([]); }
+    try { setErr(''); const r = await api.permissionRules(effectiveDir); setRules(r.rules); setMeta({ sources: r.sources, ignored: r.ignored }); } catch (e) { setErr((e as Error).message); setRules([]); }
   }, [effectiveDir]);
   useEffect(() => { if (active) { setRules(null); void load(); } }, [active, load]);
 
@@ -52,6 +53,7 @@ export function RememberedRules({ active }: { active: boolean }) {
         </label>
       )}
       {err && <p className="perm-reason" role="alert">{err}</p>}
+      {Object.entries(meta.ignored ?? {}).map(([src, n]) => <p key={src} className="muted small" data-testid="ignored-rules">{n} saved rule{n === 1 ? '' : 's'} in the {src} source {n === 1 ? 'is' : 'are'} not applied: that source is off in Config sources.</p>)}
       {rules === null ? <p className="muted small"><Spinner size={11} /> Loading…</p>
         : rules.length === 0 && !sessionRules.length ? <p className="muted small">No saved rules for this project.</p> : (
           <ul className="rules-list">

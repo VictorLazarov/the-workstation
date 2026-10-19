@@ -9,7 +9,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { DEFAULT_PORT, MODEL_ALIAS_ENV, type ClientMessage, type LogEntry, type ServerMessage, type SessionSummary } from '@workstation/protocol';
+import { DEFAULT_PORT, MODEL_ALIAS_ENV, type ClientMessage, type LogEntry, type PermissionRulesResponse, type ServerMessage, type SessionSummary, type SettingSourceId } from '@workstation/protocol';
 import { Catalog } from './catalog.js';
 import { fetchGatewayModels, gatewayTarget, resolveModelAlias, testGateway } from './gateway.js';
 import { ConfigStore } from './config.js';
@@ -231,6 +231,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
     if (detail !== undefined && detail !== 'summary' && detail !== 'full') throw new HttpError(400, 'detail must be summary or full');
     try { return c.json(await sessions.contextUsage(live, detail)); } catch (e) { throw new HttpError(502, e instanceof Error ? e.message : String(e)); }
   });
+  app.get('/api/sessions/:id/loaded-config', async (c) => {
+    const id = c.req.param('id');
+    if (!uuidish(id)) throw new HttpError(400, 'invalid session id');
+    const live = sessions.get(id);
+    if (!live) throw new HttpError(404, 'session is not live');
+    return c.json(await sessions.loadedConfig(live));
+  });
   app.patch('/api/sessions/:id', async (c) => {
     const id = c.req.param('id');
     if (!uuidish(id)) throw new HttpError(400, 'invalid session id');
@@ -313,7 +320,13 @@ export async function startServer(opts: ServerOptions = {}): Promise<RunningServ
   app.post('/api/git/revert', async (c) => { const b = await jsonBody(c); return c.json(await gitRevert(await requireDir(b.cwd), b.path)); });
 
   // ── remembered permission rules ("Always allow" writes to <project>/.claude/settings.local.json) ──
-  app.get('/api/permission-rules', async (c) => { const dir = await settingsProjectDir(await cwdParam(c)); return c.json({ dir, rules: listPermissionRules(dir) }); });
+  app.get('/api/permission-rules', async (c) => {
+    const dir = await settingsProjectDir(await cwdParam(c));
+    const sources = config.settingSources();
+    const ignored: Partial<Record<SettingSourceId, number>> = {};
+    const rules = listPermissionRules(dir, undefined, sources, ignored);
+    return c.json({ dir, rules, sources, ...(Object.keys(ignored).length ? { ignored } : {}) } satisfies PermissionRulesResponse);
+  });
   app.delete('/api/permission-rules', async (c) => { const b = await jsonBody(c); return c.json(removeLocalPermissionRule(await settingsProjectDir(await requireDir(b.cwd)), b.behavior, b.rule)); });
 
   // ── diagnostics log (token-gated like every /api route) ──
